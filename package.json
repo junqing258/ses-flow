@@ -3,22 +3,18 @@
   "private": true,
   "packageManager": "pnpm@10.21.0",
   "scripts": {
-    "dev": "concurrently \"pnpm -C backend dev\" \"pnpm -C frontend dev\"",
-    "dev:backend": "pnpm -C backend start:dev",
-    "dev:frontend": "pnpm -C frontend dev",
-    "build:backend": "pnpm -C backend build",
-    "build:frontend": "pnpm -C frontend build",
-    "build": "pnpm -C frontend build && pnpm -C backend build",
-    "start": "pnpm -C backend start",
-    "test:backend": "pnpm -C backend test"
-  },
-  "dependencies": {
-    "@types/node": "^20.11.0",
-    "concurrently": "^9.2.1",
-    "prettier": "^3.2.0",
-    "typescript": "^5.3.0"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "start": "turbo start",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "format": "turbo format",
+    "format:check": "turbo format:check"
   },
   "devDependencies": {
+    "@types/node": "^20.11.0",
+"prettier": "^3.2.0",
+    "typescript": "^5.3.0",
     "turbo": "^1.13.4"
   }
 }
