@@ -8,8 +8,8 @@ import { AppModule } from './modules/app.module';
 
 const resolveWebDist = () => {
   const candidates = [
-    path.resolve(process.cwd(), 'web/dist'),
-    path.resolve(process.cwd(), '../web/dist'),
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), '../frontend/dist'),
   ];
 
   for (const candidate of candidates) {
