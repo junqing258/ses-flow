@@ -8,11 +8,36 @@ pnpm install
 
 If you want to manage both `server` and `web` via the workspace, run the same command from the repo root.
 
+## Database
+
+Prisma is configured in `apps/backend/prisma/schema.prisma` and uses PostgreSQL.
+
+1. Copy `apps/backend/.env.example` to `apps/backend/.env`
+2. Fill in `DATABASE_URL` and `DIRECT_URL`
+3. Generate the Prisma client:
+
+```bash
+pnpm --filter backend prisma:generate
+```
+
+If the editor reports `@prisma/client` has no exported member `PrismaClient`, run the same command once and restart the TypeScript server. The backend package also runs `prisma generate` automatically on install.
+
+Common Prisma commands:
+
+```bash
+pnpm --filter backend prisma:migrate:dev -- --name init
+pnpm --filter backend prisma:migrate:deploy
+pnpm --filter backend prisma:db:push
+pnpm --filter backend prisma:studio
+```
+
 ## Run
 
 ```bash
-pnpm run start:dev
+pnpm --filter backend dev
 ```
+
+The dev command uses `ts-node` so Nest can read decorator metadata correctly without requiring explicit `@Inject(...)` on `ConfigService` constructor parameters.
 
 Open:
 
