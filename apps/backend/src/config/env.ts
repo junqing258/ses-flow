@@ -6,6 +6,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   DIRECT_URL: z.string().min(1, 'DIRECT_URL is required'),
+  AUTH_SESSION_TTL_HOURS: z.coerce.number().int().positive().max(24 * 365).default(24),
 });
 
 export const validateEnv = (rawEnv: Record<string, unknown>) => envSchema.parse(rawEnv);
