@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "key": "sorting-main-flow",
+    "name": "Sorting Main Flow",
+    "version": 1,
+    "scope": {
+      "tenant": "tenant-a",
+      "warehouse": "WH-1"
+    },
+    "status": "published"
+  },
+  "trigger": {
+    "type": "webhook",
+    "path": "/flows/order/inbound",
+    "responseMode": "async_ack"
+  },
+  "inputSchema": {
+    "type": "object"
+  },
+  "nodes": [
+    {
+      "id": "start_1",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "id": "fetch_order",
+      "type": "fetch",
+      "name": "查询订单",
+      "config": {
+        "connector": "oms.getOrder"
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "warehouseId": "{{env.warehouseId}}"
+      },
+      "timeoutMs": 3000
+    },
+    {
+      "id": "persist_order_snapshot",
+      "type": "set_state",
+      "name": "写入订单快照",
+      "config": {
+        "path": "orderSnapshot"
+      },
+      "inputMapping": {
+        "value": "{{input}}"
+      }
+    },
+    {
+      "id": "route_switch",
+      "type": "switch",
+      "name": "业务分流",
+      "config": {
+        "expression": "{{trigger.body.bizType}}"
+      }
+    },
+    {
+      "id": "manual_review_task",
+      "type": "task",
+      "name": "创建人工复核任务",
+      "config": {
+        "taskType": "manual_review"
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "reason": "bizType requires manual review"
+      }
+    },
+    {
+      "id": "dispatch_rcs_action",
+      "type": "action",
+      "name": "下发 RCS 调度",
+      "config": {
+        "action": "rcs.dispatch"
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "bizType": "{{trigger.body.bizType}}"
+      }
+    },
+    {
+      "id": "wait_dispatch_callback",
+      "type": "wait",
+      "name": "等待回调",
+      "config": {
+        "event": "rcs.callback"
+      },
+      "inputMapping": {
+        "correlationKey": "{{trigger.headers.requestId}}",
+        "orderNo": "{{trigger.body.orderNo}}"
+      }
+    },
+    {
+      "id": "end_1",
+      "type": "end",
+      "name": "End"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start_1",
+      "to": "fetch_order"
+    },
+    {
+      "from": "fetch_order",
+      "to": "persist_order_snapshot"
+    },
+    {
+      "from": "persist_order_snapshot",
+      "to": "route_switch"
+    },
+    {
+      "from": "route_switch",
+      "to": "manual_review_task",
+      "label": "manual_review",
+      "priority": 100
+    },
+    {
+      "from": "route_switch",
+      "to": "dispatch_rcs_action",
+      "label": "auto_sort",
+      "priority": 90
+    },
+    {
+      "from": "route_switch",
+      "to": "wait_dispatch_callback",
+      "branchType": "default",
+      "priority": 1
+    },
+    {
+      "from": "manual_review_task",
+      "to": "end_1"
+    },
+    {
+      "from": "dispatch_rcs_action",
+      "to": "wait_dispatch_callback"
+    },
+    {
+      "from": "wait_dispatch_callback",
+      "to": "end_1"
+    }
+  ],
+  "policies": {
+    "idempotency": {
+      "key": "{{trigger.headers.requestId}}"
+    },
+    "allowManualRetry": true
+  }
+}

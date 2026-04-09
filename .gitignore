@@ -8,6 +8,7 @@ build/
 coverage/
 .cache/
 .turbo/
+target/
 
 # Logs
 *.log

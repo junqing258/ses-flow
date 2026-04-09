@@ -1,0 +1,12 @@
+{
+  "name": "runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rust-based DSL runner for SES workflow orchestration",
+  "scripts": {
+    "dev": "cargo run -- --workflow examples/sorting-main-flow.json",
+    "start": "cargo run --release -- --workflow examples/sorting-main-flow.json",
+    "build": "cargo build --release",
+    "test": "cargo test"
+  }
+}
