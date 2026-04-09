@@ -6,7 +6,7 @@ pub struct EvaluationContext<'a> {
     pub trigger: &'a Value,
     pub input: &'a Value,
     pub state: &'a Value,
-    pub env: &'a Value,
+    pub env: Value,
     pub output: &'a Value,
 }
 
@@ -38,7 +38,7 @@ impl<'a> EvaluationContext<'a> {
             "trigger" => self.trigger,
             "input" => self.input,
             "state" => self.state,
-            "env" => self.env,
+            "env" => &self.env,
             "output" => self.output,
             _ => return None,
         };
@@ -89,6 +89,28 @@ impl<'a> EvaluationContext<'a> {
         }
 
         Value::String(rendered)
+    }
+}
+
+pub fn is_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(value) => *value,
+        Value::Number(number) => {
+            if let Some(integer) = number.as_i64() {
+                return integer != 0;
+            }
+            if let Some(unsigned) = number.as_u64() {
+                return unsigned != 0;
+            }
+            number.as_f64().unwrap_or(0.0) != 0.0
+        }
+        Value::String(text) => {
+            let normalized = text.trim().to_ascii_lowercase();
+            !normalized.is_empty() && normalized != "false" && normalized != "0" && normalized != "null"
+        }
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(object) => !object.is_empty(),
     }
 }
 
@@ -164,7 +186,7 @@ mod tests {
             trigger: &json!({"body": {"orderNo": "SO-1"}}),
             input: &json!({}),
             state: &json!({}),
-            env: &json!({"warehouseId": "WH-1"}),
+            env: json!({"warehouseId": "WH-1"}),
             output: &json!({}),
         };
 

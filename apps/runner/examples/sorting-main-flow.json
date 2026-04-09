@@ -60,7 +60,8 @@
       "type": "task",
       "name": "创建人工复核任务",
       "config": {
-        "taskType": "manual_review"
+        "taskType": "manual_review",
+        "completeEvent": "task.completed"
       },
       "inputMapping": {
         "orderNo": "{{trigger.body.orderNo}}",

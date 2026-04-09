@@ -79,6 +79,7 @@ impl WorkflowEngine {
         let waiting_node = definition
             .node(&snapshot.current_node_id)
             .ok_or_else(|| RunnerError::MissingNode(snapshot.current_node_id.clone()))?;
+        self.validate_resume_input(waiting_node, &snapshot, &resume_input)?;
         let outgoing = definition.transitions_from(&waiting_node.id);
         let next = self.resolve_transition(&outgoing, None)?;
 
@@ -140,6 +141,91 @@ impl WorkflowEngine {
         )))
     }
 
+    fn validate_resume_input(
+        &self,
+        waiting_node: &crate::definition::NodeDefinition,
+        snapshot: &WorkflowRunSnapshot,
+        resume_input: &Value,
+    ) -> Result<(), RunnerError> {
+        match waiting_node.node_type {
+            NodeType::Wait => {
+                let expected_event = waiting_node
+                    .config
+                    .get("event")
+                    .and_then(Value::as_str)
+                    .unwrap_or("external_callback");
+                let actual_event = extract_value_by_key(resume_input, "event")
+                    .or_else(|| extract_value_by_key(resume_input, "type"));
+
+                match actual_event.and_then(|value| value.as_str().map(str::to_string)) {
+                    Some(actual) if actual == expected_event => {}
+                    Some(actual) => {
+                        return Err(RunnerError::ResumeValidation(format!(
+                            "wait node {} expected event {}, got {}",
+                            waiting_node.id, expected_event, actual
+                        )));
+                    }
+                    None => {
+                        return Err(RunnerError::ResumeValidation(format!(
+                            "wait node {} is missing event/type in resume payload",
+                            waiting_node.id
+                        )));
+                    }
+                }
+
+                validate_field_match(
+                    waiting_node,
+                    snapshot,
+                    resume_input,
+                    "correlationKey",
+                    &["correlationKey", "requestId"],
+                )?;
+
+                Ok(())
+            }
+            NodeType::Task => {
+                let expected_event = waiting_node
+                    .config
+                    .get("completeEvent")
+                    .and_then(Value::as_str)
+                    .unwrap_or("task.completed");
+                let actual_event = extract_value_by_key(resume_input, "event")
+                    .or_else(|| extract_value_by_key(resume_input, "type"));
+
+                match actual_event.and_then(|value| value.as_str().map(str::to_string)) {
+                    Some(actual) if actual == expected_event => {}
+                    Some(actual) => {
+                        return Err(RunnerError::ResumeValidation(format!(
+                            "task node {} expected event {}, got {}",
+                            waiting_node.id, expected_event, actual
+                        )));
+                    }
+                    None => {
+                        return Err(RunnerError::ResumeValidation(format!(
+                            "task node {} is missing event/type in resume payload",
+                            waiting_node.id
+                        )));
+                    }
+                }
+
+                validate_field_match(
+                    waiting_node,
+                    snapshot,
+                    resume_input,
+                    "taskId",
+                    &["taskId", "id"],
+                )?;
+
+                Ok(())
+            }
+            other => Err(RunnerError::ResumeValidation(format!(
+                "node {} of type {} is not resumable",
+                waiting_node.id,
+                other.as_str()
+            ))),
+        }
+    }
+
     fn execute_from(
         &self,
         definition: &WorkflowDefinition,
@@ -154,6 +240,7 @@ impl WorkflowEngine {
         let workflow_key = definition.meta.key.clone();
         let workflow_version = definition.meta.version;
         let max_steps = definition.nodes.len().saturating_mul(8).max(16);
+        let mut last_signal = None;
 
         for _ in 0..max_steps {
             let node = definition
@@ -173,6 +260,9 @@ impl WorkflowEngine {
                 env: &env,
             };
             let result = executor.execute(node, &context)?;
+            if let Some(signal) = result.next_signal.clone() {
+                last_signal = Some(signal);
+            }
 
             if !result.state_patch.is_null() {
                 merge_state(&mut state, result.state_patch.clone());
@@ -199,7 +289,7 @@ impl WorkflowEngine {
                         current_node_id: Some(node.id.clone()),
                         state: state.clone(),
                         timeline: timeline.clone(),
-                        last_signal: next_signal.clone(),
+                        last_signal: next_signal.clone().or(last_signal.clone()),
                         resume_state: Some(WorkflowRunSnapshot {
                             run_id,
                             workflow_key: definition.meta.key.clone(),
@@ -223,7 +313,7 @@ impl WorkflowEngine {
                         current_node_id: Some(node.id.clone()),
                         state,
                         timeline,
-                        last_signal: result.next_signal,
+                        last_signal,
                         resume_state: None,
                     });
                 }
@@ -239,7 +329,7 @@ impl WorkflowEngine {
                     current_node_id: Some(node.id.clone()),
                     state,
                     timeline,
-                    last_signal: result.next_signal,
+                    last_signal,
                     resume_state: None,
                 });
             }
@@ -262,6 +352,61 @@ fn new_run_id() -> String {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     format!("run-{epoch_ms}")
+}
+
+fn validate_field_match(
+    waiting_node: &crate::definition::NodeDefinition,
+    snapshot: &WorkflowRunSnapshot,
+    resume_input: &Value,
+    canonical_name: &str,
+    candidate_keys: &[&str],
+) -> Result<(), RunnerError> {
+    let expected = candidate_keys
+        .iter()
+        .find_map(|key| extract_value_by_key_from_signal(snapshot, key));
+    let actual = candidate_keys
+        .iter()
+        .find_map(|key| extract_value_by_key(resume_input, key));
+
+    match (expected, actual) {
+        (Some(expected), Some(actual)) if expected == actual => Ok(()),
+        (Some(expected), Some(actual)) => Err(RunnerError::ResumeValidation(format!(
+            "node {} expected {} {}, got {}",
+            waiting_node.id, canonical_name, expected, actual
+        ))),
+        (Some(_), None) => Err(RunnerError::ResumeValidation(format!(
+            "node {} resume payload is missing {}",
+            waiting_node.id, canonical_name
+        ))),
+        (None, _) => Ok(()),
+    }
+}
+
+fn extract_value_by_key_from_signal(snapshot: &WorkflowRunSnapshot, key: &str) -> Option<Value> {
+    snapshot
+        .last_signal
+        .as_ref()
+        .and_then(|signal| extract_value_by_key(&signal.payload, key))
+        .or_else(|| extract_value_by_key(&snapshot.last_input, key))
+}
+
+fn extract_value_by_key(value: &Value, key: &str) -> Option<Value> {
+    value
+        .get(key)
+        .cloned()
+        .or_else(|| {
+            value
+                .get("payload")
+                .and_then(|payload| payload.get(key))
+                .cloned()
+        })
+        .or_else(|| {
+            value
+                .get("headers")
+                .and_then(|headers| headers.get(key))
+                .cloned()
+        })
+        .or_else(|| value.get("body").and_then(|body| body.get(key)).cloned())
 }
 
 #[cfg(test)]
@@ -386,6 +531,7 @@ mod tests {
                 resume_state,
                 json!({
                     "event": "rcs.callback",
+                    "correlationKey": "req-3",
                     "status": "done",
                     "orderNo": "SO-1003"
                 }),
@@ -401,6 +547,7 @@ mod tests {
                 .expect("timeline should not be empty")
                 .output,
             json!({
+                "correlationKey": "req-3",
                 "event": "rcs.callback",
                 "status": "done",
                 "orderNo": "SO-1003"
@@ -441,5 +588,219 @@ mod tests {
             summary.state["orderSnapshot"]["data"]["orderNo"],
             json!("SO-1004")
         );
+    }
+
+    #[test]
+    fn resumes_task_branch_when_event_and_task_id_match() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/sorting-main-flow.json"))
+                .expect("example workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let waiting_summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-5"
+                    },
+                    "body": {
+                        "orderNo": "SO-1005",
+                        "bizType": "manual_review"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        let task_id = waiting_summary
+            .last_signal
+            .as_ref()
+            .and_then(|signal| signal.payload.get("taskId"))
+            .cloned()
+            .expect("task id should exist");
+
+        let resumed = engine
+            .resume(
+                &definition,
+                waiting_summary
+                    .resume_state
+                    .expect("waiting run should expose resume state"),
+                json!({
+                    "event": "task.completed",
+                    "taskId": task_id,
+                    "status": "approved"
+                }),
+            )
+            .expect("resume should complete");
+
+        assert!(matches!(resumed.status, WorkflowRunStatus::Completed));
+        assert_eq!(resumed.current_node_id.as_deref(), Some("end_1"));
+    }
+
+    #[test]
+    fn rejects_resume_when_wait_event_mismatches() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/sorting-main-flow.json"))
+                .expect("example workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let waiting_summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-6"
+                    },
+                    "body": {
+                        "orderNo": "SO-1006",
+                        "bizType": "auto_sort"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        let error = engine
+            .resume(
+                &definition,
+                waiting_summary
+                    .resume_state
+                    .expect("waiting run should expose resume state"),
+                json!({
+                    "event": "wrong.callback",
+                    "correlationKey": "req-6"
+                }),
+            )
+            .expect_err("resume should be rejected");
+
+        assert!(matches!(
+            error,
+            crate::error::RunnerError::ResumeValidation(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_resume_when_correlation_key_mismatches() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/sorting-main-flow.json"))
+                .expect("example workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let waiting_summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-7"
+                    },
+                    "body": {
+                        "orderNo": "SO-1007",
+                        "bizType": "auto_sort"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        let error = engine
+            .resume(
+                &definition,
+                waiting_summary
+                    .resume_state
+                    .expect("waiting run should expose resume state"),
+                json!({
+                    "event": "rcs.callback",
+                    "correlationKey": "req-other"
+                }),
+            )
+            .expect_err("resume should be rejected");
+
+        assert!(matches!(
+            error,
+            crate::error::RunnerError::ResumeValidation(_)
+        ));
+    }
+
+    #[test]
+    fn supports_extended_node_coverage_flow_with_subworkflow_and_respond() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/coverage-flow.json"))
+                .expect("coverage workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-coverage-1"
+                    },
+                    "body": {
+                        "orderNo": "SO-COVER-1",
+                        "customer": "customer-a",
+                        "route": "subflow",
+                        "needsDispatch": true
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+        assert_eq!(
+            summary.timeline[1].node_type,
+            crate::definition::NodeType::WebhookTrigger
+        );
+        assert_eq!(
+            summary
+                .last_signal
+                .as_ref()
+                .expect("respond should emit a signal")
+                .signal_type,
+            "webhook_response"
+        );
+        assert_eq!(summary.state["subWorkflow"]["status"], json!("completed"));
+        assert_eq!(
+            summary
+                .last_signal
+                .as_ref()
+                .expect("respond should emit a signal")
+                .payload["body"]["route"],
+            json!("subflow")
+        );
+    }
+
+    #[test]
+    fn supports_if_else_false_branch_and_default_switch_branch() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/coverage-flow.json"))
+                .expect("coverage workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-coverage-2"
+                    },
+                    "body": {
+                        "orderNo": "SO-COVER-2",
+                        "customer": "customer-b",
+                        "route": "direct",
+                        "needsDispatch": false
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+        assert_eq!(summary.state["dispatch"]["skipped"], json!(true));
+        assert_eq!(
+            summary
+                .last_signal
+                .as_ref()
+                .expect("respond should emit a signal")
+                .payload["body"]["dispatchSkipped"],
+            json!(true)
+        );
+        assert_eq!(summary.state["subWorkflow"], serde_json::Value::Null);
     }
 }

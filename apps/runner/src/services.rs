@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
+use crate::definition::WorkflowDefinition;
 use crate::error::RunnerError;
 use crate::runtime::NodeExecutionContext;
 
@@ -38,6 +39,7 @@ pub struct WorkflowServices {
     pub fetch_connectors: FetchConnectorRegistry,
     pub action_handlers: ActionHandlerRegistry,
     pub task_handlers: TaskHandlerRegistry,
+    pub workflow_definitions: WorkflowDefinitionRegistry,
 }
 
 impl WorkflowServices {
@@ -104,6 +106,21 @@ impl TaskHandlerRegistry {
 
     pub fn resolve(&self, name: &str) -> Option<Arc<dyn TaskHandler>> {
         self.handlers.get(name).cloned()
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct WorkflowDefinitionRegistry {
+    definitions: HashMap<String, WorkflowDefinition>,
+}
+
+impl WorkflowDefinitionRegistry {
+    pub fn register(&mut self, key: impl Into<String>, definition: WorkflowDefinition) {
+        self.definitions.insert(key.into(), definition);
+    }
+
+    pub fn resolve(&self, key: &str) -> Option<WorkflowDefinition> {
+        self.definitions.get(key).cloned()
     }
 }
 

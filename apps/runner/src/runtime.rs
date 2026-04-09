@@ -102,6 +102,11 @@ impl NodeExecutionResult {
         self
     }
 
+    pub fn with_signal(mut self, signal: NextSignal) -> Self {
+        self.next_signal = Some(signal);
+        self
+    }
+
     pub fn into_terminal(mut self) -> Self {
         self.terminal = true;
         self

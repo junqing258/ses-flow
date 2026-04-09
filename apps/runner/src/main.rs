@@ -1,9 +1,11 @@
 use std::env;
 use std::fs;
+use std::sync::Arc;
 
 use runner::definition::WorkflowDefinition;
 use runner::engine::WorkflowEngine;
 use runner::runtime::{RunEnvironment, WorkflowRunSnapshot, WorkflowRunSummary};
+use runner::store::{InMemoryRunStore, WorkflowRunner};
 use serde_json::{Value, json};
 
 fn main() {
@@ -25,6 +27,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let engine = WorkflowEngine::new();
+    let runner = WorkflowRunner::new(engine, Arc::new(InMemoryRunStore::new()));
     let summary = match resume_state_path {
         Some(path) => {
             let snapshot = load_resume_state(&path)?;
@@ -32,14 +35,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 Some(path) => serde_json::from_str::<Value>(&fs::read_to_string(path)?)?,
                 None => default_resume_event(),
             };
-            engine.resume(&definition, snapshot, event)?
+            let run_id = snapshot.run_id.clone();
+            runner.seed_snapshot(snapshot)?;
+            runner.resume_by_run_id(&definition, &run_id, event)?
         }
         None => {
             let trigger = match trigger_path {
                 Some(path) => serde_json::from_str::<Value>(&fs::read_to_string(path)?)?,
                 None => default_trigger(),
             };
-            engine.run(&definition, trigger, RunEnvironment::default())?
+            runner.run(&definition, trigger, RunEnvironment::default())?
         }
     };
 
@@ -69,6 +74,7 @@ fn default_trigger() -> Value {
 fn default_resume_event() -> Value {
     json!({
         "event": "rcs.callback",
+        "correlationKey": "req-demo-1",
         "status": "done",
         "orderNo": "SO-DEMO-1"
     })

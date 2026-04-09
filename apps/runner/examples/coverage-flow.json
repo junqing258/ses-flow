@@ -1,0 +1,242 @@
+{
+  "meta": {
+    "key": "coverage-flow",
+    "name": "Coverage Flow",
+    "version": 1,
+    "scope": {
+      "tenant": "tenant-a",
+      "warehouse": "WH-1"
+    },
+    "status": "published"
+  },
+  "trigger": {
+    "type": "webhook",
+    "path": "/flows/coverage",
+    "responseMode": "sync"
+  },
+  "inputSchema": {
+    "type": "object"
+  },
+  "nodes": [
+    {
+      "id": "start_1",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "id": "webhook_in",
+      "type": "webhook_trigger",
+      "name": "Webhook Trigger",
+      "config": {
+        "mode": "full"
+      }
+    },
+    {
+      "id": "fetch_context",
+      "type": "fetch",
+      "name": "Fetch Context",
+      "config": {
+        "connector": "oms.getOrder"
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "warehouseId": "{{env.warehouseId}}"
+      }
+    },
+    {
+      "id": "persist_context",
+      "type": "set_state",
+      "name": "Persist Context",
+      "config": {
+        "path": "orderContext"
+      },
+      "inputMapping": {
+        "value": "{{input}}"
+      }
+    },
+    {
+      "id": "dispatch_gate",
+      "type": "if_else",
+      "name": "Need Dispatch",
+      "config": {
+        "expression": "{{trigger.body.needsDispatch}}"
+      }
+    },
+    {
+      "id": "dispatch_command",
+      "type": "command",
+      "name": "Dispatch Command",
+      "config": {
+        "action": "rcs.dispatch"
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "route": "{{trigger.body.route}}"
+      }
+    },
+    {
+      "id": "mark_skipped",
+      "type": "set_state",
+      "name": "Mark Skipped",
+      "config": {
+        "path": "dispatch"
+      },
+      "inputMapping": {
+        "value": {
+          "skipped": true,
+          "reason": "dispatch gate false"
+        }
+      }
+    },
+    {
+      "id": "route_switch",
+      "type": "switch",
+      "name": "Route Switch",
+      "config": {
+        "expression": "{{trigger.body.route}}"
+      }
+    },
+    {
+      "id": "run_subflow",
+      "type": "sub_workflow",
+      "name": "Run Subflow",
+      "config": {
+        "statePath": "subWorkflow",
+        "definition": {
+          "meta": {
+            "key": "coverage-subflow",
+            "name": "Coverage Subflow",
+            "version": 1
+          },
+          "trigger": {
+            "type": "manual"
+          },
+          "inputSchema": {
+            "type": "object"
+          },
+          "nodes": [
+            {
+              "id": "sub_start",
+              "type": "start",
+              "name": "Sub Start"
+            },
+            {
+              "id": "sub_set",
+              "type": "set_state",
+              "name": "Sub Set",
+              "config": {
+                "path": "result"
+              },
+              "inputMapping": {
+                "value": {
+                  "customer": "{{trigger.body.customer}}",
+                  "route": "{{trigger.body.route}}",
+                  "nested": true
+                }
+              }
+            },
+            {
+              "id": "sub_end",
+              "type": "end",
+              "name": "Sub End"
+            }
+          ],
+          "transitions": [
+            {
+              "from": "sub_start",
+              "to": "sub_set"
+            },
+            {
+              "from": "sub_set",
+              "to": "sub_end"
+            }
+          ],
+          "policies": {}
+        }
+      },
+      "inputMapping": {
+        "customer": "{{trigger.body.customer}}",
+        "route": "{{trigger.body.route}}"
+      }
+    },
+    {
+      "id": "respond_ok",
+      "type": "respond",
+      "name": "Respond",
+      "config": {
+        "statusCode": 202
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "route": "{{trigger.body.route}}",
+        "dispatchSkipped": "{{state.dispatch.skipped}}",
+        "subWorkflowStatus": "{{state.subWorkflow.status}}",
+        "fetchStatus": "{{state.orderContext.data.status}}"
+      }
+    },
+    {
+      "id": "end_1",
+      "type": "end",
+      "name": "End"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start_1",
+      "to": "webhook_in"
+    },
+    {
+      "from": "webhook_in",
+      "to": "fetch_context"
+    },
+    {
+      "from": "fetch_context",
+      "to": "persist_context"
+    },
+    {
+      "from": "persist_context",
+      "to": "dispatch_gate"
+    },
+    {
+      "from": "dispatch_gate",
+      "to": "dispatch_command",
+      "label": "then",
+      "priority": 100
+    },
+    {
+      "from": "dispatch_gate",
+      "to": "mark_skipped",
+      "label": "else",
+      "priority": 90
+    },
+    {
+      "from": "dispatch_command",
+      "to": "route_switch"
+    },
+    {
+      "from": "mark_skipped",
+      "to": "route_switch"
+    },
+    {
+      "from": "route_switch",
+      "to": "run_subflow",
+      "label": "subflow",
+      "priority": 100
+    },
+    {
+      "from": "route_switch",
+      "to": "respond_ok",
+      "branchType": "default",
+      "priority": 1
+    },
+    {
+      "from": "run_subflow",
+      "to": "respond_ok"
+    },
+    {
+      "from": "respond_ok",
+      "to": "end_1"
+    }
+  ],
+  "policies": {}
+}

@@ -1,0 +1,6 @@
+{
+  "event": "task.completed",
+  "taskId": "task-run-demo",
+  "status": "approved",
+  "operatorId": "reviewer-1"
+}

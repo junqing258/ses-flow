@@ -18,6 +18,16 @@ pub enum RunnerError {
     MissingActionHandler(String),
     #[error("task handler not found: {0}")]
     MissingTaskHandler(String),
+    #[error("sub-workflow definition not found: {0}")]
+    MissingSubWorkflow(String),
+    #[error("sub-workflow execution failed: {0}")]
+    SubWorkflow(String),
+    #[error("workflow run snapshot not found: {0}")]
+    MissingRunSnapshot(String),
+    #[error("workflow run store error: {0}")]
+    Store(String),
+    #[error("resume validation failed: {0}")]
+    ResumeValidation(String),
     #[error("transition resolution failed: {0}")]
     Transition(String),
 }

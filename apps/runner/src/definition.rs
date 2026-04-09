@@ -168,13 +168,17 @@ pub enum NodeType {
     Fetch,
     SetState,
     Switch,
+    #[serde(alias = "command")]
     Action,
     Wait,
     Task,
     Respond,
     Code,
+    #[serde(alias = "subworkflow")]
     SubWorkflow,
+    #[serde(alias = "webhook")]
     WebhookTrigger,
+    #[serde(alias = "if")]
     IfElse,
 }
 
