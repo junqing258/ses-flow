@@ -7,7 +7,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
-      path: "/workflow",
+      path: "/workflow/:id?",
       name: "workflow",
       component: WorkflowEditorPage,
     },

@@ -55,6 +55,7 @@
         <button class="flex h-7 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-800 transition-colors">
           <Pencil class="h-3.5 w-3.5" />
         </button>
+        <!-- 运行 -->
         <button class="flex h-7 w-11 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-800 transition-colors">
           <Play class="h-3.5 w-3.5" />
         </button>
@@ -237,6 +238,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { type Connection, type Edge, VueFlow, useVueFlow } from "@vue-flow/core";
 import { ChevronDown, ChevronLeft, Compass, Code, Hand, MoreHorizontal, MousePointer2, Pencil, Play, Redo2, Settings, Undo2 } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
@@ -271,7 +273,10 @@ const WORKFLOW_EDGE_STYLE = {
   strokeWidth: 2,
 };
 const HISTORY_LIMIT = 50;
+const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
 
+const route = useRoute();
+const router = useRouter();
 const nodes = ref<WorkflowFlowNode[]>(createWorkflowNodes());
 const edges = ref<Edge[]>(createWorkflowEdges());
 const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(createWorkflowPanels());
@@ -282,8 +287,15 @@ const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
+const getRouteWorkflowId = (value: string | string[] | undefined) => {
+  const routeValue = Array.isArray(value) ? value[0] : value;
+  const normalizedValue = routeValue?.trim();
+
+  return normalizedValue || DEFAULT_WORKFLOW_ID;
+};
+
 const workflowMeta = reactive({
-  id: "sorting-main-flow",
+  id: getRouteWorkflowId(route.params.id as string | string[] | undefined),
   name: "sorting-main-flow",
   status: "draft" as "draft" | "published",
   version: "v3",
@@ -350,6 +362,17 @@ watch(
     }
   },
   { immediate: true },
+);
+
+watch(
+  () => route.params.id,
+  (routeWorkflowId) => {
+    const nextWorkflowId = getRouteWorkflowId(routeWorkflowId as string | string[] | undefined);
+
+    if (workflowMeta.id !== nextWorkflowId) {
+      workflowMeta.id = nextWorkflowId;
+    }
+  },
 );
 
 const resolveIcon = (icon: WorkflowIconKey) => WORKFLOW_ICON_MAP[icon];
@@ -730,9 +753,17 @@ const handlePublish = async () => {
       workflowVersion: workflowMeta.version,
       workflowStatus: workflowMeta.status,
     });
+    const publishedWorkflowId = registration.workflowId?.trim() || workflowMeta.id;
 
+    workflowMeta.id = publishedWorkflowId;
     workflowMeta.status = "published";
-    toast.success(`已发布到 Runner：${registration.workflowId}`);
+    await router.replace({
+      name: "workflow",
+      params: {
+        id: publishedWorkflowId,
+      },
+    });
+    toast.success(`已发布到 Runner：${publishedWorkflowId}`);
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "发布到 Runner 失败");
   } finally {

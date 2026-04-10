@@ -487,6 +487,24 @@ const slugifyNodeId = (value: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+const getPaletteBaseNodeId = (item: WorkflowPaletteItem) => {
+  const labelId = slugifyNodeId(item.label);
+
+  if (labelId) {
+    return labelId;
+  }
+
+  const paletteId = slugifyNodeId(item.id.replace(/^palette-/, ""));
+
+  if (paletteId) {
+    return paletteId;
+  }
+
+  const kindId = slugifyNodeId(item.kind);
+
+  return kindId || "node";
+};
+
 const clonePanel = (nodeId: keyof typeof INITIAL_WORKFLOW_PANELS) =>
   structuredClone(INITIAL_WORKFLOW_PANELS[nodeId]) as WorkflowNodePanel;
 
@@ -521,7 +539,7 @@ export const createWorkflowNodeDraft = (
   position: WorkflowFlowNode["position"],
   existingNodes: WorkflowFlowNode[],
 ): WorkflowNodeDraft => {
-  const baseNodeId = slugifyNodeId(item.label);
+  const baseNodeId = getPaletteBaseNodeId(item);
 
   switch (item.id) {
     case "palette-start": {
