@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Handle, Position, type NodeProps } from "@vue-flow/core";
+import { Handle, Position, type HandleConnectableFunc, type NodeProps } from "@vue-flow/core";
 
 import { WORKFLOW_ICON_MAP, type WorkflowNodeData } from "@/features/workflow/model";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,8 @@ const props = defineProps<NodeProps<WorkflowNodeData>>();
 
 const IconComponent = computed(() => WORKFLOW_ICON_MAP[props.data.icon]);
 const isActive = computed(() => Boolean(props.data.active || props.selected));
-const isSwitchNode = computed(() => props.data.kind === "switch");
+const isBranchNode = computed(() => props.data.kind === "switch" || props.data.kind === "if-else");
+const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) => connectedEdges.length < 1;
 </script>
 
 <template>
@@ -39,14 +40,13 @@ const isSwitchNode = computed(() => props.data.kind === "switch");
       <div class="flex min-w-0 flex-1 flex-col justify-center gap-1 px-4">
         <div class="flex items-center justify-between gap-2">
           <p class="truncate text-[12px] font-medium text-slate-500">{{ data.title }}</p>
-
-          <span
+          <!-- <span
             v-if="data.status === 'published'"
             class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700"
           >
             <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             已发布
-          </span>
+          </span> -->
         </div>
 
         <p class="truncate text-[14px] font-semibold tracking-[0.01em] text-slate-900">{{ data.subtitle }}</p>
@@ -54,7 +54,7 @@ const isSwitchNode = computed(() => props.data.kind === "switch");
     </div>
 
     <Handle
-      v-if="!isSwitchNode"
+      v-if="!isBranchNode"
       id="out"
       type="source"
       :position="Position.Bottom"
@@ -66,12 +66,14 @@ const isSwitchNode = computed(() => props.data.kind === "switch");
         id="branch-a"
         type="source"
         :position="Position.Left"
+        :connectable="singleConnectionHandle"
         class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
       />
       <Handle
         id="branch-b"
         type="source"
         :position="Position.Right"
+        :connectable="singleConnectionHandle"
         class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
       />
     </template>

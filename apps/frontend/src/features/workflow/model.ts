@@ -42,6 +42,7 @@ export type WorkflowNodeKind =
   | "start"
   | "trigger"
   | "fetch"
+  | "if-else"
   | "switch"
   | "action"
   | "wait"
@@ -90,6 +91,11 @@ export interface WorkflowPaletteCategory {
   label: string;
 }
 
+export interface WorkflowNodeDraft {
+  node: WorkflowFlowNode;
+  panel: WorkflowNodePanel;
+}
+
 export type WorkflowFlowNode = Node<WorkflowNodeData, Record<string, never>, WorkflowNodeType> & {
   data: WorkflowNodeData;
   type: WorkflowNodeType;
@@ -128,7 +134,7 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     items: [
       { id: "palette-start", kind: "start", label: "Start", icon: "play", accent: "#10B981" },
       { id: "palette-end", kind: "end", label: "End", icon: "shield", accent: "#EF4444" },
-      { id: "palette-if-else", kind: "action", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
+      { id: "palette-if-else", kind: "if-else", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
       { id: "palette-switch", kind: "switch", label: "Switch", icon: "gitBranch", accent: "#EC4899" },
       { id: "palette-subflow", kind: "trigger", label: "Sub-Workflow", icon: "webhook", accent: "#6366F1" },
     ],
@@ -456,6 +462,257 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
       ],
     },
   },
+};
+
+const slugifyNodeId = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const clonePanel = (nodeId: keyof typeof INITIAL_WORKFLOW_PANELS) =>
+  structuredClone(INITIAL_WORKFLOW_PANELS[nodeId]) as WorkflowNodePanel;
+
+const setFieldValue = (panel: WorkflowNodePanel, fieldKey: string, value: string) => {
+  panel.tabs.forEach((tab) => {
+    panel.fieldsByTab[tab]?.forEach((field) => {
+      if (field.key === fieldKey) {
+        field.value = value;
+      }
+    });
+  });
+};
+
+const getUniqueNodeId = (baseId: string, existingNodes: WorkflowFlowNode[]) => {
+  const existingIds = new Set(existingNodes.map((node) => node.id));
+
+  if (!existingIds.has(baseId)) {
+    return baseId;
+  }
+
+  let counter = 2;
+
+  while (existingIds.has(`${baseId}_${counter}`)) {
+    counter += 1;
+  }
+
+  return `${baseId}_${counter}`;
+};
+
+export const createWorkflowNodeDraft = (
+  item: WorkflowPaletteItem,
+  position: WorkflowFlowNode["position"],
+  existingNodes: WorkflowFlowNode[],
+): WorkflowNodeDraft => {
+  const baseNodeId = slugifyNodeId(item.label);
+
+  switch (item.id) {
+    case "palette-start": {
+      const nodeId = getUniqueNodeId("start", existingNodes);
+      const panel = clonePanel("start");
+
+      setFieldValue(panel, "nodeName", "Start");
+
+      return {
+        node: {
+          id: nodeId,
+          type: "terminal",
+          position,
+          data: {
+            accent: "#10B981",
+            icon: "play",
+            kind: "start",
+            nodeKey: nodeId,
+            title: "Start",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-end": {
+      const nodeId = getUniqueNodeId("end", existingNodes);
+      const panel = clonePanel("end_left");
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", "End");
+
+      return {
+        node: {
+          id: nodeId,
+          type: "terminal",
+          position,
+          data: {
+            accent: "#EF4444",
+            icon: "shield",
+            kind: "end",
+            nodeKey: nodeId,
+            title: "End",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-webhook": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("webhook_trigger");
+      const subtitle = "新建 Webhook Trigger";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          data: {
+            accent: "#6366F1",
+            icon: "webhook",
+            kind: "trigger",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Webhook Trigger",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-fetch": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("fetch_order");
+      const subtitle = "新建查询节点";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          data: {
+            accent: "#3B82F6",
+            icon: "database",
+            kind: "fetch",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Fetch",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-if-else": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("switch_biz_type");
+      const subtitle = "新建条件分支";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+      setFieldValue(panel, "expression", "payload.condition === true");
+      setFieldValue(panel, "fallback", "else");
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          data: {
+            accent: "#F97316",
+            icon: "gitBranch",
+            kind: "if-else",
+            nodeKey: nodeId,
+            subtitle,
+            title: "If / Else",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-switch": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("switch_biz_type");
+      const subtitle = "新建业务分流";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          data: {
+            accent: "#EC4899",
+            icon: "gitBranch",
+            kind: "switch",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Switch",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-wait": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("wait_callback");
+      const subtitle = "新建等待节点";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          data: {
+            accent: "#F59E0B",
+            icon: "clock",
+            kind: "wait",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Wait",
+          },
+        },
+        panel,
+      };
+    }
+    default: {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("assign_task");
+      const subtitle = `新建${item.label}`;
+      const titleMap: Partial<Record<WorkflowPaletteItem["id"], string>> = {
+        "palette-action": "Action / Command",
+        "palette-respond": "Respond",
+        "palette-subflow": "Sub-Workflow",
+        "palette-task": "Task",
+      };
+      const title = titleMap[item.id] ?? item.label;
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          data: {
+            accent: item.accent,
+            icon: item.icon,
+            kind: item.kind,
+            nodeKey: nodeId,
+            subtitle,
+            title,
+          },
+        },
+        panel,
+      };
+    }
+  }
 };
 
 export const createWorkflowNodes = () => structuredClone(INITIAL_WORKFLOW_NODES) as WorkflowFlowNode[];

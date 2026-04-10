@@ -1,6 +1,4 @@
 /// <reference types="vitest/config" />
-import { fileURLToPath, URL } from "node:url";
-
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { codeInspectorPlugin } from "code-inspector-plugin";
@@ -23,8 +21,11 @@ export default defineConfig(() => {
         : []),
     ],
     resolve: {
-      alias: {
-        "@": fileURLToPath(new URL("./src", import.meta.url)),
+      tsconfigPaths: true,
+    },
+    build: {
+      cache: {
+        enabled: true,
       },
     },
     server: {

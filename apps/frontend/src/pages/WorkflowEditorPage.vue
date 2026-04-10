@@ -64,9 +64,12 @@
                 v-for="item in category.items"
                 :key="item.id"
                 type="button"
-                class="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors"
+                draggable="true"
+                class="flex w-full cursor-grab items-center gap-3 px-3 py-2.5 text-left transition-colors active:cursor-grabbing"
                 :class="selectedNodeData.kind === item.kind ? 'bg-slate-50' : 'hover:bg-slate-50'"
                 @click="focusPaletteItem(item.kind)"
+                @dragstart="handlePaletteDragStart($event, item.id)"
+                @dragend="handlePaletteDragEnd"
               >
                 <span class="h-6 w-1 rounded-full" :style="{ backgroundColor: item.accent }" />
                 <div class="min-w-0 flex-1">
@@ -86,12 +89,18 @@
         </div>
       </aside>
 
-      <main class="workflow-canvas relative min-h-0 overflow-hidden">
+      <main
+        class="workflow-canvas relative min-h-0 overflow-hidden"
+        @dragenter.prevent="handleCanvasDragEnter"
+        @dragover.prevent="handleCanvasDragOver"
+        @drop.prevent="handleCanvasDrop"
+      >
         <VueFlow
           :nodes="nodes"
           :edges="edges"
           fit-view-on-init
           class="h-full w-full"
+          @connect="handleConnect"
           @node-click="handleNodeClick"
         >
           <template #node-workflow-card="nodeProps">
@@ -112,6 +121,17 @@
         </VueFlow>
 
         <div class="pointer-events-none absolute inset-0">
+          <div
+            v-if="isCanvasDropTarget"
+            class="absolute inset-6 rounded-[28px] border-2 border-dashed border-[#4f6af5]/55 bg-[#4f6af5]/8 shadow-[inset_0_0_0_1px_rgba(79,106,245,0.08)]"
+          >
+            <div class="absolute inset-x-0 top-6 flex justify-center">
+              <div class="rounded-full bg-white/92 px-4 py-2 text-xs font-semibold tracking-[0.03em] text-[#4f6af5] shadow-sm">
+                松开鼠标，将节点放入画布
+              </div>
+            </div>
+          </div>
+
           <div class="pointer-events-auto absolute left-4 top-4 flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur">
             <button
               v-for="tool in canvasTools"
@@ -231,7 +251,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
-import { type Edge, VueFlow } from "@vue-flow/core";
+import { type Connection, type Edge, VueFlow, useVueFlow } from "@vue-flow/core";
 import { MiniMap } from "@vue-flow/minimap";
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Search } from "lucide-vue-next";
 import { toast } from "vue-sonner";
@@ -249,6 +269,7 @@ import {
   WORKFLOW_PALETTE_CATEGORIES,
   WORKFLOW_TAB_LABELS,
   createWorkflowEdges,
+  createWorkflowNodeDraft,
   createWorkflowNodes,
   createWorkflowPanels,
   type WorkflowFlowNode,
@@ -256,8 +277,15 @@ import {
   type WorkflowNodeData,
   type WorkflowNodeKind,
   type WorkflowNodePanel,
+  type WorkflowPaletteItem,
   type WorkflowTabId,
 } from "@/features/workflow/model";
+
+const DRAG_DATA_TYPE = "application/x-ses-workflow-node";
+const WORKFLOW_EDGE_STYLE = {
+  stroke: "#CBD5E1",
+  strokeWidth: 2,
+};
 
 const nodes = ref<WorkflowFlowNode[]>(createWorkflowNodes());
 const edges = ref<Edge[]>(createWorkflowEdges());
@@ -265,6 +293,8 @@ const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(createWorkflowPanel
 const searchQuery = ref("");
 const selectedNodeId = ref("fetch_order");
 const activeTab = ref<WorkflowTabId>("base");
+const activeDragPaletteItemId = ref<string | null>(null);
+const isCanvasDropTarget = ref(false);
 const workflowMeta = {
   id: "sorting-main-flow",
   name: "sorting-main-flow",
@@ -274,6 +304,7 @@ const workflowMeta = {
 const expandedCategories = reactive<Record<string, boolean>>(
   Object.fromEntries(WORKFLOW_PALETTE_CATEGORIES.map((category) => [category.id, category.defaultOpen])),
 );
+const { screenToFlowCoordinate } = useVueFlow();
 
 const canvasTools = [
   { id: "select", icon: "mousePointer" as WorkflowIconKey },
@@ -306,6 +337,13 @@ const filteredCategories = computed(() => {
       : category.items,
   })).filter((category) => category.items.length > 0);
 });
+
+const paletteItemMap = computed<Record<string, WorkflowPaletteItem>>(() =>
+  WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).reduce<Record<string, WorkflowPaletteItem>>((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+  }, {}),
+);
 
 watch(
   visibleTabs,
@@ -347,6 +385,41 @@ const handleNodeClick = (payload: any) => {
   setSelectedNode(payload.node.id);
 };
 
+const getEdgeId = (connection: Connection) => {
+  const sourceHandle = connection.sourceHandle ?? "default";
+  const targetHandle = connection.targetHandle ?? "default";
+
+  return `edge:${connection.source}:${sourceHandle}->${connection.target}:${targetHandle}`;
+};
+
+const handleConnect = (connection: Connection) => {
+  if (!connection.source || !connection.target) {
+    return;
+  }
+
+  const nextEdgeId = getEdgeId(connection);
+
+  if (edges.value.some((edge) => edge.id === nextEdgeId)) {
+    toast.info("这条连线已经存在");
+    return;
+  }
+
+  edges.value = [
+    ...edges.value,
+    {
+      id: nextEdgeId,
+      source: connection.source,
+      sourceHandle: connection.sourceHandle,
+      target: connection.target,
+      targetHandle: connection.targetHandle,
+      type: "smoothstep",
+      style: WORKFLOW_EDGE_STYLE,
+    },
+  ];
+
+  toast.success("已创建连线");
+};
+
 const toggleCategory = (categoryId: string) => {
   expandedCategories[categoryId] = !expandedCategories[categoryId];
 };
@@ -365,6 +438,74 @@ const focusPaletteItem = (kind: WorkflowNodeKind) => {
   if (targetNode) {
     setSelectedNode(targetNode.id);
   }
+};
+
+const handlePaletteDragStart = (event: DragEvent, itemId: string) => {
+  if (!event.dataTransfer) {
+    return;
+  }
+
+  activeDragPaletteItemId.value = itemId;
+  event.dataTransfer.effectAllowed = "copy";
+  event.dataTransfer.setData(DRAG_DATA_TYPE, itemId);
+  event.dataTransfer.setData("text/plain", itemId);
+};
+
+const handlePaletteDragEnd = () => {
+  activeDragPaletteItemId.value = null;
+  isCanvasDropTarget.value = false;
+};
+
+const handleCanvasDragEnter = (event: DragEvent) => {
+  if (!event.dataTransfer?.types.includes(DRAG_DATA_TYPE)) {
+    return;
+  }
+
+  isCanvasDropTarget.value = true;
+};
+
+const handleCanvasDragOver = (event: DragEvent) => {
+  if (!event.dataTransfer?.types.includes(DRAG_DATA_TYPE)) {
+    return;
+  }
+
+  event.dataTransfer.dropEffect = "copy";
+  isCanvasDropTarget.value = true;
+};
+
+const handleCanvasDrop = (event: DragEvent) => {
+  isCanvasDropTarget.value = false;
+
+  const itemId = event.dataTransfer?.getData(DRAG_DATA_TYPE);
+  const item = itemId ? paletteItemMap.value[itemId] : undefined;
+
+  activeDragPaletteItemId.value = null;
+
+  if (!item) {
+    return;
+  }
+
+  const flowPosition = screenToFlowCoordinate({
+    x: event.clientX,
+    y: event.clientY,
+  });
+  const { node, panel } = createWorkflowNodeDraft(
+    item,
+    {
+      x: Math.max(24, flowPosition.x - (item.id === "palette-start" || item.id === "palette-end" ? 32 : 110)),
+      y: Math.max(24, flowPosition.y - (item.id === "palette-start" || item.id === "palette-end" ? 32 : 36)),
+    },
+    nodes.value,
+  );
+
+  nodes.value = [...nodes.value, node];
+  panelByNodeId.value = {
+    ...panelByNodeId.value,
+    [node.id]: panel,
+  };
+  setSelectedNode(node.id);
+
+  toast.success(`已添加节点：${node.data.subtitle ?? node.data.title}`);
 };
 
 const handleFieldUpdate = (tab: WorkflowTabId, fieldKey: string, value: string) => {
