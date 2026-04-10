@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::fs;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -335,9 +337,9 @@ impl NodeExecutor for CodeExecutor {
             )));
         }
 
-        let source = resolve_code_source(node)?;
         let params = resolve_mapping(node, context);
-        let process_output = execute_js_code(&source, context, &params, node.timeout_ms)?;
+        let spec = resolve_code_execution_spec(node)?;
+        let process_output = execute_js_code(&spec, context, &params, node.timeout_ms)?;
 
         Ok(build_code_result(process_output.result).with_logs(process_output.logs))
     }
@@ -534,32 +536,96 @@ fn resolve_mapping(node: &NodeDefinition, context: &NodeExecutionContext<'_>) ->
     template_context.resolve_value(&node.input_mapping)
 }
 
-fn resolve_code_source(node: &NodeDefinition) -> Result<String, RunnerError> {
-    node.config
+fn resolve_code_execution_spec(node: &NodeDefinition) -> Result<CodeExecutionSpec, RunnerError> {
+    if let Some(source) = node
+        .config
         .get("source")
         .or_else(|| node.config.get("js"))
         .or_else(|| node.config.get("code"))
         .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| {
-            RunnerError::CodeExecution(format!("node {} is missing config.source/js/code", node.id))
-        })
+    {
+        return Ok(CodeExecutionSpec::InlineSource(source.to_string()));
+    }
+
+    if let Some(source_path) = node
+        .config
+        .get("sourcePath")
+        .or_else(|| node.config.get("filePath"))
+        .and_then(Value::as_str)
+    {
+        let resolved = resolve_code_file_path(source_path)?;
+        let source = fs::read_to_string(&resolved).map_err(|error| {
+            RunnerError::CodeExecution(format!(
+                "failed to read code source file {}: {error}",
+                resolved.display()
+            ))
+        })?;
+        return Ok(CodeExecutionSpec::InlineSource(source));
+    }
+
+    if let Some(module_path) = node.config.get("modulePath").and_then(Value::as_str) {
+        let resolved = resolve_code_file_path(module_path)?;
+        let export_name = node
+            .config
+            .get("exportName")
+            .and_then(Value::as_str)
+            .unwrap_or("default")
+            .to_string();
+        return Ok(CodeExecutionSpec::Module {
+            module_path: resolved.to_string_lossy().to_string(),
+            export_name,
+        });
+    }
+
+    Err(RunnerError::CodeExecution(format!(
+        "node {} is missing config.source/js/code, sourcePath/filePath, or modulePath",
+        node.id
+    )))
+}
+
+fn resolve_code_file_path(path: &str) -> Result<PathBuf, RunnerError> {
+    let file_path = Path::new(path);
+    let absolute = if file_path.is_absolute() {
+        file_path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| RunnerError::CodeExecution(error.to_string()))?
+            .join(file_path)
+    };
+
+    absolute.canonicalize().map_err(|error| {
+        RunnerError::CodeExecution(format!(
+            "failed to resolve code file path {}: {error}",
+            absolute.display()
+        ))
+    })
 }
 
 fn execute_js_code(
-    source: &str,
+    spec: &CodeExecutionSpec,
     context: &NodeExecutionContext<'_>,
     params: &Value,
     timeout_ms: Option<u64>,
 ) -> Result<CodeProcessOutput, RunnerError> {
-    let payload = json!({
-        "source": source,
+    let mut payload = json!({
         "trigger": context.trigger,
         "input": context.input,
         "state": context.state,
         "env": env_to_value(context.env),
         "params": params
     });
+    match spec {
+        CodeExecutionSpec::InlineSource(source) => {
+            payload["source"] = Value::String(source.clone());
+        }
+        CodeExecutionSpec::Module {
+            module_path,
+            export_name,
+        } => {
+            payload["modulePath"] = Value::String(module_path.clone());
+            payload["exportName"] = Value::String(export_name.clone());
+        }
+    }
     let request = serde_json::to_vec(&payload)
         .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
 
@@ -684,6 +750,7 @@ fn wait_for_code_process(
 
 const NODE_RUNNER_BOOTSTRAP: &str = r#"
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 const chunks = [];
 for await (const chunk of process.stdin) {
@@ -692,7 +759,16 @@ for await (const chunk of process.stdin) {
 
 const raw = Buffer.concat(chunks).toString('utf8').trim();
 const payload = raw ? JSON.parse(raw) : {};
-const { source = '', trigger = null, input = null, state = null, env = null, params = null } = payload;
+const {
+  source = '',
+  modulePath = null,
+  exportName = 'default',
+  trigger = null,
+  input = null,
+  state = null,
+  env = null,
+  params = null
+} = payload;
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const majorVersion = Number((process.versions.node || '0').split('.')[0] || '0');
 if (!Number.isFinite(majorVersion) || majorVersion < 22) {
@@ -723,8 +799,18 @@ globalThis.console = {
 };
 
 try {
-  const fn = new AsyncFunction('trigger', 'input', 'state', 'env', 'params', source);
-  const result = await fn(trigger, input, state, env, params);
+  let result;
+  if (modulePath) {
+    const module = await import(pathToFileURL(modulePath).href);
+    const handler = exportName === 'default' ? module.default : module[exportName];
+    if (typeof handler !== 'function') {
+      throw new Error(`Code module export "${exportName}" is not a function`);
+    }
+    result = await handler(trigger, input, state, env, params);
+  } else {
+    const fn = new AsyncFunction('trigger', 'input', 'state', 'env', 'params', source);
+    result = await fn(trigger, input, state, env, params);
+  }
   process.stdout.write(JSON.stringify({
     result: result === undefined ? null : result,
     logs
@@ -741,6 +827,14 @@ struct CodeProcessOutput {
     result: Value,
     #[serde(default)]
     logs: Vec<NodeLogRecord>,
+}
+
+enum CodeExecutionSpec {
+    InlineSource(String),
+    Module {
+        module_path: String,
+        export_name: String,
+    },
 }
 
 fn evaluation_context<'a>(

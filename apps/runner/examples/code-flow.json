@@ -40,7 +40,7 @@
       },
       "config": {
         "language": "js",
-        "source": "const quantity = params.qty == null ? 0 : Number(params.qty);\nconst branch = params.route === 'priority' ? 'priority' : 'default';\nconsole.log('code node start', { requestId: params.requestId, branch });\nreturn {\n  output: {\n    orderNo: params.orderNo,\n    normalizedQty: quantity,\n    route: params.route,\n    branch,\n    requestId: params.requestId\n  },\n  statePatch: {\n    code: {\n      orderNo: params.orderNo,\n      normalizedQty: quantity,\n      branch,\n      requestId: params.requestId,\n      tenantId: env.tenantId\n    }\n  },\n  branchKey: branch\n};"
+        "modulePath": "examples/code-flow-handler.mjs"
       }
     },
     {

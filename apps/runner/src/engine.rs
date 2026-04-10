@@ -1196,4 +1196,77 @@ mod tests {
             crate::error::RunnerError::CodeExecution(message) if message.contains("timeout")
         ));
     }
+
+    #[test]
+    fn supports_code_node_source_path_script() {
+        let definition: WorkflowDefinition = serde_json::from_value(json!({
+            "meta": {
+                "key": "code-source-path-flow",
+                "name": "Code Source Path Flow",
+                "version": 1
+            },
+            "trigger": {
+                "type": "manual"
+            },
+            "inputSchema": {
+                "type": "object"
+            },
+            "nodes": [
+                {
+                    "id": "start_1",
+                    "type": "start",
+                    "name": "Start"
+                },
+                {
+                    "id": "run_code",
+                    "type": "code",
+                    "name": "Run Code",
+                    "inputMapping": {
+                        "orderNo": "{{input.orderNo}}"
+                    },
+                    "config": {
+                        "language": "js",
+                        "sourcePath": "examples/code-source-handler.js"
+                    }
+                },
+                {
+                    "id": "end_1",
+                    "type": "end",
+                    "name": "End"
+                }
+            ],
+            "transitions": [
+                {
+                    "from": "start_1",
+                    "to": "run_code"
+                },
+                {
+                    "from": "run_code",
+                    "to": "end_1"
+                }
+            ],
+            "policies": {}
+        }))
+        .expect("source path workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let summary = engine
+            .run(
+                &definition,
+                json!({
+                    "body": {
+                        "orderNo": "SO-SOURCE-1"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("source path script should run");
+
+        assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+        assert_eq!(
+            summary.timeline[1].node_type,
+            crate::definition::NodeType::Code
+        );
+        assert_eq!(summary.timeline[1].output["source"], json!("file"));
+        assert_eq!(summary.timeline[1].output["orderNo"], json!("SO-SOURCE-1"));
+    }
 }
