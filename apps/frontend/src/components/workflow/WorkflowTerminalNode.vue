@@ -21,8 +21,8 @@ const props = defineProps<NodeProps<WorkflowNodeData>>();
       v-if="props.data.kind !== 'start'"
       id="in"
       type="target"
-      :position="Position.Top"
-      class="!top-0 !h-3 !w-3 !-translate-y-1/2 !border-2 !border-[var(--terminal-accent)] !bg-white"
+      :position="Position.Left"
+      class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-[var(--terminal-accent)] !bg-white"
       :style="{ '--terminal-accent': props.data.accent }"
     />
 
@@ -32,8 +32,8 @@ const props = defineProps<NodeProps<WorkflowNodeData>>();
       v-if="props.data.kind !== 'end'"
       id="out"
       type="source"
-      :position="Position.Bottom"
-      class="!bottom-0 !h-3 !w-3 !translate-y-1/2 !border-2 !border-[var(--terminal-accent)] !bg-white"
+      :position="Position.Right"
+      class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-[var(--terminal-accent)] !bg-white"
       :style="{ '--terminal-accent': props.data.accent }"
     />
   </div>

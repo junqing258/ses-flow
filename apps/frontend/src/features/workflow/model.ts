@@ -1,4 +1,4 @@
-import type { Edge, Node } from "@vue-flow/core";
+import { Position, type Edge, type Node } from "@vue-flow/core";
 import {
   Activity,
   Clock3,
@@ -173,7 +173,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "start",
     type: "terminal",
-    position: { x: 372, y: 24 },
+    position: { x: 56, y: 240 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#10B981",
       icon: "play",
@@ -185,7 +187,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "webhook_trigger",
     type: "workflow-card",
-    position: { x: 262, y: 126 },
+    position: { x: 192, y: 176 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#6366F1",
       icon: "webhook",
@@ -199,7 +203,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "fetch_order",
     type: "workflow-card",
-    position: { x: 262, y: 286 },
+    position: { x: 520, y: 176 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       active: true,
       accent: "#3B82F6",
@@ -213,7 +219,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "switch_biz_type",
     type: "workflow-card",
-    position: { x: 262, y: 446 },
+    position: { x: 848, y: 176 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#EC4899",
       icon: "gitBranch",
@@ -226,7 +234,7 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "branch_label_a",
     type: "branch-chip",
-    position: { x: 185, y: 562 },
+    position: { x: 1088, y: 134 },
     draggable: false,
     selectable: false,
     data: {
@@ -240,7 +248,7 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "branch_label_b",
     type: "branch-chip",
-    position: { x: 486, y: 562 },
+    position: { x: 1088, y: 308 },
     draggable: false,
     selectable: false,
     data: {
@@ -254,7 +262,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "assign_task",
     type: "workflow-card",
-    position: { x: 58, y: 632 },
+    position: { x: 1184, y: 88 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#F97316",
       icon: "zap",
@@ -267,7 +277,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "wait_callback",
     type: "workflow-card",
-    position: { x: 520, y: 632 },
+    position: { x: 1184, y: 262 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#F59E0B",
       icon: "clock",
@@ -280,7 +292,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "end_left",
     type: "terminal",
-    position: { x: 146, y: 792 },
+    position: { x: 1528, y: 95 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#EF4444",
       icon: "shield",
@@ -292,7 +306,9 @@ const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
   {
     id: "end_right",
     type: "terminal",
-    position: { x: 608, y: 792 },
+    position: { x: 1528, y: 269 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       accent: "#EF4444",
       icon: "shield",
@@ -519,6 +535,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "terminal",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#10B981",
             icon: "play",
@@ -542,6 +560,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "terminal",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#EF4444",
             icon: "shield",
@@ -566,6 +586,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "workflow-card",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#6366F1",
             icon: "webhook",
@@ -591,6 +613,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "workflow-card",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#3B82F6",
             icon: "database",
@@ -618,6 +642,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "workflow-card",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#F97316",
             icon: "gitBranch",
@@ -643,6 +669,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "workflow-card",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#EC4899",
             icon: "gitBranch",
@@ -668,6 +696,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "workflow-card",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: "#F59E0B",
             icon: "clock",
@@ -700,6 +730,8 @@ export const createWorkflowNodeDraft = (
           id: nodeId,
           type: "workflow-card",
           position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           data: {
             accent: item.accent,
             icon: item.icon,

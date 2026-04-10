@@ -28,8 +28,8 @@ const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
     <Handle
       id="in"
       type="target"
-      :position="Position.Top"
-      class="!top-0 !h-3 !w-3 !-translate-y-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+      :position="Position.Left"
+      class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
     />
 
     <div class="flex h-[78px] overflow-hidden rounded-[14px]">
@@ -57,24 +57,24 @@ const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
       v-if="!isBranchNode"
       id="out"
       type="source"
-      :position="Position.Bottom"
-      class="!bottom-0 !h-3 !w-3 !translate-y-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+      :position="Position.Right"
+      class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
     />
 
     <template v-else>
       <Handle
         id="branch-a"
         type="source"
-        :position="Position.Left"
+        :position="Position.Right"
         :connectable="singleConnectionHandle"
-        class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+        class="!right-0 !top-[32%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
       />
       <Handle
         id="branch-b"
         type="source"
         :position="Position.Right"
         :connectable="singleConnectionHandle"
-        class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+        class="!right-0 !top-[68%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
       />
     </template>
   </div>
