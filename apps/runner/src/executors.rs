@@ -547,13 +547,15 @@ fn resolve_code_execution_spec(node: &NodeDefinition) -> Result<CodeExecutionSpe
         return Ok(CodeExecutionSpec::InlineSource(source.to_string()));
     }
 
+    let base_dir = resolve_code_base_dir(node)?;
+
     if let Some(source_path) = node
         .config
         .get("sourcePath")
         .or_else(|| node.config.get("filePath"))
         .and_then(Value::as_str)
     {
-        let resolved = resolve_code_file_path(source_path)?;
+        let resolved = resolve_code_file_path(base_dir.as_deref(), source_path)?;
         let source = fs::read_to_string(&resolved).map_err(|error| {
             RunnerError::CodeExecution(format!(
                 "failed to read code source file {}: {error}",
@@ -564,7 +566,7 @@ fn resolve_code_execution_spec(node: &NodeDefinition) -> Result<CodeExecutionSpe
     }
 
     if let Some(module_path) = node.config.get("modulePath").and_then(Value::as_str) {
-        let resolved = resolve_code_file_path(module_path)?;
+        let resolved = resolve_code_file_path(base_dir.as_deref(), module_path)?;
         let export_name = node
             .config
             .get("exportName")
@@ -583,14 +585,30 @@ fn resolve_code_execution_spec(node: &NodeDefinition) -> Result<CodeExecutionSpe
     )))
 }
 
-fn resolve_code_file_path(path: &str) -> Result<PathBuf, RunnerError> {
+fn resolve_code_base_dir(node: &NodeDefinition) -> Result<Option<PathBuf>, RunnerError> {
+    let Some(base_dir) = node
+        .config
+        .get("baseDir")
+        .or_else(|| node.config.get("workingDirectory"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+
+    resolve_code_file_path(None, base_dir).map(Some)
+}
+
+fn resolve_code_file_path(base_dir: Option<&Path>, path: &str) -> Result<PathBuf, RunnerError> {
     let file_path = Path::new(path);
     let absolute = if file_path.is_absolute() {
         file_path.to_path_buf()
     } else {
-        std::env::current_dir()
-            .map_err(|error| RunnerError::CodeExecution(error.to_string()))?
-            .join(file_path)
+        match base_dir {
+            Some(base_dir) => base_dir.join(file_path),
+            None => std::env::current_dir()
+                .map_err(|error| RunnerError::CodeExecution(error.to_string()))?
+                .join(file_path),
+        }
     };
 
     absolute.canonicalize().map_err(|error| {

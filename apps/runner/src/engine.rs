@@ -1269,4 +1269,125 @@ mod tests {
         assert_eq!(summary.timeline[1].output["source"], json!("file"));
         assert_eq!(summary.timeline[1].output["orderNo"], json!("SO-SOURCE-1"));
     }
+
+    #[test]
+    fn supports_code_node_module_export_name_with_base_dir() {
+        let definition: WorkflowDefinition = serde_json::from_value(json!({
+            "meta": {
+                "key": "code-module-export-flow",
+                "name": "Code Module Export Flow",
+                "version": 1
+            },
+            "trigger": {
+                "type": "manual"
+            },
+            "inputSchema": {
+                "type": "object"
+            },
+            "nodes": [
+                {
+                    "id": "start_1",
+                    "type": "start",
+                    "name": "Start"
+                },
+                {
+                    "id": "run_code",
+                    "type": "code",
+                    "name": "Run Code",
+                    "inputMapping": {
+                        "orderNo": "{{input.orderNo}}",
+                        "route": "{{input.route}}"
+                    },
+                    "config": {
+                        "language": "js",
+                        "baseDir": "examples/code-modules",
+                        "modulePath": "reusable-handler.mjs",
+                        "exportName": "branchByPriority"
+                    }
+                },
+                {
+                    "id": "mark_priority",
+                    "type": "set_state",
+                    "name": "Mark Priority",
+                    "config": {
+                        "path": "decision"
+                    },
+                    "inputMapping": {
+                        "value": {
+                            "handledBy": "priority-module"
+                        }
+                    }
+                },
+                {
+                    "id": "mark_default",
+                    "type": "set_state",
+                    "name": "Mark Default",
+                    "config": {
+                        "path": "decision"
+                    },
+                    "inputMapping": {
+                        "value": {
+                            "handledBy": "default-module"
+                        }
+                    }
+                },
+                {
+                    "id": "end_1",
+                    "type": "end",
+                    "name": "End"
+                }
+            ],
+            "transitions": [
+                {
+                    "from": "start_1",
+                    "to": "run_code"
+                },
+                {
+                    "from": "run_code",
+                    "to": "mark_priority",
+                    "label": "priority",
+                    "priority": 100
+                },
+                {
+                    "from": "run_code",
+                    "to": "mark_default",
+                    "branchType": "default",
+                    "priority": 1
+                },
+                {
+                    "from": "mark_priority",
+                    "to": "end_1"
+                },
+                {
+                    "from": "mark_default",
+                    "to": "end_1"
+                }
+            ],
+            "policies": {}
+        }))
+        .expect("module export workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let summary = engine
+            .run(
+                &definition,
+                json!({
+                    "body": {
+                        "orderNo": "SO-MODULE-1",
+                        "route": "priority"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("module export should run");
+
+        assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+        assert_eq!(summary.timeline[1].output["source"], json!("named-export"));
+        assert_eq!(summary.state["moduleResult"]["branch"], json!("priority"));
+        assert_eq!(
+            summary.state["decision"]["handledBy"],
+            json!("priority-module")
+        );
+        assert_eq!(summary.timeline[1].logs[0].level, "info");
+        assert!(summary.timeline[1].logs[0].message.contains("SO-MODULE-1"));
+    }
 }
