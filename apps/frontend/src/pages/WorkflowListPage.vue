@@ -14,7 +14,7 @@
           </div>
           <div>
             <p class="text-[10px] font-semibold uppercase tracking-[0.32em] text-slate-400">Builder</p>
-            <h1 class="text-lg font-semibold tracking-tight text-slate-900">Agent Builder</h1>
+            <h1 class="text-lg font-semibold tracking-tight text-slate-900">Workflow Builder</h1>
           </div>
         </div>
 
