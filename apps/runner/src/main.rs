@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use runner::api::{ApiState, build_router};
 use runner::server::WorkflowServer;
-use runner::telemetry::init_tracing;
+use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
 
 #[tokio::main]

@@ -1,7 +1,7 @@
 import { toRaw } from "vue";
 
 import type { ExportFormat, ExportPayload, MapOverviewStats, MapProject, PlatformPanel } from "@/types/map";
-import { safeStructuredClone } from "@/utils/safeClone";
+import { safeStructuredClone } from "@/lib/safeClone";
 
 type PendingResolver = {
   resolve: (value: MapOverviewStats | ExportPayload | PlatformPanel[]) => void;

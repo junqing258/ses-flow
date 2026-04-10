@@ -4,6 +4,8 @@ use std::sync::Once;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::format;
 
 static TRACING_INIT: Once = Once::new();
 
@@ -15,10 +17,14 @@ pub fn init_tracing() {
         tracing_subscriber::registry()
             .with(env_filter)
             .with(
-                tracing_subscriber::fmt::layer()
-                    .with_target(false)
-                    .with_thread_names(true)
-                    .compact(),
+                fmt::layer()
+                    .event_format(
+                        format::Format::default()
+                            .with_level(true)
+                            .with_target(false)
+                            .with_thread_names(true)
+                            .compact()
+                    )
             )
             .init();
     });

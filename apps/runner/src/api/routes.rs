@@ -49,7 +49,7 @@ pub fn build_router(state: ApiState) -> Router {
 
                     span!(
                         Level::INFO,
-                        "http_request",
+                        "REQ",
                         method = %request.method(),
                         matched_path = %matched_path,
                         uri = %request.uri(),
@@ -135,7 +135,7 @@ async fn upload_workflow(
         workspace_id = request.workspace_id.as_deref().unwrap_or("default"),
         workflow_key = request.workflow.meta.key,
         workflow_version = request.workflow.meta.version,
-        "registering workflow",
+        message = "registering workflow",
     );
     let registration = state.server.register_workflow(
         request.workspace_id,
