@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use runner::api::{ApiState, build_router};
 use runner::server::WorkflowServer;
+use runner::store::SqliteRunStore;
 use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
 
@@ -20,10 +21,15 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let host = parse_arg("--host").unwrap_or_else(|| "127.0.0.1".to_string());
     let port = parse_arg("--port").unwrap_or_else(|| "3002".to_string());
+    let db_path = parse_arg("--db").unwrap_or_else(|| "runner.db".to_string());
 
     let address: SocketAddr = format!("{host}:{port}").parse()?;
+
+    info!(db_path = %db_path, "initializing SQLite store");
+    let store = Arc::new(SqliteRunStore::new(&db_path).await?);
+
     let router = build_router(ApiState {
-        server: Arc::new(WorkflowServer::new()),
+        server: Arc::new(WorkflowServer::with_store(store)),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;
     info!(address = %address, "runner api listening");

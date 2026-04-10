@@ -89,6 +89,27 @@ impl WorkflowServer {
         }
     }
 
+    pub fn with_store(store: Arc<dyn WorkflowRunStore>) -> Self {
+        debug!("initializing workflow server with custom store");
+        let (events, _) = broadcast::channel(256);
+        let observer = Arc::new(BroadcastRunObserver {
+            store: store.clone(),
+            events: events.clone(),
+        });
+        let runner = Arc::new(WorkflowRunner::new(
+            WorkflowEngine::with_observer(observer),
+            store.clone(),
+        ));
+
+        Self {
+            store,
+            runner,
+            catalog: WorkflowCatalog::new(),
+            run_registry: RunRegistry::default(),
+            events,
+        }
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<WorkflowRunEvent> {
         self.events.subscribe()
     }
