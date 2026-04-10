@@ -9,11 +9,25 @@
 - 内置基础节点执行器
 - `connector / action / task` handler registry
 - workspace + workflow 注册能力
-- `run / snapshot` store 抽象与内存实现
+- `run / snapshot` store 抽象与 PostgreSQL 持久化实现
 - `waiting -> resume` 恢复执行能力
 - `sub_workflow` 父子级联恢复
 - `resume` 事件类型与关联键校验
 - HTTP API + SSE 运行状态推送
+
+## Database Setup
+
+该项目使用 PostgreSQL 作为持久化存储。详细的 PostgreSQL 设置说明请参考 [POSTGRES_SETUP.md](./POSTGRES_SETUP.md)。
+
+### 快速启动（使用 Docker Compose）
+
+```bash
+# 启动 PostgreSQL
+docker-compose up -d
+
+# 运行 runner
+cargo run -- --host 127.0.0.1 --port 3002
+```
 
 ### Commands
 
@@ -31,13 +45,17 @@ pnpm exec moon run runner:test
 cargo watch -x 'run -- --host 127.0.0.1 --port 3002'
 cargo run -- --host 127.0.0.1 --port 3002
 
-# with custom SQLite database path
-cargo run -- --host 127.0.0.1 --port 3002 --db /path/to/runner.db
+# with custom PostgreSQL database URL
+cargo run -- --host 127.0.0.1 --port 3002 --database-url "postgresql://user:password@localhost/dbname"
+
+# or use environment variable
+export DATABASE_URL="postgresql://user:password@localhost/dbname"
+cargo run -- --host 127.0.0.1 --port 3002
 
 cargo test
 ```
 
-默认使用 SQLite 持久化存储，数据库文件默认为当前目录下的 `runner.db`。可以通过 `--db` 参数指定自定义路径。
+默认使用 PostgreSQL 持久化存储，数据库连接字符串默认为 `postgresql://runner:runner@localhost/runner`。可以通过 `--database-url` 参数或 `DATABASE_URL` 环境变量指定自定义连接字符串。
 
 `apps/runner` 现在默认以服务器模式启动，开发模式会通过 `cargo watch` 在源码变化后自动重启。
 
@@ -152,5 +170,5 @@ curl -i \
 当前的 `fetch`、`action`、`wait`、`task` 仍是受控 stub，用于先把定义层、状态模型和节点协议跑通。
 其中 `fetch / action / task` 已经改为通过 registry 分发，后续接真实外部系统时只需要替换对应 handler。
 当前 `code` 节点直接调用宿主 `Node.js 22+` 运行，脚本上下文暴露 `trigger / input / state / env / params` 五个 JSON 对象，其中 `params` 来自节点 `inputMapping`。节点既支持内联 `config.source/js/code`，也支持 `config.sourcePath/filePath` 读取脚本文件，以及 `config.modulePath` 调用外部模块导出的函数；模块模式还支持 `config.exportName` 选择命名导出。返回值可直接作为节点输出，或使用 `{ output, statePatch, branchKey }` 控制状态合并与分支。节点 `timeoutMs` 会限制脚本最长运行时间，`console.log/info/warn/error/debug` 会被捕获并写入 timeline。相对路径默认按 runner 进程当前工作目录解析，也可以通过 `config.baseDir` / `config.workingDirectory` 显式指定基准目录。
-当前 `run store` 使用 SQLite 持久化存储，支持工作流运行摘要和快照的持久化。引擎与持久化边界已拆开，可通过实现 `WorkflowRunStore` trait 替换为其他存储实现（如 PostgreSQL / Redis / KV 存储）。
+当前 `run store` 使用 PostgreSQL 持久化存储，支持工作流运行摘要和快照的持久化。引擎与持久化边界已拆开，可通过实现 `WorkflowRunStore` trait 替换为其他存储实现（如 MySQL / Redis / KV 存储）。
 当前 `sub_workflow` 支持同步执行，也支持子流程进入 `waiting` 后由父流程代理等待并级联恢复。

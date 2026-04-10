@@ -4,12 +4,15 @@ use std::sync::Arc;
 
 use runner::api::{ApiState, build_router};
 use runner::server::WorkflowServer;
-use runner::store::SqliteRunStore;
+use runner::store::{PostgresCatalogStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
 
 #[tokio::main]
 async fn main() {
+    // Load .env file if it exists
+    dotenv::dotenv().ok();
+
     init_tracing();
 
     if let Err(error) = run().await {
@@ -21,15 +24,18 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let host = parse_arg("--host").unwrap_or_else(|| "127.0.0.1".to_string());
     let port = parse_arg("--port").unwrap_or_else(|| "3002".to_string());
-    let db_path = parse_arg("--db").unwrap_or_else(|| "runner.db".to_string());
+    let database_url = parse_arg("--database-url")
+        .or_else(|| env::var("DATABASE_URL").ok())
+        .unwrap_or_else(|| "postgresql://runner:runner@localhost/flow-runner".to_string());
 
     let address: SocketAddr = format!("{host}:{port}").parse()?;
 
-    info!(db_path = %db_path, "initializing SQLite store");
-    let store = Arc::new(SqliteRunStore::new(&db_path).await?);
+    info!(database_url = %database_url, "initializing PostgreSQL stores");
+    let run_store = Arc::new(PostgresRunStore::new(&database_url).await?);
+    let catalog_store = Arc::new(PostgresCatalogStore::new(run_store.get_pool()).await?);
 
     let router = build_router(ApiState {
-        server: Arc::new(WorkflowServer::with_store(store)),
+        server: Arc::new(WorkflowServer::with_store_and_catalog(run_store, catalog_store)),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;
     info!(address = %address, "runner api listening");

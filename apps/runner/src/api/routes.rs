@@ -155,7 +155,7 @@ async fn upload_workflow(
 async fn get_workflow(
     State(state): State<ApiState>,
     Path(workflow_id): Path<String>,
-) -> Result<Json<crate::server::WorkflowRecord>, ApiError> {
+) -> Result<Json<crate::store::WorkflowRecord>, ApiError> {
     debug!(workflow_id = %workflow_id, "fetching workflow");
     Ok(Json(state.server.get_workflow(&workflow_id)?))
 }

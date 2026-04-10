@@ -15,7 +15,7 @@ use crate::core::runtime::{
     RunEnvironment, WorkflowRunEvent, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
-use crate::store::{InMemoryRunStore, WorkflowRunStore, WorkflowRunner};
+use crate::store::{InMemoryCatalogStore, InMemoryRunStore, WorkflowCatalogStore, WorkspaceRecord, WorkflowRunner, WorkflowRunStore};
 
 #[derive(Debug, Error)]
 pub enum ServerError {
@@ -25,24 +25,6 @@ pub enum ServerError {
     NotFound(String),
     #[error(transparent)]
     Runner(#[from] RunnerError),
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct WorkspaceRecord {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct WorkflowRecord {
-    pub id: String,
-    #[serde(rename = "workspaceId")]
-    pub workspace_id: String,
-    #[serde(rename = "workflowKey")]
-    pub workflow_key: String,
-    #[serde(rename = "workflowVersion")]
-    pub workflow_version: u32,
-    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,36 +43,31 @@ pub struct WorkflowRegistration {
 pub struct WorkflowServer {
     store: Arc<dyn WorkflowRunStore>,
     runner: Arc<WorkflowRunner>,
-    catalog: WorkflowCatalog,
+    catalog: Arc<dyn WorkflowCatalogStore>,
     run_registry: RunRegistry,
     events: broadcast::Sender<WorkflowRunEvent>,
 }
 
 impl WorkflowServer {
     pub fn new() -> Self {
-        debug!("initializing workflow server");
-        let store: Arc<dyn WorkflowRunStore> = Arc::new(InMemoryRunStore::new());
-        let (events, _) = broadcast::channel(256);
-        let observer = Arc::new(BroadcastRunObserver {
-            store: store.clone(),
-            events: events.clone(),
-        });
-        let runner = Arc::new(WorkflowRunner::new(
-            WorkflowEngine::with_observer(observer),
-            store.clone(),
-        ));
-
-        Self {
-            store,
-            runner,
-            catalog: WorkflowCatalog::new(),
-            run_registry: RunRegistry::default(),
-            events,
-        }
+        debug!("initializing workflow server with in-memory catalog");
+        let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
+        Self::with_store_and_catalog(Arc::new(InMemoryRunStore::new()), catalog)
     }
 
     pub fn with_store(store: Arc<dyn WorkflowRunStore>) -> Self {
-        debug!("initializing workflow server with custom store");
+        debug!("initializing workflow server with in-memory catalog");
+        let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
+        Self::with_store_and_catalog(store, catalog)
+    }
+
+    pub fn with_catalog(catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
+        debug!("initializing workflow server with custom catalog");
+        Self::with_store_and_catalog(Arc::new(InMemoryRunStore::new()), catalog)
+    }
+
+    pub fn with_store_and_catalog(store: Arc<dyn WorkflowRunStore>, catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
+        debug!("initializing workflow server with custom store and catalog");
         let (events, _) = broadcast::channel(256);
         let observer = Arc::new(BroadcastRunObserver {
             store: store.clone(),
@@ -104,7 +81,7 @@ impl WorkflowServer {
         Self {
             store,
             runner,
-            catalog: WorkflowCatalog::new(),
+            catalog,
             run_registry: RunRegistry::default(),
             events,
         }
@@ -128,28 +105,51 @@ impl WorkflowServer {
             "validating workflow registration",
         );
         definition.validate()?;
-        let workspace = self.catalog.ensure_workspace(workspace_id, workspace_name);
-        let workflow = self.catalog.register_workflow(&workspace.id, definition);
+
+        // Ensure workspace exists
+        let workspace_record = WorkspaceRecord {
+            id: requested_workspace_id.to_string(),
+            name: workspace_name.unwrap_or_else(|| requested_workspace_id.to_string()),
+        };
+        self.catalog.save_workspace(&workspace_record)?;
+
+        // Generate workflow ID and save
+        let workflow_id = new_workflow_id();
+        let stored_workflow = crate::store::StoredWorkflowDefinition {
+            id: workflow_id.clone(),
+            workspace_id: workspace_record.id.clone(),
+            definition,
+        };
+        self.catalog.save_workflow(&stored_workflow)?;
+
         info!(
-            workflow_id = %workflow.id,
-            workspace_id = %workflow.workspace_id,
-            workflow_key = %workflow.workflow_key,
-            workflow_version = workflow.workflow_version,
+            workflow_id = %workflow_id,
+            workspace_id = %workspace_record.id,
+            workflow_key = %stored_workflow.definition.meta.key,
+            workflow_version = stored_workflow.definition.meta.version,
             "workflow registration completed",
         );
 
         Ok(WorkflowRegistration {
-            workspace_id: workflow.workspace_id,
-            workflow_id: workflow.id,
-            workflow_key: workflow.workflow_key,
-            workflow_version: workflow.workflow_version,
+            workspace_id: stored_workflow.workspace_id,
+            workflow_id: stored_workflow.id,
+            workflow_key: stored_workflow.definition.meta.key,
+            workflow_version: stored_workflow.definition.meta.version,
         })
     }
 
-    pub fn get_workflow(&self, workflow_id: &str) -> Result<WorkflowRecord, ServerError> {
-        self.catalog
-            .get_workflow(workflow_id)
-            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))
+    pub fn get_workflow(&self, workflow_id: &str) -> Result<crate::store::WorkflowRecord, ServerError> {
+        let stored_workflow = self.catalog
+            .load_workflow(workflow_id)?
+            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+
+        Ok(crate::store::WorkflowRecord {
+            id: stored_workflow.id,
+            workspace_id: stored_workflow.workspace_id,
+            workflow_key: stored_workflow.definition.meta.key,
+            workflow_version: stored_workflow.definition.meta.version,
+            name: stored_workflow.definition.meta.name,
+        })
     }
 
     pub fn get_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, ServerError> {
@@ -163,27 +163,26 @@ impl WorkflowServer {
         env: RunEnvironment,
     ) -> Result<WorkflowRunSummary, ServerError> {
         info!(workflow_id = %workflow_id, "preparing workflow run");
-        let workflow = self
-            .catalog
-            .get_definition(workflow_id)
+        let stored_workflow = self.catalog
+            .load_workflow(workflow_id)?
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
         let run_id = new_run_id();
-        let start_node = workflow.definition.start_node()?.id.clone();
+        let start_node = stored_workflow.definition.start_node()?.id.clone();
         info!(
-            workflow_id = %workflow.id,
+            workflow_id = %stored_workflow.id,
             run_id = %run_id,
             start_node_id = %start_node,
-            workflow_key = workflow.definition.meta.key,
-            workflow_version = workflow.definition.meta.version,
+            workflow_key = stored_workflow.definition.meta.key,
+            workflow_version = stored_workflow.definition.meta.version,
             "workflow run queued",
         );
 
-        self.run_registry.bind(&run_id, workflow.id.clone());
+        self.run_registry.bind(&run_id, stored_workflow.id.clone());
 
         let summary = WorkflowRunSummary {
             run_id: run_id.clone(),
-            workflow_key: workflow.definition.meta.key.clone(),
-            workflow_version: workflow.definition.meta.version,
+            workflow_key: stored_workflow.definition.meta.key.clone(),
+            workflow_version: stored_workflow.definition.meta.version,
             status: WorkflowRunStatus::Running,
             current_node_id: Some(start_node),
             state: json!({}),
@@ -196,18 +195,18 @@ impl WorkflowServer {
         let runner = self.runner.clone();
         let fallback = self.clone();
         tokio::task::spawn_blocking(move || {
-            let run_result = runner.run_with_id(&workflow.definition, run_id.clone(), trigger, env);
+            let run_result = runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
             if let Err(error) = run_result {
                 error!(
-                    workflow_id = %workflow.id,
+                    workflow_id = %stored_workflow.id,
                     run_id = %run_id,
                     error = %error,
                     "workflow run failed in background task",
                 );
                 fallback.publish_summary(&WorkflowRunSummary {
                     run_id: run_id.clone(),
-                    workflow_key: workflow.definition.meta.key.clone(),
-                    workflow_version: workflow.definition.meta.version,
+                    workflow_key: stored_workflow.definition.meta.key.clone(),
+                    workflow_version: stored_workflow.definition.meta.version,
                     status: WorkflowRunStatus::Failed,
                     current_node_id: None,
                     state: json!({
@@ -233,15 +232,15 @@ impl WorkflowServer {
             .run_registry
             .resolve(run_id)
             .ok_or_else(|| ServerError::NotFound(format!("workflow run not found: {run_id}")))?;
-        let workflow = self
+        let stored_workflow = self
             .catalog
-            .get_definition(&workflow_id)
+            .load_workflow(&workflow_id)?
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
 
         let running_summary = WorkflowRunSummary {
             run_id: run_id.to_string(),
-            workflow_key: workflow.definition.meta.key.clone(),
-            workflow_version: workflow.definition.meta.version,
+            workflow_key: stored_workflow.definition.meta.key.clone(),
+            workflow_version: stored_workflow.definition.meta.version,
             status: WorkflowRunStatus::Running,
             current_node_id: self
                 .store
@@ -266,18 +265,18 @@ impl WorkflowServer {
         let fallback = self.clone();
         let run_id = run_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let resume_result = runner.resume_by_run_id(&workflow.definition, &run_id, event);
+            let resume_result = runner.resume_by_run_id(&stored_workflow.definition, &run_id, event);
             if let Err(error) = resume_result {
                 error!(
-                    workflow_id = %workflow.id,
+                    workflow_id = %stored_workflow.id,
                     run_id = %run_id,
                     error = %error,
                     "workflow resume failed in background task",
                 );
                 fallback.publish_summary(&WorkflowRunSummary {
                     run_id: run_id.clone(),
-                    workflow_key: workflow.definition.meta.key.clone(),
-                    workflow_version: workflow.definition.meta.version,
+                    workflow_key: stored_workflow.definition.meta.key.clone(),
+                    workflow_version: stored_workflow.definition.meta.version,
                     status: WorkflowRunStatus::Failed,
                     current_node_id: None,
                     state: json!({
@@ -306,13 +305,6 @@ impl WorkflowServer {
     }
 }
 
-#[derive(Clone)]
-struct StoredWorkflowDefinition {
-    id: String,
-    workspace_id: String,
-    definition: WorkflowDefinition,
-}
-
 #[derive(Clone, Default)]
 struct RunRegistry {
     state: Arc<Mutex<HashMap<String, String>>>,
@@ -329,94 +321,6 @@ impl RunRegistry {
 
     fn resolve(&self, run_id: &str) -> Option<String> {
         self.state.lock().ok()?.get(run_id).cloned()
-    }
-}
-
-#[derive(Clone, Default)]
-struct WorkflowCatalog {
-    state: Arc<Mutex<WorkflowCatalogState>>,
-}
-
-#[derive(Default)]
-struct WorkflowCatalogState {
-    workspaces: HashMap<String, WorkspaceRecord>,
-    workflows: HashMap<String, StoredWorkflowDefinition>,
-}
-
-impl WorkflowCatalog {
-    fn new() -> Self {
-        let catalog = Self::default();
-        catalog.ensure_workspace(Some("default".to_string()), Some("Default".to_string()));
-        catalog
-    }
-
-    fn ensure_workspace(
-        &self,
-        workspace_id: Option<String>,
-        workspace_name: Option<String>,
-    ) -> WorkspaceRecord {
-        let id = workspace_id.unwrap_or_else(|| "default".to_string());
-        let fallback_name = id.clone();
-        let name = workspace_name.unwrap_or(fallback_name);
-
-        let mut state = self.state.lock().expect("workflow catalog lock poisoned");
-        let workspace = state
-            .workspaces
-            .entry(id.clone())
-            .or_insert_with(|| WorkspaceRecord {
-                id: id.clone(),
-                name,
-            })
-            .clone();
-        debug!(workspace_id = %workspace.id, workspace_name = %workspace.name, "workspace resolved");
-        workspace
-    }
-
-    fn register_workflow(
-        &self,
-        workspace_id: &str,
-        definition: WorkflowDefinition,
-    ) -> WorkflowRecord {
-        let workflow_id = new_workflow_id();
-        let record = StoredWorkflowDefinition {
-            id: workflow_id.clone(),
-            workspace_id: workspace_id.to_string(),
-            definition,
-        };
-        let workflow = WorkflowRecord {
-            id: record.id.clone(),
-            workspace_id: record.workspace_id.clone(),
-            workflow_key: record.definition.meta.key.clone(),
-            workflow_version: record.definition.meta.version,
-            name: record.definition.meta.name.clone(),
-        };
-
-        let mut state = self.state.lock().expect("workflow catalog lock poisoned");
-        state.workflows.insert(workflow_id, record);
-        debug!(
-            workflow_id = %workflow.id,
-            workspace_id = %workflow.workspace_id,
-            workflow_key = %workflow.workflow_key,
-            workflow_version = workflow.workflow_version,
-            "workflow stored in catalog",
-        );
-        workflow
-    }
-
-    fn get_workflow(&self, workflow_id: &str) -> Option<WorkflowRecord> {
-        let state = self.state.lock().ok()?;
-        let workflow = state.workflows.get(workflow_id)?;
-        Some(WorkflowRecord {
-            id: workflow.id.clone(),
-            workspace_id: workflow.workspace_id.clone(),
-            workflow_key: workflow.definition.meta.key.clone(),
-            workflow_version: workflow.definition.meta.version,
-            name: workflow.definition.meta.name.clone(),
-        })
-    }
-
-    fn get_definition(&self, workflow_id: &str) -> Option<StoredWorkflowDefinition> {
-        self.state.lock().ok()?.workflows.get(workflow_id).cloned()
     }
 }
 
