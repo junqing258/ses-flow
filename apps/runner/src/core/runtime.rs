@@ -174,6 +174,7 @@ pub enum WorkflowRunStatus {
     Completed,
     Waiting,
     Failed,
+    Terminated,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,6 +201,17 @@ pub trait WorkflowRunObserver: Send + Sync {
 pub struct NoopWorkflowRunObserver;
 
 impl WorkflowRunObserver for NoopWorkflowRunObserver {}
+
+pub trait WorkflowRunController: Send + Sync {
+    fn should_terminate(&self, _run_id: &str) -> bool {
+        false
+    }
+}
+
+#[derive(Default)]
+pub struct NoopWorkflowRunController;
+
+impl WorkflowRunController for NoopWorkflowRunController {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeExecutionRecord {

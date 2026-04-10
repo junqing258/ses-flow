@@ -213,7 +213,7 @@ describe("buildRunnerWorkflowDefinition", () => {
 
   it("keeps explicit switch branch labels when no fallback branch is configured", () => {
     const panels = createWorkflowPanels();
-    const fallbackField = panels.switch_biz_type.fieldsByTab.base.find(
+    const fallbackField = (panels.switch_biz_type.fieldsByTab.base ?? []).find(
       (field) => field.key === "fallback",
     );
 

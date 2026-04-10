@@ -39,7 +39,7 @@ interface RunnerTransitionDefinition {
   priority?: number;
 }
 
-export type WorkflowRunStatus = "running" | "completed" | "waiting" | "failed";
+export type WorkflowRunStatus = "running" | "completed" | "waiting" | "failed" | "terminated";
 
 export interface WorkflowExecutionRequest {
   env?: Record<string, unknown>;
@@ -649,4 +649,18 @@ export const fetchWorkflowRunSummary = async (runId: string): Promise<WorkflowRu
   }
 
   return parseRunnerResponse<WorkflowRunSummary>(response, "获取运行状态失败");
+};
+
+export const terminateWorkflowRun = async (runId: string): Promise<WorkflowRunSummary> => {
+  let response: Response;
+
+  try {
+    response = await sendRequest(`${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}/terminate`, {
+      method: "POST",
+    });
+  } catch {
+    throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
+  }
+
+  return parseRunnerResponse<WorkflowRunSummary>(response, "终止工作流运行失败");
 };

@@ -8,9 +8,9 @@ use tracing::{debug, error, info, warn};
 use super::definition::{NodeType, TransitionDefinition, WorkflowDefinition};
 use super::executors::ExecutorRegistry;
 use super::runtime::{
-    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunObserver,
-    RunEnvironment, WorkflowRunObserver, WorkflowRunSnapshot, WorkflowRunStatus,
-    WorkflowRunSummary,
+    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunController,
+    NoopWorkflowRunObserver, RunEnvironment, WorkflowRunController, WorkflowRunObserver,
+    WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary,
 };
 use super::template::{merge_state, nested_state_patch};
 use crate::error::RunnerError;
@@ -20,6 +20,7 @@ pub struct WorkflowEngine {
     registry: ExecutorRegistry,
     services: WorkflowServices,
     observer: Arc<dyn WorkflowRunObserver>,
+    controller: Arc<dyn WorkflowRunController>,
 }
 
 impl WorkflowEngine {
@@ -28,21 +29,42 @@ impl WorkflowEngine {
     }
 
     pub fn with_services(services: WorkflowServices) -> Self {
-        Self::with_services_and_observer(services, Arc::new(NoopWorkflowRunObserver))
+        Self::with_services_observer_and_controller(
+            services,
+            Arc::new(NoopWorkflowRunObserver),
+            Arc::new(NoopWorkflowRunController),
+        )
     }
 
     pub fn with_observer(observer: Arc<dyn WorkflowRunObserver>) -> Self {
-        Self::with_services_and_observer(WorkflowServices::with_defaults(), observer)
+        Self::with_services_observer_and_controller(
+            WorkflowServices::with_defaults(),
+            observer,
+            Arc::new(NoopWorkflowRunController),
+        )
     }
 
     pub fn with_services_and_observer(
         services: WorkflowServices,
         observer: Arc<dyn WorkflowRunObserver>,
     ) -> Self {
+        Self::with_services_observer_and_controller(
+            services,
+            observer,
+            Arc::new(NoopWorkflowRunController),
+        )
+    }
+
+    pub fn with_services_observer_and_controller(
+        services: WorkflowServices,
+        observer: Arc<dyn WorkflowRunObserver>,
+        controller: Arc<dyn WorkflowRunController>,
+    ) -> Self {
         Self {
             registry: ExecutorRegistry::with_defaults(Arc::new(services.clone())),
             services,
             observer,
+            controller,
         }
     }
 
@@ -299,7 +321,11 @@ impl WorkflowEngine {
             resolve_sub_workflow_definition_from_services(waiting_node, &self.services)?;
         child_definition.validate()?;
 
-        let child_engine = WorkflowEngine::with_services(self.services.clone());
+        let child_engine = WorkflowEngine::with_services_observer_and_controller(
+            self.services.clone(),
+            Arc::new(NoopWorkflowRunObserver),
+            self.controller.clone(),
+        );
         let child_summary = child_engine.resume(&child_definition, child_snapshot, resume_input)?;
         let child_output = sub_workflow_summary_output(&child_summary);
 
@@ -384,6 +410,21 @@ impl WorkflowEngine {
                 self.emit_summary(&summary);
                 Ok(summary)
             }
+            WorkflowRunStatus::Terminated => {
+                let summary = WorkflowRunSummary {
+                    run_id: snapshot.run_id,
+                    workflow_key: snapshot.workflow_key,
+                    workflow_version: snapshot.workflow_version,
+                    status: WorkflowRunStatus::Terminated,
+                    current_node_id: Some(waiting_node.id.clone()),
+                    state,
+                    timeline,
+                    last_signal: child_summary.last_signal,
+                    resume_state: None,
+                };
+                self.emit_summary(&summary);
+                Ok(summary)
+            }
         }
     }
 
@@ -424,6 +465,20 @@ impl WorkflowEngine {
         });
 
         for _ in 0..max_steps {
+            if self.controller.should_terminate(&run_id) {
+                let summary = self.terminated_summary(
+                    &run_id,
+                    &workflow_key,
+                    workflow_version,
+                    Some(current_node_id.clone()),
+                    state,
+                    timeline,
+                    last_signal,
+                );
+                self.emit_summary(&summary);
+                return Ok(summary);
+            }
+
             let node = definition
                 .node(&current_node_id)
                 .ok_or_else(|| RunnerError::MissingNode(current_node_id.clone()))?;
@@ -488,6 +543,20 @@ impl WorkflowEngine {
                 last_signal: last_signal.clone(),
                 resume_state: None,
             });
+
+            if self.controller.should_terminate(&run_id) {
+                let summary = self.terminated_summary(
+                    &run_id,
+                    &workflow_key,
+                    workflow_version,
+                    Some(node.id.clone()),
+                    state,
+                    timeline,
+                    last_signal,
+                );
+                self.emit_summary(&summary);
+                return Ok(summary);
+            }
 
             match result.status {
                 ExecutionStatus::Waiting => {
@@ -608,6 +677,29 @@ impl WorkflowEngine {
     fn emit_summary(&self, summary: &WorkflowRunSummary) {
         self.observer.on_summary(summary);
     }
+
+    fn terminated_summary(
+        &self,
+        run_id: &str,
+        workflow_key: &str,
+        workflow_version: u32,
+        current_node_id: Option<String>,
+        state: Value,
+        timeline: Vec<NodeExecutionRecord>,
+        last_signal: Option<super::runtime::NextSignal>,
+    ) -> WorkflowRunSummary {
+        WorkflowRunSummary {
+            run_id: run_id.to_string(),
+            workflow_key: workflow_key.to_string(),
+            workflow_version,
+            status: WorkflowRunStatus::Terminated,
+            current_node_id,
+            state,
+            timeline,
+            last_signal,
+            resume_state: None,
+        }
+    }
 }
 
 fn resolve_sub_workflow_definition_from_services(
@@ -648,6 +740,7 @@ fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStat
         WorkflowRunStatus::Completed => ExecutionStatus::Success,
         WorkflowRunStatus::Waiting => ExecutionStatus::Waiting,
         WorkflowRunStatus::Failed => ExecutionStatus::Failed,
+        WorkflowRunStatus::Terminated => ExecutionStatus::Failed,
     }
 }
 

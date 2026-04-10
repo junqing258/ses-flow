@@ -360,6 +360,17 @@
             </span>
           </div>
 
+          <button
+            type="button"
+            class="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-rose-200 px-3 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-transparent"
+            :disabled="!canTerminateActiveRun || isTerminatingWorkflow"
+            @click="handleTerminateRun"
+          >
+            <LoaderCircle v-if="isTerminatingWorkflow" class="h-4 w-4 animate-spin" />
+            <Square v-else class="h-4 w-4" />
+            {{ isTerminatingWorkflow ? "终止中..." : "终止运行" }}
+          </button>
+
           <div class="mt-4 space-y-2 text-xs text-slate-500">
             <div class="flex items-center justify-between gap-3">
               <span>Workflow ID</span>
@@ -479,7 +490,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { type Connection, type Edge, VueFlow, useVueFlow } from "@vue-flow/core";
-import { ChevronDown, ChevronLeft, Compass, Code, Hand, LoaderCircle, MoreHorizontal, MousePointer2, Pencil, Play, Redo2, Settings, Undo2, Webhook } from "lucide-vue-next";
+import { ChevronDown, ChevronLeft, Compass, Code, Hand, LoaderCircle, MoreHorizontal, MousePointer2, Pencil, Play, Redo2, Settings, Square, Undo2, Webhook } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
@@ -507,6 +518,7 @@ import {
   fetchWorkflowRunSummary,
   publishWorkflowToRunner,
   syncWorkflowToRunner,
+  terminateWorkflowRun,
   type RunnerWorkflowDefinition,
   type WorkflowRunStatus,
   type WorkflowRunSummary,
@@ -551,6 +563,7 @@ const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
 const isLoadingWorkflow = ref(false);
 const isRunningWorkflow = ref(false);
+const isTerminatingWorkflow = ref(false);
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const activeRunSummary = ref<WorkflowRunSummary | null>(null);
 const activeRunId = ref("");
@@ -609,6 +622,11 @@ const isRunMode = computed(() => pageMode.value === "run");
 const workflowStatusLabel = computed(() => (workflowMeta.status === "published" ? "Published" : "Draft"));
 const publishButtonLabel = computed(() => (isPublishing.value ? "Publishing..." : "Publish"));
 const runActionLabel = computed(() => (isRunningWorkflow.value ? "运行中..." : activeRunId.value ? "重新运行" : "运行当前工作流"));
+const canTerminateActiveRun = computed(
+  () =>
+    Boolean(activeRunId.value) &&
+    (activeRunStatus.value === "running" || activeRunStatus.value === "waiting"),
+);
 const persistedWorkflowId = computed(() =>
   route.name === "workflow-editor" && typeof route.params.id === "string" ? route.params.id : undefined,
 );
@@ -645,6 +663,8 @@ const activeRunStatusLabel = computed(() => {
       return "等待恢复";
     case "failed":
       return "失败";
+    case "terminated":
+      return "已终止";
     default:
       return "未运行";
   }
@@ -659,6 +679,8 @@ const activeRunStatusClass = computed(() => {
       return "bg-amber-50 text-amber-700";
     case "failed":
       return "bg-rose-50 text-rose-700";
+    case "terminated":
+      return "bg-slate-200 text-slate-700";
     default:
       return "bg-slate-100 text-slate-500";
   }
@@ -750,6 +772,7 @@ const resetRunSession = () => {
   activeRunSummary.value = null;
   activeRunId.value = "";
   activeRunWorkflowId.value = "";
+  isTerminatingWorkflow.value = false;
   runErrorMessage.value = "";
   setNodeExecutionStatuses(null);
 };
@@ -1272,8 +1295,10 @@ const refreshRunSummary = async () => {
       return;
     }
 
+    isTerminatingWorkflow.value = false;
     clearRunSummaryPolling();
   } catch (error) {
+    isTerminatingWorkflow.value = false;
     clearRunSummaryPolling();
     runErrorMessage.value = error instanceof Error ? error.message : "获取运行状态失败";
   }
@@ -1286,6 +1311,35 @@ const handleRefreshRunSummary = async () => {
   }
 
   await refreshRunSummary();
+};
+
+const handleTerminateRun = async () => {
+  if (!activeRunId.value || !canTerminateActiveRun.value || isTerminatingWorkflow.value) {
+    return;
+  }
+
+  isTerminatingWorkflow.value = true;
+  runErrorMessage.value = "";
+
+  try {
+    const summary = await terminateWorkflowRun(activeRunId.value);
+    activeRunSummary.value = summary;
+    setNodeExecutionStatuses(summary);
+
+    if (summary.status === "terminated") {
+      isTerminatingWorkflow.value = false;
+      clearRunSummaryPolling();
+      toast.success(`运行已终止：${summary.runId}`);
+      return;
+    }
+
+    toast.success("已发送终止请求");
+    await refreshRunSummary();
+  } catch (error) {
+    isTerminatingWorkflow.value = false;
+    runErrorMessage.value = error instanceof Error ? error.message : "终止工作流运行失败";
+    toast.error(runErrorMessage.value);
+  }
 };
 
 const handleRunWorkflow = async () => {

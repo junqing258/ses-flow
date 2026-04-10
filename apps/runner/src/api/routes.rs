@@ -33,6 +33,7 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/workflows/{workflow_id}/runs", post(execute_workflow))
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
+        .route("/runs/{run_id}/terminate", post(terminate_workflow))
         .route("/runs/{run_id}/events", get(stream_run_events))
         .layer(middleware::from_fn(log_http_requests))
         .with_state(state)
@@ -231,6 +232,15 @@ async fn get_run_summary(
         .server
         .get_summary(&run_id)?
         .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))?;
+    Ok(Json(summary))
+}
+
+async fn terminate_workflow(
+    State(state): State<ApiState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<WorkflowRunSummary>, ApiError> {
+    info!(run_id = %run_id, "terminating workflow run");
+    let summary = state.server.terminate_workflow(&run_id)?;
     Ok(Json(summary))
 }
 

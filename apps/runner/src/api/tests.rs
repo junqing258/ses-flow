@@ -223,6 +223,128 @@ async fn streams_waiting_run_summary_over_sse() {
 }
 
 #[tokio::test]
+async fn terminates_waiting_run() {
+    let app = build_app();
+    let workflow = json!({
+        "meta": {
+            "key": "terminate-waiting-flow",
+            "name": "Terminate Waiting Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "wait_1",
+                "type": "wait",
+                "name": "Wait",
+                "config": { "event": "done" }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "wait_1" },
+            { "from": "wait_1", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+
+    let workflow_id = upload_workflow(app.clone(), workflow).await;
+    let run_id = start_run(app.clone(), &workflow_id, json!({})).await;
+
+    let waiting_summary = wait_for_status(app.clone(), &run_id, "waiting").await;
+    assert_eq!(waiting_summary["status"], json!("waiting"));
+
+    let terminate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/runs/{run_id}/terminate"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(terminate_response.status(), StatusCode::OK);
+    let terminate_body = terminate_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let terminate_payload: Value =
+        serde_json::from_slice(&terminate_body).expect("response body should be valid json");
+    assert_eq!(terminate_payload["status"], json!("terminated"));
+
+    let terminated_summary = get_summary(app, &run_id).await;
+    assert_eq!(terminated_summary["status"], json!("terminated"));
+}
+
+#[tokio::test]
+async fn terminates_running_run_after_current_node_finishes() {
+    let app = build_app();
+    let workflow = json!({
+        "meta": {
+            "key": "terminate-running-flow",
+            "name": "Terminate Running Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "run_code",
+                "type": "code",
+                "name": "Run Code",
+                "config": {
+                    "language": "js",
+                    "source": "await new Promise((resolve) => setTimeout(resolve, 150)); return { output: { done: true } };",
+                    "timeoutMs": 5000
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "run_code" },
+            { "from": "run_code", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+
+    let workflow_id = upload_workflow(app.clone(), workflow).await;
+    let run_id = start_run(app.clone(), &workflow_id, json!({})).await;
+
+    let terminate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/runs/{run_id}/terminate"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(terminate_response.status(), StatusCode::OK);
+
+    let terminated_summary = wait_for_status(app, &run_id, "terminated").await;
+    assert_eq!(terminated_summary["status"], json!("terminated"));
+}
+
+#[tokio::test]
 async fn lists_workflows_and_returns_editor_document_for_detail() {
     let app = build_app();
     let workflow = json!({
@@ -361,6 +483,74 @@ async fn wait_for_status(app: axum::Router, run_id: &str, expected_status: &str)
     }
 
     panic!("run {run_id} did not reach status {expected_status} in time");
+}
+
+async fn upload_workflow(app: axum::Router, workflow: Value) -> String {
+    let upload_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/workflows")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "workspaceId": "ws-api",
+                        "workspaceName": "Warehouse API",
+                        "workflow": workflow
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(upload_response.status(), StatusCode::OK);
+    let upload_body = upload_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let upload_payload: Value =
+        serde_json::from_slice(&upload_body).expect("response body should be valid json");
+    upload_payload["workflowId"]
+        .as_str()
+        .expect("workflow id should be present")
+        .to_string()
+}
+
+async fn start_run(app: axum::Router, workflow_id: &str, trigger: Value) -> String {
+    let execute_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/workflows/{workflow_id}/runs"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "trigger": trigger
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(execute_response.status(), StatusCode::ACCEPTED);
+    let execute_body = execute_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let execute_payload: Value =
+        serde_json::from_slice(&execute_body).expect("response body should be valid json");
+    execute_payload["runId"]
+        .as_str()
+        .expect("run id should be present")
+        .to_string()
 }
 
 async fn get_summary(app: axum::Router, run_id: &str) -> Value {

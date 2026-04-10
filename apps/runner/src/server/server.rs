@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,12 +14,14 @@ use tracing::{debug, error, info, warn};
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::{WorkflowEngine, new_run_id};
 use crate::core::runtime::{
-    RunEnvironment, WorkflowRunEvent, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
+    RunEnvironment, WorkflowRunController, WorkflowRunEvent, WorkflowRunObserver,
+    WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
+use crate::services::WorkflowServices;
 use crate::store::{
     InMemoryCatalogStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
-    WorkflowDetailRecord, WorkflowRunner, WorkflowRunStore, WorkflowSummaryRecord, WorkspaceRecord,
+    WorkflowDetailRecord, WorkflowRunStore, WorkflowRunner, WorkflowSummaryRecord, WorkspaceRecord,
 };
 
 #[derive(Debug, Error)]
@@ -70,15 +73,27 @@ impl WorkflowServer {
         Self::with_store_and_catalog(Arc::new(InMemoryRunStore::new()), catalog)
     }
 
-    pub fn with_store_and_catalog(store: Arc<dyn WorkflowRunStore>, catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
+    pub fn with_store_and_catalog(
+        store: Arc<dyn WorkflowRunStore>,
+        catalog: Arc<dyn WorkflowCatalogStore>,
+    ) -> Self {
         debug!("initializing workflow server with custom store and catalog");
         let (events, _) = broadcast::channel(256);
+        let run_registry = RunRegistry::default();
         let observer = Arc::new(BroadcastRunObserver {
             store: store.clone(),
             events: events.clone(),
+            run_registry: run_registry.clone(),
+        });
+        let controller = Arc::new(ServerRunController {
+            run_registry: run_registry.clone(),
         });
         let runner = Arc::new(WorkflowRunner::new(
-            WorkflowEngine::with_observer(observer),
+            WorkflowEngine::with_services_observer_and_controller(
+                WorkflowServices::with_defaults(),
+                observer,
+                controller,
+            ),
             store.clone(),
         ));
 
@@ -86,7 +101,7 @@ impl WorkflowServer {
             store,
             runner,
             catalog,
-            run_registry: RunRegistry::default(),
+            run_registry,
             events,
         }
     }
@@ -167,7 +182,8 @@ impl WorkflowServer {
     }
 
     pub fn get_workflow(&self, workflow_id: &str) -> Result<WorkflowDetailRecord, ServerError> {
-        let stored_workflow = self.catalog
+        let stored_workflow = self
+            .catalog
             .load_workflow(workflow_id)?
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
 
@@ -189,7 +205,8 @@ impl WorkflowServer {
         env: RunEnvironment,
     ) -> Result<WorkflowRunSummary, ServerError> {
         info!(workflow_id = %workflow_id, "preparing workflow run");
-        let stored_workflow = self.catalog
+        let stored_workflow = self
+            .catalog
             .load_workflow(workflow_id)?
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
         let run_id = new_run_id();
@@ -221,7 +238,8 @@ impl WorkflowServer {
         let runner = self.runner.clone();
         let fallback = self.clone();
         tokio::task::spawn_blocking(move || {
-            let run_result = runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
+            let run_result =
+                runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
             if let Err(error) = run_result {
                 error!(
                     workflow_id = %stored_workflow.id,
@@ -291,7 +309,8 @@ impl WorkflowServer {
         let fallback = self.clone();
         let run_id = run_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let resume_result = runner.resume_by_run_id(&stored_workflow.definition, &run_id, event);
+            let resume_result =
+                runner.resume_by_run_id(&stored_workflow.definition, &run_id, event);
             if let Err(error) = resume_result {
                 error!(
                     workflow_id = %stored_workflow.id,
@@ -318,9 +337,44 @@ impl WorkflowServer {
         Ok(running_summary)
     }
 
+    pub fn terminate_workflow(&self, run_id: &str) -> Result<WorkflowRunSummary, ServerError> {
+        let summary = self
+            .store
+            .load_summary(run_id)?
+            .ok_or_else(|| ServerError::NotFound(format!("workflow run not found: {run_id}")))?;
+
+        match summary.status {
+            WorkflowRunStatus::Completed
+            | WorkflowRunStatus::Failed
+            | WorkflowRunStatus::Terminated => Ok(summary),
+            WorkflowRunStatus::Waiting => {
+                info!(run_id = %run_id, "terminating waiting workflow run");
+                let terminated = WorkflowRunSummary {
+                    run_id: summary.run_id,
+                    workflow_key: summary.workflow_key,
+                    workflow_version: summary.workflow_version,
+                    status: WorkflowRunStatus::Terminated,
+                    current_node_id: summary.current_node_id,
+                    state: summary.state,
+                    timeline: summary.timeline,
+                    last_signal: summary.last_signal,
+                    resume_state: None,
+                };
+                self.publish_summary(&terminated);
+                Ok(terminated)
+            }
+            WorkflowRunStatus::Running => {
+                info!(run_id = %run_id, "termination requested for running workflow run");
+                self.run_registry.request_termination(run_id);
+                Ok(summary)
+            }
+        }
+    }
+
     fn publish_summary(&self, summary: &WorkflowRunSummary) {
-        if let Err(error) = self.store.save_summary(summary) {
-            warn!(run_id = %summary.run_id, error = %error, "failed to persist workflow summary");
+        persist_summary(self.store.as_ref(), summary);
+        if is_terminal_status(&summary.status) {
+            self.run_registry.finish(&summary.run_id);
         }
         if let Err(error) = self.events.send(WorkflowRunEvent::from_summary(summary)) {
             debug!(
@@ -377,32 +431,76 @@ impl WorkflowServer {
 
 #[derive(Clone, Default)]
 struct RunRegistry {
-    state: Arc<Mutex<HashMap<String, String>>>,
+    state: Arc<Mutex<RunRegistryState>>,
+}
+
+#[derive(Default)]
+struct RunRegistryState {
+    workflow_ids: HashMap<String, String>,
+    termination_requests: HashSet<String>,
 }
 
 impl RunRegistry {
     fn bind(&self, run_id: &str, workflow_id: String) {
         if let Ok(mut state) = self.state.lock() {
-            state.insert(run_id.to_string(), workflow_id);
+            state.workflow_ids.insert(run_id.to_string(), workflow_id);
+            state.termination_requests.remove(run_id);
         } else {
             warn!(run_id = %run_id, "failed to acquire run registry lock while binding run");
         }
     }
 
     fn resolve(&self, run_id: &str) -> Option<String> {
-        self.state.lock().ok()?.get(run_id).cloned()
+        self.state.lock().ok()?.workflow_ids.get(run_id).cloned()
+    }
+
+    fn request_termination(&self, run_id: &str) {
+        if let Ok(mut state) = self.state.lock() {
+            state.termination_requests.insert(run_id.to_string());
+        } else {
+            warn!(run_id = %run_id, "failed to acquire run registry lock while requesting termination");
+        }
+    }
+
+    fn should_terminate(&self, run_id: &str) -> bool {
+        self.state
+            .lock()
+            .ok()
+            .map(|state| state.termination_requests.contains(run_id))
+            .unwrap_or(false)
+    }
+
+    fn finish(&self, run_id: &str) {
+        if let Ok(mut state) = self.state.lock() {
+            state.workflow_ids.remove(run_id);
+            state.termination_requests.remove(run_id);
+        } else {
+            warn!(run_id = %run_id, "failed to acquire run registry lock while finalizing run");
+        }
+    }
+}
+
+struct ServerRunController {
+    run_registry: RunRegistry,
+}
+
+impl WorkflowRunController for ServerRunController {
+    fn should_terminate(&self, run_id: &str) -> bool {
+        self.run_registry.should_terminate(run_id)
     }
 }
 
 struct BroadcastRunObserver {
     store: Arc<dyn WorkflowRunStore>,
     events: broadcast::Sender<WorkflowRunEvent>,
+    run_registry: RunRegistry,
 }
 
 impl WorkflowRunObserver for BroadcastRunObserver {
     fn on_summary(&self, summary: &WorkflowRunSummary) {
-        if let Err(error) = self.store.save_summary(summary) {
-            warn!(run_id = %summary.run_id, error = %error, "failed to persist observed summary");
+        persist_summary(self.store.as_ref(), summary);
+        if is_terminal_status(&summary.status) {
+            self.run_registry.finish(&summary.run_id);
         }
         if let Err(error) = self.events.send(WorkflowRunEvent::from_summary(summary)) {
             debug!(
@@ -410,6 +508,25 @@ impl WorkflowRunObserver for BroadcastRunObserver {
                 "skipped summary broadcast because there are no subscribers",
             );
         }
+    }
+}
+
+fn is_terminal_status(status: &WorkflowRunStatus) -> bool {
+    matches!(
+        status,
+        WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated
+    )
+}
+
+fn persist_summary(store: &dyn WorkflowRunStore, summary: &WorkflowRunSummary) {
+    let persistence_result = if is_terminal_status(&summary.status) {
+        store.mark_completed(summary)
+    } else {
+        store.save_summary(summary)
+    };
+
+    if let Err(error) = persistence_result {
+        warn!(run_id = %summary.run_id, error = %error, "failed to persist workflow summary");
     }
 }
 

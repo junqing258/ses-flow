@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::error::RunnerError;
 use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary};
+use crate::error::RunnerError;
 
 pub trait WorkflowRunStore: Send + Sync {
     fn save_summary(&self, summary: &WorkflowRunSummary) -> Result<(), RunnerError>;
@@ -78,7 +78,9 @@ impl WorkflowRunStore for InMemoryRunStore {
             .insert(summary.run_id.clone(), summary.clone());
         if matches!(
             summary.status,
-            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed
+            WorkflowRunStatus::Completed
+                | WorkflowRunStatus::Failed
+                | WorkflowRunStatus::Terminated
         ) {
             state.waiting_snapshots.remove(&summary.run_id);
         }

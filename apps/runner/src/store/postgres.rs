@@ -1,5 +1,5 @@
 use serde::de::DeserializeOwned;
-use sqlx::{postgres::PgPool, Row};
+use sqlx::{Row, postgres::PgPool};
 
 use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunSummary};
 use crate::error::RunnerError;
@@ -12,9 +12,9 @@ pub struct PostgresRunStore {
 
 impl PostgresRunStore {
     pub async fn new(database_url: &str) -> Result<Self, RunnerError> {
-        let pool = PgPool::connect(database_url)
-            .await
-            .map_err(|e| RunnerError::Store(format!("Failed to connect to PostgreSQL database: {}", e)))?;
+        let pool = PgPool::connect(database_url).await.map_err(|e| {
+            RunnerError::Store(format!("Failed to connect to PostgreSQL database: {}", e))
+        })?;
 
         let store = Self { pool };
         store.init_schema().await?;
@@ -66,7 +66,9 @@ impl PostgresRunStore {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| RunnerError::Store(format!("Failed to create workflow_snapshots table: {}", e)))?;
+        .map_err(|e| {
+            RunnerError::Store(format!("Failed to create workflow_snapshots table: {}", e))
+        })?;
 
         sqlx::query(
             r#"
@@ -243,39 +245,66 @@ impl WorkflowRunStore for PostgresRunStore {
 
                 let snapshot = match row {
                     Some(row) => {
-                        let run_id: String = row.try_get("run_id")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get run_id: {}", e)))?;
-                        let workflow_key: String = row.try_get("workflow_key")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get workflow_key: {}", e)))?;
-                        let workflow_version: i32 = row.try_get("workflow_version")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get workflow_version: {}", e)))?;
-                        let current_node_id: String = row.try_get("current_node_id")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?;
-                        let trigger: serde_json::Value = row.try_get("trigger")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get trigger: {}", e)))?;
-                        let last_input: serde_json::Value = row.try_get("last_input")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get last_input: {}", e)))?;
-                        let state: serde_json::Value = row.try_get("state")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get state: {}", e)))?;
-                        let timeline: serde_json::Value = row.try_get("timeline")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get timeline: {}", e)))?;
-                        let last_signal: Option<serde_json::Value> = row.try_get("last_signal")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get last_signal: {}", e)))?;
-                        let env: serde_json::Value = row.try_get("env")
+                        let run_id: String = row.try_get("run_id").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get run_id: {}", e))
+                        })?;
+                        let workflow_key: String = row.try_get("workflow_key").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get workflow_key: {}", e))
+                        })?;
+                        let workflow_version: i32 =
+                            row.try_get("workflow_version").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get workflow_version: {}", e))
+                            })?;
+                        let current_node_id: String =
+                            row.try_get("current_node_id").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get current_node_id: {}", e))
+                            })?;
+                        let trigger: serde_json::Value = row.try_get("trigger").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get trigger: {}", e))
+                        })?;
+                        let last_input: serde_json::Value =
+                            row.try_get("last_input").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get last_input: {}", e))
+                            })?;
+                        let state: serde_json::Value = row.try_get("state").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get state: {}", e))
+                        })?;
+                        let timeline: serde_json::Value = row.try_get("timeline").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get timeline: {}", e))
+                        })?;
+                        let last_signal: Option<serde_json::Value> =
+                            row.try_get("last_signal").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get last_signal: {}", e))
+                            })?;
+                        let env: serde_json::Value = row
+                            .try_get("env")
                             .map_err(|e| RunnerError::Store(format!("Failed to get env: {}", e)))?;
 
                         let trigger_typed: serde_json::Value = serde_json::from_value(trigger)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize trigger: {}", e)))?;
-                        let last_input_typed: serde_json::Value = serde_json::from_value(last_input)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize last_input: {}", e)))?;
+                            .map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize trigger: {}", e))
+                            })?;
+                        let last_input_typed: serde_json::Value =
+                            serde_json::from_value(last_input).map_err(|e| {
+                                RunnerError::Store(format!(
+                                    "Failed to deserialize last_input: {}",
+                                    e
+                                ))
+                            })?;
                         let state_typed: serde_json::Value = serde_json::from_value(state)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize state: {}", e)))?;
-                        let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> = serde_json::from_value(timeline)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize timeline: {}", e)))?;
+                            .map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize state: {}", e))
+                            })?;
+                        let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> =
+                            serde_json::from_value(timeline).map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize timeline: {}", e))
+                            })?;
                         let last_signal_typed: Option<crate::core::runtime::NextSignal> =
                             deserialize_optional_json_field(last_signal, "last_signal")?;
-                        let env_typed: crate::core::runtime::RunEnvironment = serde_json::from_value(env)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize env: {}", e)))?;
+                        let env_typed: crate::core::runtime::RunEnvironment =
+                            serde_json::from_value(env).map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize env: {}", e))
+                            })?;
 
                         Ok(Some(WorkflowRunSnapshot {
                             run_id,
@@ -321,30 +350,47 @@ impl WorkflowRunStore for PostgresRunStore {
 
                 let summary = match row {
                     Some(row) => {
-                        let run_id: String = row.try_get("run_id")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get run_id: {}", e)))?;
-                        let workflow_key: String = row.try_get("workflow_key")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get workflow_key: {}", e)))?;
-                        let workflow_version: i32 = row.try_get("workflow_version")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get workflow_version: {}", e)))?;
-                        let status_str: String = row.try_get("status")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get status: {}", e)))?;
-                        let current_node_id: Option<String> = row.try_get("current_node_id")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?;
-                        let state: serde_json::Value = row.try_get("state")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get state: {}", e)))?;
-                        let timeline: serde_json::Value = row.try_get("timeline")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get timeline: {}", e)))?;
-                        let last_signal: Option<serde_json::Value> = row.try_get("last_signal")
-                            .map_err(|e| RunnerError::Store(format!("Failed to get last_signal: {}", e)))?;
+                        let run_id: String = row.try_get("run_id").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get run_id: {}", e))
+                        })?;
+                        let workflow_key: String = row.try_get("workflow_key").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get workflow_key: {}", e))
+                        })?;
+                        let workflow_version: i32 =
+                            row.try_get("workflow_version").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get workflow_version: {}", e))
+                            })?;
+                        let status_str: String = row.try_get("status").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get status: {}", e))
+                        })?;
+                        let current_node_id: Option<String> =
+                            row.try_get("current_node_id").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get current_node_id: {}", e))
+                            })?;
+                        let state: serde_json::Value = row.try_get("state").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get state: {}", e))
+                        })?;
+                        let timeline: serde_json::Value = row.try_get("timeline").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get timeline: {}", e))
+                        })?;
+                        let last_signal: Option<serde_json::Value> =
+                            row.try_get("last_signal").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get last_signal: {}", e))
+                            })?;
 
-                        let status: crate::core::runtime::WorkflowRunStatus = serde_json::from_str(&status_str)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize status: {}", e)))?;
+                        let status: crate::core::runtime::WorkflowRunStatus =
+                            serde_json::from_str(&status_str).map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize status: {}", e))
+                            })?;
 
                         let state_typed: serde_json::Value = serde_json::from_value(state)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize state: {}", e)))?;
-                        let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> = serde_json::from_value(timeline)
-                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize timeline: {}", e)))?;
+                            .map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize state: {}", e))
+                            })?;
+                        let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> =
+                            serde_json::from_value(timeline).map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize timeline: {}", e))
+                            })?;
                         let last_signal_typed: Option<crate::core::runtime::NextSignal> =
                             deserialize_optional_json_field(last_signal, "last_signal")?;
 
@@ -379,7 +425,12 @@ impl WorkflowRunStore for PostgresRunStore {
         let last_signal_value = serde_json::to_value(&summary.last_signal)
             .map_err(|e| RunnerError::Store(format!("Failed to serialize last_signal: {}", e)))?;
 
-        let is_completed = matches!(summary.status, crate::core::runtime::WorkflowRunStatus::Completed | crate::core::runtime::WorkflowRunStatus::Failed);
+        let is_completed = matches!(
+            summary.status,
+            crate::core::runtime::WorkflowRunStatus::Completed
+                | crate::core::runtime::WorkflowRunStatus::Failed
+                | crate::core::runtime::WorkflowRunStatus::Terminated
+        );
 
         let pool = self.pool.clone();
         let run_id = summary.run_id.clone();
@@ -469,6 +520,9 @@ mod tests {
         let parsed = deserialize_optional_json_field::<NextSignal>(value, "last_signal")
             .expect("valid payload should deserialize");
 
-        assert_eq!(parsed.expect("signal should be present").signal_type, "event");
+        assert_eq!(
+            parsed.expect("signal should be present").signal_type,
+            "event"
+        );
     }
 }

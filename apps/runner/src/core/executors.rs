@@ -10,13 +10,13 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use super::definition::{NodeDefinition, NodeType, WorkflowDefinition};
-use crate::error::RunnerError;
 use super::runtime::{
     NextSignal, NodeExecutionContext, NodeExecutionResult, NodeLogRecord, RunEnvironment,
     WorkflowRunStatus,
 };
-use crate::services::WorkflowServices;
 use super::template::{EvaluationContext, env_to_value, is_truthy, nested_state_patch};
+use crate::error::RunnerError;
+use crate::services::WorkflowServices;
 
 pub trait NodeExecutor: Send + Sync {
     fn node_type(&self) -> NodeType;
@@ -523,6 +523,17 @@ impl NodeExecutor for SubWorkflowExecutor {
                 let mut result = NodeExecutionResult::waiting(nested_signal, output);
                 if let Some(path) = export_path {
                     result = result.with_state_patch(nested_state_patch(path, waiting_output));
+                }
+                Ok(result)
+            }
+            WorkflowRunStatus::Terminated => {
+                let mut result = NodeExecutionResult::failed(
+                    "sub_workflow_terminated",
+                    format!("sub-workflow {} was terminated", definition.meta.key),
+                    false,
+                );
+                if let Some(path) = export_path {
+                    result = result.with_state_patch(nested_state_patch(path, output));
                 }
                 Ok(result)
             }
