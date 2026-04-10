@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::definition::NodeType;
+use super::definition::NodeType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEnvironment {

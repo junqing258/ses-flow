@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::definition::WorkflowDefinition;
+use crate::core::definition::WorkflowDefinition;
 use crate::error::RunnerError;
-use crate::runtime::NodeExecutionContext;
+use crate::core::runtime::NodeExecutionContext;
 
 pub trait FetchConnector: Send + Sync {
     fn name(&self) -> &'static str;

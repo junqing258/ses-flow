@@ -4,16 +4,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use crate::definition::{NodeType, TransitionDefinition, WorkflowDefinition};
+use super::definition::{NodeType, TransitionDefinition, WorkflowDefinition};
 use crate::error::RunnerError;
-use crate::executors::ExecutorRegistry;
-use crate::runtime::{
+use super::executors::ExecutorRegistry;
+use super::runtime::{
     ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunObserver,
     RunEnvironment, WorkflowRunObserver, WorkflowRunSnapshot, WorkflowRunStatus,
     WorkflowRunSummary,
 };
 use crate::services::WorkflowServices;
-use crate::template::{merge_state, nested_state_patch};
+use super::template::{merge_state, nested_state_patch};
 
 pub struct WorkflowEngine {
     registry: ExecutorRegistry,
@@ -172,7 +172,7 @@ impl WorkflowEngine {
 
     fn validate_resume_input(
         &self,
-        waiting_node: &crate::definition::NodeDefinition,
+        waiting_node: &super::definition::NodeDefinition,
         snapshot: &WorkflowRunSnapshot,
         resume_input: &Value,
     ) -> Result<(), RunnerError> {
@@ -259,7 +259,7 @@ impl WorkflowEngine {
     fn resume_sub_workflow(
         &self,
         definition: &WorkflowDefinition,
-        waiting_node: &crate::definition::NodeDefinition,
+        waiting_node: &super::definition::NodeDefinition,
         snapshot: WorkflowRunSnapshot,
         resume_input: Value,
     ) -> Result<WorkflowRunSummary, RunnerError> {
@@ -512,7 +512,7 @@ impl WorkflowEngine {
 }
 
 fn resolve_sub_workflow_definition_from_services(
-    node: &crate::definition::NodeDefinition,
+    node: &super::definition::NodeDefinition,
     services: &WorkflowServices,
 ) -> Result<WorkflowDefinition, RunnerError> {
     if let Some(definition) = node
@@ -599,7 +599,7 @@ pub fn new_run_id() -> String {
 }
 
 fn validate_field_match(
-    waiting_node: &crate::definition::NodeDefinition,
+    waiting_node: &super::definition::NodeDefinition,
     snapshot: &WorkflowRunSnapshot,
     resume_input: &Value,
     canonical_name: &str,

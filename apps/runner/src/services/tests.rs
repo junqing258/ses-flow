@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::runtime::{NodeExecutionContext, RunEnvironment};
+use crate::core::runtime::{NodeExecutionContext, RunEnvironment};
 use crate::services::WorkflowServices;
 
 #[test]

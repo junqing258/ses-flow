@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::template::{EvaluationContext, merge_state, nested_state_patch};
+use super::template::{EvaluationContext, merge_state, nested_state_patch};
 
 #[test]
 fn resolves_exact_template_to_original_value_type() {

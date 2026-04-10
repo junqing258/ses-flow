@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use crate::definition::WorkflowDefinition;
-use crate::engine::WorkflowEngine;
-use crate::runtime::{RunEnvironment, WorkflowRunStatus};
+use crate::core::definition::WorkflowDefinition;
+use crate::core::engine::WorkflowEngine;
+use crate::core::runtime::{RunEnvironment, WorkflowRunStatus};
 use crate::store::{InMemoryRunStore, WorkflowRunStore, WorkflowRunner};
 
 #[test]

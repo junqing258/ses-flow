@@ -9,14 +9,14 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use crate::definition::{NodeDefinition, NodeType, WorkflowDefinition};
+use super::definition::{NodeDefinition, NodeType, WorkflowDefinition};
 use crate::error::RunnerError;
-use crate::runtime::{
+use super::runtime::{
     NextSignal, NodeExecutionContext, NodeExecutionResult, NodeLogRecord, RunEnvironment,
     WorkflowRunStatus,
 };
 use crate::services::WorkflowServices;
-use crate::template::{EvaluationContext, env_to_value, is_truthy, nested_state_patch};
+use super::template::{EvaluationContext, env_to_value, is_truthy, nested_state_patch};
 
 pub trait NodeExecutor: Send + Sync {
     fn node_type(&self) -> NodeType;
@@ -464,7 +464,7 @@ impl NodeExecutor for SubWorkflowExecutor {
         let definition = resolve_sub_workflow_definition(node, &self.services)?;
         definition.validate()?;
 
-        let engine = crate::engine::WorkflowEngine::with_services((*self.services).clone());
+        let engine = super::WorkflowEngine::with_services((*self.services).clone());
         let nested_trigger = json!({
             "headers": {
                 "parentRunId": context.run_id,
