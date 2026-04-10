@@ -8,24 +8,104 @@
 - 最小可运行的执行内核
 - 内置基础节点执行器
 - `connector / action / task` handler registry
+- workspace + workflow 注册能力
 - `run / snapshot` store 抽象与内存实现
 - `waiting -> resume` 恢复执行能力
 - `sub_workflow` 父子级联恢复
 - `resume` 事件类型与关联键校验
-- 示例流程与本地运行入口
+- HTTP API + SSE 运行状态推送
 
 ## Commands
 
 ```bash
-cargo run -- --workflow examples/sorting-main-flow.json
+cargo run -- --host 127.0.0.1 --port 3002
 cargo test
 ```
 
-等待态恢复执行：
+`apps/runner` 现在默认以服务器模式启动。
+
+## API
+
+上传 workflow 并定义 workspace：
 
 ```bash
-cargo run -- --workflow examples/sorting-main-flow.json > /tmp/runner-waiting.json
-cargo run -- --workflow examples/sorting-main-flow.json --resume-state /tmp/runner-waiting.json --event examples/rcs-callback.json
+curl -i \
+  --request POST \
+  --url http://127.0.0.1:3002/workflows \
+  --header 'content-type: application/json' \
+  --data '{
+    "workspaceId": "ws-demo",
+    "workspaceName": "Demo Workspace",
+    "workflow": {
+      "meta": {
+        "key": "sorting.demo",
+        "name": "Sorting Demo",
+        "version": 1
+      },
+      "trigger": { "type": "manual" },
+      "inputSchema": { "type": "object" },
+      "nodes": [
+        { "id": "start_1", "type": "start", "name": "Start" },
+        { "id": "end_1", "type": "end", "name": "End" }
+      ],
+      "transitions": [
+        { "from": "start_1", "to": "end_1" }
+      ],
+      "policies": {}
+    }
+  }'
+```
+
+返回值会包含 `workflowId`，后续执行时使用它。
+
+执行 workflow：
+
+```bash
+curl -i \
+  --request POST \
+  --url http://127.0.0.1:3002/workflows/<workflow_id>/runs \
+  --header 'content-type: application/json' \
+  --data '{
+    "trigger": {
+      "headers": { "requestId": "req-api-1" },
+      "body": { "orderNo": "SO-API-1", "bizType": "auto_sort" }
+    }
+  }'
+```
+
+返回值会包含 `runId`、`statusUrl`、`eventsUrl`。
+
+查询 workflow 执行状态：
+
+```bash
+curl -i \
+  --request GET \
+  --url http://127.0.0.1:3002/runs/<run_id>
+```
+
+使用 SSE 持续订阅运行状态和 timeline 更新：
+
+```bash
+curl -N \
+  --request GET \
+  --url http://127.0.0.1:3002/runs/<run_id>/events
+```
+
+恢复 waiting run：
+
+```bash
+curl -i \
+  --request POST \
+  --url http://127.0.0.1:3002/runs/<run_id>/resume \
+  --header 'content-type: application/json' \
+  --data '{
+    "event": {
+      "event": "rcs.callback",
+      "correlationKey": "req-api-1",
+      "status": "done",
+      "orderNo": "SO-API-1"
+    }
+  }'
 ```
 
 当前恢复校验规则：

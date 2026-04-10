@@ -1,12 +1,16 @@
+pub mod api;
 pub mod definition;
 pub mod engine;
 pub mod error;
 pub mod executors;
 pub mod runtime;
+pub mod server;
 pub mod services;
 pub mod store;
 pub mod template;
 
+#[cfg(test)]
+mod api_tests;
 #[cfg(test)]
 mod engine_tests;
 #[cfg(test)]

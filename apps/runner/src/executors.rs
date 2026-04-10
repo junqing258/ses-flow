@@ -489,6 +489,10 @@ impl NodeExecutor for SubWorkflowExecutor {
         let export_path = node.config.get("statePath").and_then(Value::as_str);
 
         match summary.status {
+            WorkflowRunStatus::Running => Err(RunnerError::SubWorkflow(format!(
+                "sub-workflow {} returned unexpected running status",
+                definition.meta.key
+            ))),
             WorkflowRunStatus::Completed => {
                 let mut result = NodeExecutionResult::success(output.clone());
                 if let Some(path) = export_path {

@@ -6,6 +6,14 @@ description = "Self-hosted DSL runner for the SES workflow platform"
 license = "UNLICENSED"
 
 [dependencies]
+async-stream = "0.3"
+axum = "0.8"
+futures-core = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = "0.5"

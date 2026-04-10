@@ -107,6 +107,18 @@ impl WorkflowRunner {
         Ok(summary)
     }
 
+    pub fn run_with_id(
+        &self,
+        definition: &crate::definition::WorkflowDefinition,
+        run_id: String,
+        trigger: serde_json::Value,
+        env: crate::runtime::RunEnvironment,
+    ) -> Result<WorkflowRunSummary, RunnerError> {
+        let summary = self.engine.run_with_id(definition, run_id, trigger, env)?;
+        self.store_summary_and_snapshot(&summary)?;
+        Ok(summary)
+    }
+
     pub fn resume_by_run_id(
         &self,
         definition: &crate::definition::WorkflowDefinition,

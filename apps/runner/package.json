@@ -4,8 +4,8 @@
   "private": true,
   "description": "Rust-based DSL runner for SES workflow orchestration",
   "scripts": {
-    "dev": "cargo run -- --workflow examples/sorting-main-flow.json",
-    "start": "cargo run --release -- --workflow examples/sorting-main-flow.json",
+    "dev": "cargo run -- --host 127.0.0.1 --port 3002",
+    "start": "cargo run --release -- --host 127.0.0.1 --port 3002",
     "build": "cargo build --release",
     "test": "cargo test"
   }

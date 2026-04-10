@@ -8,8 +8,9 @@ use crate::definition::{NodeType, TransitionDefinition, WorkflowDefinition};
 use crate::error::RunnerError;
 use crate::executors::ExecutorRegistry;
 use crate::runtime::{
-    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, RunEnvironment,
-    WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary,
+    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunObserver,
+    RunEnvironment, WorkflowRunObserver, WorkflowRunSnapshot, WorkflowRunStatus,
+    WorkflowRunSummary,
 };
 use crate::services::WorkflowServices;
 use crate::template::{merge_state, nested_state_patch};
@@ -17,6 +18,7 @@ use crate::template::{merge_state, nested_state_patch};
 pub struct WorkflowEngine {
     registry: ExecutorRegistry,
     services: WorkflowServices,
+    observer: Arc<dyn WorkflowRunObserver>,
 }
 
 impl WorkflowEngine {
@@ -25,9 +27,21 @@ impl WorkflowEngine {
     }
 
     pub fn with_services(services: WorkflowServices) -> Self {
+        Self::with_services_and_observer(services, Arc::new(NoopWorkflowRunObserver))
+    }
+
+    pub fn with_observer(observer: Arc<dyn WorkflowRunObserver>) -> Self {
+        Self::with_services_and_observer(WorkflowServices::with_defaults(), observer)
+    }
+
+    pub fn with_services_and_observer(
+        services: WorkflowServices,
+        observer: Arc<dyn WorkflowRunObserver>,
+    ) -> Self {
         Self {
             registry: ExecutorRegistry::with_defaults(Arc::new(services.clone())),
             services,
+            observer,
         }
     }
 
@@ -37,8 +51,17 @@ impl WorkflowEngine {
         trigger: Value,
         env: RunEnvironment,
     ) -> Result<WorkflowRunSummary, RunnerError> {
+        self.run_with_id(definition, new_run_id(), trigger, env)
+    }
+
+    pub fn run_with_id(
+        &self,
+        definition: &WorkflowDefinition,
+        run_id: String,
+        trigger: Value,
+        env: RunEnvironment,
+    ) -> Result<WorkflowRunSummary, RunnerError> {
         definition.validate()?;
-        let run_id = new_run_id();
         let current_node_id = definition.start_node()?.id.clone();
         let current_input = trigger
             .get("body")
@@ -271,28 +294,36 @@ impl WorkflowEngine {
         });
 
         match child_summary.status {
-            WorkflowRunStatus::Waiting => Ok(WorkflowRunSummary {
-                run_id: snapshot.run_id.clone(),
-                workflow_key: snapshot.workflow_key.clone(),
-                workflow_version: snapshot.workflow_version,
-                status: WorkflowRunStatus::Waiting,
-                current_node_id: Some(waiting_node.id.clone()),
-                state: state.clone(),
-                timeline: timeline.clone(),
-                last_signal: child_summary.last_signal.clone(),
-                resume_state: Some(WorkflowRunSnapshot {
-                    run_id: snapshot.run_id,
-                    workflow_key: snapshot.workflow_key,
+            WorkflowRunStatus::Running => Err(RunnerError::SubWorkflow(format!(
+                "sub-workflow {} returned unexpected running status",
+                child_summary.workflow_key
+            ))),
+            WorkflowRunStatus::Waiting => {
+                let summary = WorkflowRunSummary {
+                    run_id: snapshot.run_id.clone(),
+                    workflow_key: snapshot.workflow_key.clone(),
                     workflow_version: snapshot.workflow_version,
-                    current_node_id: waiting_node.id.clone(),
-                    trigger: snapshot.trigger,
-                    last_input: child_output,
-                    state,
-                    timeline,
-                    last_signal: child_summary.last_signal,
-                    env: snapshot.env,
-                }),
-            }),
+                    status: WorkflowRunStatus::Waiting,
+                    current_node_id: Some(waiting_node.id.clone()),
+                    state: state.clone(),
+                    timeline: timeline.clone(),
+                    last_signal: child_summary.last_signal.clone(),
+                    resume_state: Some(WorkflowRunSnapshot {
+                        run_id: snapshot.run_id,
+                        workflow_key: snapshot.workflow_key,
+                        workflow_version: snapshot.workflow_version,
+                        current_node_id: waiting_node.id.clone(),
+                        trigger: snapshot.trigger,
+                        last_input: child_output,
+                        state,
+                        timeline,
+                        last_signal: child_summary.last_signal,
+                        env: snapshot.env,
+                    }),
+                };
+                self.emit_summary(&summary);
+                Ok(summary)
+            }
             WorkflowRunStatus::Completed => {
                 let outgoing = definition.transitions_from(&waiting_node.id);
                 let next = self.resolve_transition(&outgoing, None)?;
@@ -307,17 +338,21 @@ impl WorkflowEngine {
                     child_output,
                 )
             }
-            WorkflowRunStatus::Failed => Ok(WorkflowRunSummary {
-                run_id: snapshot.run_id,
-                workflow_key: snapshot.workflow_key,
-                workflow_version: snapshot.workflow_version,
-                status: WorkflowRunStatus::Failed,
-                current_node_id: Some(waiting_node.id.clone()),
-                state,
-                timeline,
-                last_signal: child_summary.last_signal,
-                resume_state: None,
-            }),
+            WorkflowRunStatus::Failed => {
+                let summary = WorkflowRunSummary {
+                    run_id: snapshot.run_id,
+                    workflow_key: snapshot.workflow_key,
+                    workflow_version: snapshot.workflow_version,
+                    status: WorkflowRunStatus::Failed,
+                    current_node_id: Some(waiting_node.id.clone()),
+                    state,
+                    timeline,
+                    last_signal: child_summary.last_signal,
+                    resume_state: None,
+                };
+                self.emit_summary(&summary);
+                Ok(summary)
+            }
         }
     }
 
@@ -336,6 +371,18 @@ impl WorkflowEngine {
         let workflow_version = definition.meta.version;
         let max_steps = definition.nodes.len().saturating_mul(8).max(16);
         let mut last_signal = None;
+
+        self.emit_summary(&WorkflowRunSummary {
+            run_id: run_id.clone(),
+            workflow_key: workflow_key.clone(),
+            workflow_version,
+            status: WorkflowRunStatus::Running,
+            current_node_id: Some(current_node_id.clone()),
+            state: state.clone(),
+            timeline: timeline.clone(),
+            last_signal: None,
+            resume_state: None,
+        });
 
         for _ in 0..max_steps {
             let node = definition
@@ -373,13 +420,25 @@ impl WorkflowEngine {
                 logs: result.logs.clone(),
             });
 
+            self.emit_summary(&WorkflowRunSummary {
+                run_id: run_id.clone(),
+                workflow_key: workflow_key.clone(),
+                workflow_version,
+                status: WorkflowRunStatus::Running,
+                current_node_id: Some(node.id.clone()),
+                state: state.clone(),
+                timeline: timeline.clone(),
+                last_signal: last_signal.clone(),
+                resume_state: None,
+            });
+
             match result.status {
                 ExecutionStatus::Waiting => {
                     let waiting_output = result.output.clone();
                     let next_signal = result.next_signal;
-                    return Ok(WorkflowRunSummary {
+                    let summary = WorkflowRunSummary {
                         run_id: run_id.clone(),
-                        workflow_key,
+                        workflow_key: workflow_key.clone(),
                         workflow_version,
                         status: WorkflowRunStatus::Waiting,
                         current_node_id: Some(node.id.clone()),
@@ -398,10 +457,12 @@ impl WorkflowEngine {
                             last_signal: next_signal,
                             env,
                         }),
-                    });
+                    };
+                    self.emit_summary(&summary);
+                    return Ok(summary);
                 }
                 ExecutionStatus::Failed => {
-                    return Ok(WorkflowRunSummary {
+                    let summary = WorkflowRunSummary {
                         run_id,
                         workflow_key,
                         workflow_version,
@@ -411,13 +472,15 @@ impl WorkflowEngine {
                         timeline,
                         last_signal,
                         resume_state: None,
-                    });
+                    };
+                    self.emit_summary(&summary);
+                    return Ok(summary);
                 }
                 ExecutionStatus::Success | ExecutionStatus::Skipped => {}
             }
 
             if result.terminal || node.node_type == NodeType::End {
-                return Ok(WorkflowRunSummary {
+                let summary = WorkflowRunSummary {
                     run_id,
                     workflow_key,
                     workflow_version,
@@ -427,7 +490,9 @@ impl WorkflowEngine {
                     timeline,
                     last_signal,
                     resume_state: None,
-                });
+                };
+                self.emit_summary(&summary);
+                return Ok(summary);
             }
 
             let outgoing = definition.transitions_from(&node.id);
@@ -439,6 +504,10 @@ impl WorkflowEngine {
         Err(RunnerError::Transition(
             "execution aborted because the max step guard was reached".to_string(),
         ))
+    }
+
+    fn emit_summary(&self, summary: &WorkflowRunSummary) {
+        self.observer.on_summary(summary);
     }
 }
 
@@ -476,6 +545,7 @@ fn resolve_sub_workflow_definition_from_services(
 
 fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStatus {
     match status {
+        WorkflowRunStatus::Running => ExecutionStatus::Success,
         WorkflowRunStatus::Completed => ExecutionStatus::Success,
         WorkflowRunStatus::Waiting => ExecutionStatus::Waiting,
         WorkflowRunStatus::Failed => ExecutionStatus::Failed,
@@ -518,7 +588,7 @@ fn sub_workflow_summary_output(summary: &WorkflowRunSummary) -> Value {
     })
 }
 
-fn new_run_id() -> String {
+pub fn new_run_id() -> String {
     static RUN_COUNTER: AtomicU64 = AtomicU64::new(1);
     let epoch_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
