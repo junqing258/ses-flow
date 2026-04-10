@@ -73,7 +73,7 @@
         </Button>
         <Button variant="ghost" class="h-8 gap-1.5 px-3 text-sm font-medium text-slate-600 rounded-full hover:bg-slate-200" @click="handleExportJson">
           <Code class="h-4 w-4" />
-          Code
+          JSON
         </Button>
         <Button class="ml-1 h-8 rounded-full bg-slate-900 px-4 text-[13px] font-medium text-white hover:bg-slate-800 shadow-sm">
           Publish

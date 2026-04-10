@@ -1,16 +1,27 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Handle, Position, type HandleConnectableFunc, type NodeProps } from "@vue-flow/core";
+import {
+  Handle,
+  Position,
+  type HandleConnectableFunc,
+  type NodeProps,
+} from "@vue-flow/core";
 
-import { WORKFLOW_ICON_MAP, type WorkflowNodeData } from "@/features/workflow/model";
+import {
+  WORKFLOW_ICON_MAP,
+  type WorkflowNodeData,
+} from "@/features/workflow/model";
 import { cn } from "@/lib/utils";
 
 const props = defineProps<NodeProps<WorkflowNodeData>>();
 
 const IconComponent = computed(() => WORKFLOW_ICON_MAP[props.data.icon]);
 const isActive = computed(() => Boolean(props.data.active || props.selected));
-const isBranchNode = computed(() => props.data.kind === "switch" || props.data.kind === "if-else");
-const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) => connectedEdges.length < 1;
+const isBranchNode = computed(
+  () => props.data.kind === "switch" || props.data.kind === "if-else",
+);
+const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
+  connectedEdges.length < 1;
 </script>
 
 <template>
@@ -29,17 +40,21 @@ const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
       id="in"
       type="target"
       :position="Position.Left"
-      class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+      class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-(--node-accent)! !bg-white"
     />
 
     <div class="flex h-[78px] overflow-hidden rounded-[14px]">
-      <div class="flex w-[56px] items-center justify-center bg-[var(--node-accent)] text-white">
+      <div
+        class="flex w-[56px] items-center justify-center bg-[var(--node-accent)] text-white"
+      >
         <component :is="IconComponent" class="h-5 w-5" />
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col justify-center gap-1 px-4">
         <div class="flex items-center justify-between gap-2">
-          <p class="truncate text-[12px] font-medium text-slate-500">{{ data.title }}</p>
+          <p class="truncate text-[12px] font-medium text-slate-500">
+            {{ data.title }}
+          </p>
           <!-- <span
             v-if="data.status === 'published'"
             class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700"
@@ -49,7 +64,11 @@ const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
           </span> -->
         </div>
 
-        <p class="truncate text-[14px] font-semibold tracking-[0.01em] text-slate-900">{{ data.subtitle }}</p>
+        <p
+          class="truncate text-[14px] font-semibold tracking-[0.01em] text-slate-900"
+        >
+          {{ data.subtitle }}
+        </p>
       </div>
     </div>
 
@@ -58,7 +77,7 @@ const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
       id="out"
       type="source"
       :position="Position.Right"
-      class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+      class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-(--node-accent)! !bg-white"
     />
 
     <template v-else>
@@ -67,14 +86,14 @@ const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
         type="source"
         :position="Position.Right"
         :connectable="singleConnectionHandle"
-        class="!right-0 !top-[32%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+        class="!right-0 !top-[32%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-(--node-accent)! !bg-white"
       />
       <Handle
         id="branch-b"
         type="source"
         :position="Position.Right"
         :connectable="singleConnectionHandle"
-        class="!right-0 !top-[68%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-[var(--node-accent)] !bg-white"
+        class="!right-0 !top-[68%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-(--node-accent)! !bg-white"
       />
     </template>
   </div>
