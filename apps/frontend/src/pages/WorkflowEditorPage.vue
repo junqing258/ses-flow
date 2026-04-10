@@ -248,7 +248,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import { type Connection, type Edge, VueFlow, useVueFlow } from "@vue-flow/core";
@@ -286,6 +286,7 @@ const WORKFLOW_EDGE_STYLE = {
   stroke: "#CBD5E1",
   strokeWidth: 2,
 };
+const HISTORY_LIMIT = 50;
 
 const nodes = ref<WorkflowFlowNode[]>(createWorkflowNodes());
 const edges = ref<Edge[]>(createWorkflowEdges());
@@ -295,6 +296,7 @@ const selectedNodeId = ref("fetch_order");
 const activeTab = ref<WorkflowTabId>("base");
 const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
+const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const workflowMeta = {
   id: "sorting-main-flow",
   name: "sorting-main-flow",
@@ -321,6 +323,14 @@ const EMPTY_NODE_DATA: WorkflowNodeData = {
   subtitle: "请选择节点",
   title: "未选择节点",
 };
+
+interface WorkflowEditorSnapshot {
+  activeTab: WorkflowTabId;
+  edges: Edge[];
+  nodes: WorkflowFlowNode[];
+  panelByNodeId: Record<string, WorkflowNodePanel>;
+  selectedNodeId: string;
+}
 
 const selectedNodeData = ref<WorkflowNodeData>(EMPTY_NODE_DATA);
 const selectedPanel = computed(() => panelByNodeId.value[selectedNodeId.value]);
@@ -369,6 +379,131 @@ const syncSelectedNodeData = () => {
   selectedNodeData.value = nodes.value.find((node) => node.id === selectedNodeId.value)?.data ?? EMPTY_NODE_DATA;
 };
 
+const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
+  active: data.active,
+  accent: data.accent,
+  icon: data.icon,
+  kind: data.kind,
+  nodeKey: data.nodeKey,
+  status: data.status,
+  subtitle: data.subtitle,
+  title: data.title,
+});
+
+const cloneWorkflowNodes = (sourceNodes: WorkflowFlowNode[]) =>
+  sourceNodes.map<WorkflowFlowNode>((node) => ({
+    data: cloneWorkflowNodeData(node.data),
+    deletable: node.deletable,
+    draggable: node.draggable,
+    id: node.id,
+    parentNode: node.parentNode,
+    position: {
+      x: node.position.x,
+      y: node.position.y,
+    },
+    selectable: node.selectable,
+    sourcePosition: node.sourcePosition,
+    targetPosition: node.targetPosition,
+    type: node.type,
+  }));
+
+const cloneEdgeStyle = (style: Edge["style"]) => {
+  if (!style || typeof style !== "object" || Array.isArray(style)) {
+    return undefined;
+  }
+
+  return Object.entries(style).reduce<Record<string, string | number>>((acc, [key, value]) => {
+    if (typeof value === "string" || typeof value === "number") {
+      acc[key] = value;
+    }
+
+    return acc;
+  }, {});
+};
+
+const cloneWorkflowEdges = (sourceEdges: Edge[]) =>
+  sourceEdges.map<Edge>((edge) => ({
+    animated: edge.animated,
+    deletable: edge.deletable,
+    id: edge.id,
+    interactionWidth: edge.interactionWidth,
+    selectable: edge.selectable,
+    source: edge.source,
+    sourceHandle: edge.sourceHandle,
+    style: cloneEdgeStyle(edge.style),
+    target: edge.target,
+    targetHandle: edge.targetHandle,
+    type: edge.type,
+    updatable: edge.updatable,
+  }));
+
+const cloneWorkflowPanels = (sourcePanels: Record<string, WorkflowNodePanel>) =>
+  Object.fromEntries(
+    Object.entries(sourcePanels).map(([nodeId, panel]) => [
+      nodeId,
+      {
+        fieldsByTab: Object.fromEntries(
+          Object.entries(panel.fieldsByTab).map(([tab, fields]) => [
+            tab,
+            (fields ?? []).map((field) => ({
+              key: field.key,
+              label: field.label,
+              type: field.type,
+              value: field.value,
+            })),
+          ]),
+        ),
+        tabs: [...panel.tabs],
+      } satisfies WorkflowNodePanel,
+    ]),
+  ) as Record<string, WorkflowNodePanel>;
+
+const createSnapshot = (): WorkflowEditorSnapshot => ({
+  activeTab: activeTab.value,
+  edges: cloneWorkflowEdges(edges.value),
+  nodes: cloneWorkflowNodes(nodes.value),
+  panelByNodeId: cloneWorkflowPanels(panelByNodeId.value),
+  selectedNodeId: selectedNodeId.value,
+});
+
+const pushHistorySnapshot = () => {
+  historyStack.value = [...historyStack.value.slice(-(HISTORY_LIMIT - 1)), createSnapshot()];
+};
+
+const restoreSnapshot = (snapshot: WorkflowEditorSnapshot) => {
+  nodes.value = cloneWorkflowNodes(snapshot.nodes);
+  edges.value = cloneWorkflowEdges(snapshot.edges);
+  panelByNodeId.value = cloneWorkflowPanels(snapshot.panelByNodeId);
+  selectedNodeId.value = snapshot.selectedNodeId;
+  activeTab.value = snapshot.activeTab;
+  syncSelectedNodeData();
+};
+
+const undoLastChange = () => {
+  const snapshot = historyStack.value[historyStack.value.length - 1];
+
+  if (!snapshot) {
+    toast.info("没有可撤销的操作");
+    return;
+  }
+
+  historyStack.value = historyStack.value.slice(0, -1);
+  restoreSnapshot(snapshot);
+  toast.success("已撤销上一步操作");
+};
+
+const selectFallbackNode = () => {
+  const fallbackNode = nodes.value.find((node) => node.type !== "branch-chip");
+
+  if (fallbackNode) {
+    setSelectedNode(fallbackNode.id);
+    return;
+  }
+
+  selectedNodeId.value = "";
+  syncSelectedNodeData();
+};
+
 const setSelectedNode = (nodeId: string) => {
   selectedNodeId.value = nodeId;
   nodes.value = nodes.value.map((node) => ({
@@ -383,6 +518,30 @@ const setSelectedNode = (nodeId: string) => {
 
 const handleNodeClick = (payload: any) => {
   setSelectedNode(payload.node.id);
+};
+
+const deleteSelectedNode = () => {
+  const targetId = selectedNodeId.value;
+
+  if (!targetId) {
+    return;
+  }
+
+  const targetNode = nodes.value.find((node) => node.id === targetId);
+
+  if (!targetNode || targetNode.type === "branch-chip") {
+    return;
+  }
+
+  pushHistorySnapshot();
+  nodes.value = nodes.value.filter((node) => node.id !== targetId);
+  edges.value = edges.value.filter((edge) => edge.source !== targetId && edge.target !== targetId);
+
+  const { [targetId]: _removedPanel, ...restPanels } = panelByNodeId.value;
+  panelByNodeId.value = restPanels;
+
+  selectFallbackNode();
+  toast.success(`已删除节点：${targetNode.data.subtitle ?? targetNode.data.title}`);
 };
 
 const getEdgeId = (connection: Connection) => {
@@ -404,6 +563,7 @@ const handleConnect = (connection: Connection) => {
     return;
   }
 
+  pushHistorySnapshot();
   edges.value = [
     ...edges.value,
     {
@@ -498,6 +658,7 @@ const handleCanvasDrop = (event: DragEvent) => {
     nodes.value,
   );
 
+  pushHistorySnapshot();
   nodes.value = [...nodes.value, node];
   panelByNodeId.value = {
     ...panelByNodeId.value,
@@ -567,6 +728,45 @@ const handleExportJson = () => {
     toast.error(error instanceof Error ? error.message : "导出工作流 JSON 失败");
   }
 };
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+
+  if (target.isContentEditable) {
+    return true;
+  }
+
+  return tagName === "input" || tagName === "textarea" || tagName === "select";
+};
+
+const handleWindowKeydown = (event: KeyboardEvent) => {
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    undoLastChange();
+    return;
+  }
+
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    deleteSelectedNode();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener("keydown", handleWindowKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleWindowKeydown);
+});
 
 setSelectedNode(selectedNodeId.value);
 </script>

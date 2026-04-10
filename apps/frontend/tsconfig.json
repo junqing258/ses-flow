@@ -11,9 +11,8 @@
     "isolatedModules": true,
     "lib": ["ES2021", "DOM", "DOM.Iterable", "ESNext.Disposable"],
     "types": ["vite/client", "web-bluetooth"],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "tests/**/*.ts"],
