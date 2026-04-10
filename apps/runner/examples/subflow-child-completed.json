@@ -1,0 +1,5 @@
+{
+  "event": "child.callback",
+  "correlationKey": "SO-DEMO-1",
+  "status": "done"
+}

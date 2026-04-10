@@ -42,6 +42,8 @@ pub struct NodeExecutionResult {
     pub state_patch: Value,
     #[serde(rename = "branchKey", skip_serializing_if = "Option::is_none")]
     pub branch_key: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub logs: Vec<NodeLogRecord>,
     #[serde(rename = "nextSignal", skip_serializing_if = "Option::is_none")]
     pub next_signal: Option<NextSignal>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +59,7 @@ impl NodeExecutionResult {
             output,
             state_patch: Value::Null,
             branch_key: None,
+            logs: Vec::new(),
             next_signal: None,
             error: None,
             terminal: false,
@@ -69,6 +72,7 @@ impl NodeExecutionResult {
             output,
             state_patch: Value::Null,
             branch_key: None,
+            logs: Vec::new(),
             next_signal: Some(signal),
             error: None,
             terminal: false,
@@ -81,6 +85,7 @@ impl NodeExecutionResult {
             output: Value::Null,
             state_patch: Value::Null,
             branch_key: None,
+            logs: Vec::new(),
             next_signal: None,
             error: Some(NodeExecutionError {
                 code: code.into(),
@@ -99,6 +104,11 @@ impl NodeExecutionResult {
 
     pub fn with_branch_key(mut self, branch_key: impl Into<String>) -> Self {
         self.branch_key = Some(branch_key.into());
+        self
+    }
+
+    pub fn with_logs(mut self, logs: Vec<NodeLogRecord>) -> Self {
+        self.logs = logs;
         self
     }
 
@@ -177,6 +187,14 @@ pub struct NodeExecutionRecord {
     pub state_patch: Value,
     #[serde(rename = "branchKey", skip_serializing_if = "Option::is_none")]
     pub branch_key: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub logs: Vec<NodeLogRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeLogRecord {
+    pub level: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

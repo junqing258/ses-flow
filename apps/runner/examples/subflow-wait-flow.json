@@ -1,0 +1,119 @@
+{
+  "meta": {
+    "key": "subflow-wait-flow",
+    "name": "Subflow Wait Flow",
+    "version": 1,
+    "scope": {
+      "tenant": "tenant-a",
+      "warehouse": "WH-1"
+    },
+    "status": "published"
+  },
+  "trigger": {
+    "type": "webhook",
+    "path": "/flows/subflow-wait",
+    "responseMode": "async_ack"
+  },
+  "inputSchema": {
+    "type": "object"
+  },
+  "nodes": [
+    {
+      "id": "start_1",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "id": "nested_workflow",
+      "type": "sub_workflow",
+      "name": "Nested Workflow",
+      "config": {
+        "statePath": "nested",
+        "definition": {
+          "meta": {
+            "key": "child-wait-flow",
+            "name": "Child Wait Flow",
+            "version": 1
+          },
+          "trigger": {
+            "type": "manual"
+          },
+          "inputSchema": {
+            "type": "object"
+          },
+          "nodes": [
+            {
+              "id": "child_start",
+              "type": "start",
+              "name": "Child Start"
+            },
+            {
+              "id": "child_wait",
+              "type": "wait",
+              "name": "Child Wait",
+              "config": {
+                "event": "child.callback"
+              },
+              "inputMapping": {
+                "correlationKey": "{{trigger.body.orderNo}}",
+                "orderNo": "{{trigger.body.orderNo}}"
+              }
+            },
+            {
+              "id": "child_end",
+              "type": "end",
+              "name": "Child End"
+            }
+          ],
+          "transitions": [
+            {
+              "from": "child_start",
+              "to": "child_wait"
+            },
+            {
+              "from": "child_wait",
+              "to": "child_end"
+            }
+          ],
+          "policies": {}
+        }
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}"
+      }
+    },
+    {
+      "id": "respond_ok",
+      "type": "respond",
+      "name": "Respond",
+      "config": {
+        "statusCode": 200
+      },
+      "inputMapping": {
+        "orderNo": "{{trigger.body.orderNo}}",
+        "nestedStatus": "{{state.nested.status}}",
+        "nestedRunId": "{{state.nested.runId}}"
+      }
+    },
+    {
+      "id": "end_1",
+      "type": "end",
+      "name": "End"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start_1",
+      "to": "nested_workflow"
+    },
+    {
+      "from": "nested_workflow",
+      "to": "respond_ok"
+    },
+    {
+      "from": "respond_ok",
+      "to": "end_1"
+    }
+  ],
+  "policies": {}
+}

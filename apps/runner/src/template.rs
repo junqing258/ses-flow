@@ -107,7 +107,10 @@ pub fn is_truthy(value: &Value) -> bool {
         }
         Value::String(text) => {
             let normalized = text.trim().to_ascii_lowercase();
-            !normalized.is_empty() && normalized != "false" && normalized != "0" && normalized != "null"
+            !normalized.is_empty()
+                && normalized != "false"
+                && normalized != "0"
+                && normalized != "null"
         }
         Value::Array(items) => !items.is_empty(),
         Value::Object(object) => !object.is_empty(),

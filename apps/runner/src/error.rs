@@ -18,6 +18,8 @@ pub enum RunnerError {
     MissingActionHandler(String),
     #[error("task handler not found: {0}")]
     MissingTaskHandler(String),
+    #[error("code node execution failed: {0}")]
+    CodeExecution(String),
     #[error("sub-workflow definition not found: {0}")]
     MissingSubWorkflow(String),
     #[error("sub-workflow execution failed: {0}")]

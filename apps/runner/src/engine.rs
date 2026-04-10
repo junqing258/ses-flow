@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
@@ -11,10 +12,11 @@ use crate::runtime::{
     WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::services::WorkflowServices;
-use crate::template::merge_state;
+use crate::template::{merge_state, nested_state_patch};
 
 pub struct WorkflowEngine {
     registry: ExecutorRegistry,
+    services: WorkflowServices,
 }
 
 impl WorkflowEngine {
@@ -24,7 +26,8 @@ impl WorkflowEngine {
 
     pub fn with_services(services: WorkflowServices) -> Self {
         Self {
-            registry: ExecutorRegistry::with_defaults(Arc::new(services)),
+            registry: ExecutorRegistry::with_defaults(Arc::new(services.clone())),
+            services,
         }
     }
 
@@ -79,6 +82,9 @@ impl WorkflowEngine {
         let waiting_node = definition
             .node(&snapshot.current_node_id)
             .ok_or_else(|| RunnerError::MissingNode(snapshot.current_node_id.clone()))?;
+        if waiting_node.node_type == NodeType::SubWorkflow {
+            return self.resume_sub_workflow(definition, waiting_node, snapshot, resume_input);
+        }
         self.validate_resume_input(waiting_node, &snapshot, &resume_input)?;
         let outgoing = definition.transitions_from(&waiting_node.id);
         let next = self.resolve_transition(&outgoing, None)?;
@@ -218,11 +224,100 @@ impl WorkflowEngine {
 
                 Ok(())
             }
+            NodeType::SubWorkflow => Ok(()),
             other => Err(RunnerError::ResumeValidation(format!(
                 "node {} of type {} is not resumable",
                 waiting_node.id,
                 other.as_str()
             ))),
+        }
+    }
+
+    fn resume_sub_workflow(
+        &self,
+        definition: &WorkflowDefinition,
+        waiting_node: &crate::definition::NodeDefinition,
+        snapshot: WorkflowRunSnapshot,
+        resume_input: Value,
+    ) -> Result<WorkflowRunSummary, RunnerError> {
+        let child_snapshot = extract_child_snapshot(&snapshot)?;
+        let child_definition =
+            resolve_sub_workflow_definition_from_services(waiting_node, &self.services)?;
+        child_definition.validate()?;
+
+        let child_engine = WorkflowEngine::with_services(self.services.clone());
+        let child_summary = child_engine.resume(&child_definition, child_snapshot, resume_input)?;
+        let child_output = sub_workflow_summary_output(&child_summary);
+
+        let mut state = snapshot.state.clone();
+        if let Some(path) = waiting_node.config.get("statePath").and_then(Value::as_str) {
+            merge_state(&mut state, nested_state_patch(path, child_output.clone()));
+        }
+
+        let mut timeline = snapshot.timeline.clone();
+        timeline.push(NodeExecutionRecord {
+            node_id: waiting_node.id.clone(),
+            node_type: waiting_node.node_type,
+            status: map_workflow_status_to_execution(&child_summary.status),
+            output: child_output.clone(),
+            state_patch: waiting_node
+                .config
+                .get("statePath")
+                .and_then(Value::as_str)
+                .map(|path| nested_state_patch(path, child_output.clone()))
+                .unwrap_or(Value::Null),
+            branch_key: None,
+            logs: Vec::new(),
+        });
+
+        match child_summary.status {
+            WorkflowRunStatus::Waiting => Ok(WorkflowRunSummary {
+                run_id: snapshot.run_id.clone(),
+                workflow_key: snapshot.workflow_key.clone(),
+                workflow_version: snapshot.workflow_version,
+                status: WorkflowRunStatus::Waiting,
+                current_node_id: Some(waiting_node.id.clone()),
+                state: state.clone(),
+                timeline: timeline.clone(),
+                last_signal: child_summary.last_signal.clone(),
+                resume_state: Some(WorkflowRunSnapshot {
+                    run_id: snapshot.run_id,
+                    workflow_key: snapshot.workflow_key,
+                    workflow_version: snapshot.workflow_version,
+                    current_node_id: waiting_node.id.clone(),
+                    trigger: snapshot.trigger,
+                    last_input: child_output,
+                    state,
+                    timeline,
+                    last_signal: child_summary.last_signal,
+                    env: snapshot.env,
+                }),
+            }),
+            WorkflowRunStatus::Completed => {
+                let outgoing = definition.transitions_from(&waiting_node.id);
+                let next = self.resolve_transition(&outgoing, None)?;
+                self.execute_from(
+                    definition,
+                    snapshot.run_id,
+                    snapshot.trigger,
+                    snapshot.env,
+                    state,
+                    timeline,
+                    next.to.clone(),
+                    child_output,
+                )
+            }
+            WorkflowRunStatus::Failed => Ok(WorkflowRunSummary {
+                run_id: snapshot.run_id,
+                workflow_key: snapshot.workflow_key,
+                workflow_version: snapshot.workflow_version,
+                status: WorkflowRunStatus::Failed,
+                current_node_id: Some(waiting_node.id.clone()),
+                state,
+                timeline,
+                last_signal: child_summary.last_signal,
+                resume_state: None,
+            }),
         }
     }
 
@@ -275,6 +370,7 @@ impl WorkflowEngine {
                 output: result.output.clone(),
                 state_patch: result.state_patch.clone(),
                 branch_key: result.branch_key.clone(),
+                logs: result.logs.clone(),
             });
 
             match result.status {
@@ -346,12 +442,90 @@ impl WorkflowEngine {
     }
 }
 
+fn resolve_sub_workflow_definition_from_services(
+    node: &crate::definition::NodeDefinition,
+    services: &WorkflowServices,
+) -> Result<WorkflowDefinition, RunnerError> {
+    if let Some(definition) = node
+        .config
+        .get("definition")
+        .cloned()
+        .or_else(|| node.config.get("workflow").cloned())
+    {
+        return serde_json::from_value(definition)
+            .map_err(|error| RunnerError::SubWorkflow(error.to_string()));
+    }
+
+    if let Some(reference) = node
+        .config
+        .get("ref")
+        .and_then(Value::as_str)
+        .or_else(|| node.config.get("workflowKey").and_then(Value::as_str))
+    {
+        return services
+            .workflow_definitions
+            .resolve(reference)
+            .ok_or_else(|| RunnerError::MissingSubWorkflow(reference.to_string()));
+    }
+
+    Err(RunnerError::SubWorkflow(format!(
+        "node {} is missing sub-workflow definition/ref",
+        node.id
+    )))
+}
+
+fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStatus {
+    match status {
+        WorkflowRunStatus::Completed => ExecutionStatus::Success,
+        WorkflowRunStatus::Waiting => ExecutionStatus::Waiting,
+        WorkflowRunStatus::Failed => ExecutionStatus::Failed,
+    }
+}
+
+fn extract_child_snapshot(
+    snapshot: &WorkflowRunSnapshot,
+) -> Result<WorkflowRunSnapshot, RunnerError> {
+    snapshot
+        .last_input
+        .get("resumeState")
+        .cloned()
+        .or_else(|| {
+            snapshot
+                .last_input
+                .get("body")
+                .and_then(|body| body.get("resumeState"))
+                .cloned()
+        })
+        .ok_or_else(|| {
+            RunnerError::SubWorkflow(format!(
+                "parent run {} is missing child resumeState in sub-workflow output",
+                snapshot.run_id
+            ))
+        })
+        .and_then(|value| serde_json::from_value(value).map_err(RunnerError::Json))
+}
+
+fn sub_workflow_summary_output(summary: &WorkflowRunSummary) -> Value {
+    json!({
+        "workflowKey": summary.workflow_key,
+        "workflowVersion": summary.workflow_version,
+        "runId": summary.run_id,
+        "status": summary.status,
+        "state": summary.state,
+        "timeline": summary.timeline,
+        "lastSignal": summary.last_signal,
+        "resumeState": summary.resume_state
+    })
+}
+
 fn new_run_id() -> String {
+    static RUN_COUNTER: AtomicU64 = AtomicU64::new(1);
     let epoch_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    format!("run-{epoch_ms}")
+    let sequence = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("run-{epoch_ms}-{sequence}")
 }
 
 fn validate_field_match(
@@ -802,5 +976,224 @@ mod tests {
             json!(true)
         );
         assert_eq!(summary.state["subWorkflow"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn cascades_waiting_sub_workflow_resume_to_parent_completion() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/subflow-wait-flow.json"))
+                .expect("subflow wait workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let waiting = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-sub-1"
+                    },
+                    "body": {
+                        "orderNo": "SO-SUB-1"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("run should succeed");
+
+        assert!(matches!(waiting.status, WorkflowRunStatus::Waiting));
+        assert_eq!(waiting.current_node_id.as_deref(), Some("nested_workflow"));
+        assert_eq!(
+            waiting
+                .last_signal
+                .as_ref()
+                .expect("signal should exist")
+                .signal_type,
+            "child.callback"
+        );
+        assert_eq!(waiting.state["nested"]["status"], json!("waiting"));
+        assert!(waiting.state["nested"]["resumeState"].is_object());
+
+        let resumed = engine
+            .resume(
+                &definition,
+                waiting.resume_state.expect("resume state should exist"),
+                json!({
+                    "event": "child.callback",
+                    "correlationKey": "SO-SUB-1",
+                    "status": "done"
+                }),
+            )
+            .expect("resume should complete");
+
+        assert!(matches!(resumed.status, WorkflowRunStatus::Completed));
+        assert_eq!(resumed.current_node_id.as_deref(), Some("end_1"));
+        assert_eq!(resumed.state["nested"]["status"], json!("completed"));
+        assert_eq!(
+            resumed
+                .last_signal
+                .as_ref()
+                .expect("respond signal should exist")
+                .signal_type,
+            "webhook_response"
+        );
+    }
+
+    #[test]
+    fn supports_code_node_state_patch_and_priority_branch() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/code-flow.json"))
+                .expect("code workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-code-1"
+                    },
+                    "body": {
+                        "orderNo": "SO-CODE-1",
+                        "qty": "6",
+                        "route": "priority"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+        assert_eq!(
+            summary.timeline[2].node_type,
+            crate::definition::NodeType::Code
+        );
+        assert_eq!(summary.state["code"]["normalizedQty"], json!(6));
+        assert_eq!(summary.state["code"]["branch"], json!("priority"));
+        assert_eq!(summary.state["code"]["requestId"], json!("req-code-1"));
+        assert_eq!(summary.state["decision"]["handledBy"], json!("priority"));
+        assert_eq!(summary.timeline[2].logs.len(), 1);
+        assert_eq!(summary.timeline[2].logs[0].level, "log");
+        assert!(summary.timeline[2].logs[0].message.contains("req-code-1"));
+        assert_eq!(
+            summary
+                .last_signal
+                .as_ref()
+                .expect("respond should emit a signal")
+                .payload["body"]["handledBy"],
+            json!("priority")
+        );
+        assert_eq!(
+            summary
+                .last_signal
+                .as_ref()
+                .expect("respond should emit a signal")
+                .payload["body"]["requestId"],
+            json!("req-code-1")
+        );
+    }
+
+    #[test]
+    fn supports_code_node_default_branch() {
+        let definition: WorkflowDefinition =
+            serde_json::from_str(include_str!("../examples/code-flow.json"))
+                .expect("code workflow should deserialize");
+        let engine = WorkflowEngine::new();
+        let summary = engine
+            .run(
+                &definition,
+                json!({
+                    "headers": {
+                        "requestId": "req-code-2"
+                    },
+                    "body": {
+                        "orderNo": "SO-CODE-2",
+                        "qty": 2,
+                        "route": "normal"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect("workflow run should succeed");
+
+        assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+        assert_eq!(summary.state["code"]["branch"], json!("default"));
+        assert_eq!(summary.state["code"]["requestId"], json!("req-code-2"));
+        assert_eq!(summary.state["decision"]["handledBy"], json!("default"));
+        assert_eq!(summary.timeline[2].logs.len(), 1);
+        assert_eq!(
+            summary
+                .last_signal
+                .as_ref()
+                .expect("respond should emit a signal")
+                .payload["body"]["branch"],
+            json!("default")
+        );
+    }
+
+    #[test]
+    fn rejects_code_node_when_timeout_is_exceeded() {
+        let definition: WorkflowDefinition = serde_json::from_value(json!({
+            "meta": {
+                "key": "code-timeout-flow",
+                "name": "Code Timeout Flow",
+                "version": 1
+            },
+            "trigger": {
+                "type": "manual"
+            },
+            "inputSchema": {
+                "type": "object"
+            },
+            "nodes": [
+                {
+                    "id": "start_1",
+                    "type": "start",
+                    "name": "Start"
+                },
+                {
+                    "id": "run_code",
+                    "type": "code",
+                    "name": "Run Code",
+                    "timeoutMs": 25,
+                    "config": {
+                        "language": "js",
+                        "source": "await new Promise((resolve) => setTimeout(resolve, 120)); return { ok: true };"
+                    }
+                },
+                {
+                    "id": "end_1",
+                    "type": "end",
+                    "name": "End"
+                }
+            ],
+            "transitions": [
+                {
+                    "from": "start_1",
+                    "to": "run_code"
+                },
+                {
+                    "from": "run_code",
+                    "to": "end_1"
+                }
+            ],
+            "policies": {}
+        }))
+        .expect("timeout workflow should deserialize");
+        let engine = WorkflowEngine::new();
+
+        let error = engine
+            .run(
+                &definition,
+                json!({
+                    "body": {
+                        "orderNo": "SO-TIMEOUT-1"
+                    }
+                }),
+                RunEnvironment::default(),
+            )
+            .expect_err("timeout should fail");
+
+        assert!(matches!(
+            error,
+            crate::error::RunnerError::CodeExecution(message) if message.contains("timeout")
+        ));
     }
 }

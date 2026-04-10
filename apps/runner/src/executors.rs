@@ -1,11 +1,18 @@
 use std::collections::HashMap;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
 use crate::definition::{NodeDefinition, NodeType, WorkflowDefinition};
 use crate::error::RunnerError;
-use crate::runtime::{NextSignal, NodeExecutionContext, NodeExecutionResult, RunEnvironment, WorkflowRunStatus};
+use crate::runtime::{
+    NextSignal, NodeExecutionContext, NodeExecutionResult, NodeLogRecord, RunEnvironment,
+    WorkflowRunStatus,
+};
 use crate::services::WorkflowServices;
 use crate::template::{EvaluationContext, env_to_value, is_truthy, nested_state_patch};
 
@@ -35,6 +42,7 @@ impl ExecutorRegistry {
         registry.register(SetStateExecutor);
         registry.register(IfElseExecutor);
         registry.register(SwitchExecutor);
+        registry.register(CodeExecutor);
         registry.register(ActionExecutor {
             services: services.clone(),
         });
@@ -43,9 +51,7 @@ impl ExecutorRegistry {
         registry.register(TaskExecutor {
             services: services.clone(),
         });
-        registry.register(SubWorkflowExecutor {
-            services,
-        });
+        registry.register(SubWorkflowExecutor { services });
         registry
     }
 
@@ -71,6 +77,7 @@ struct FetchExecutor {
 struct SetStateExecutor;
 struct IfElseExecutor;
 struct SwitchExecutor;
+struct CodeExecutor;
 struct ActionExecutor {
     services: Arc<WorkflowServices>,
 }
@@ -305,6 +312,37 @@ impl NodeExecutor for ActionExecutor {
     }
 }
 
+impl NodeExecutor for CodeExecutor {
+    fn node_type(&self) -> NodeType {
+        NodeType::Code
+    }
+
+    fn execute(
+        &self,
+        node: &NodeDefinition,
+        context: &NodeExecutionContext<'_>,
+    ) -> Result<NodeExecutionResult, RunnerError> {
+        let language = node
+            .config
+            .get("language")
+            .or_else(|| node.config.get("lang"))
+            .and_then(Value::as_str)
+            .unwrap_or("js");
+        if !matches!(language, "js" | "javascript") {
+            return Err(RunnerError::CodeExecution(format!(
+                "node {} only supports js/javascript, got {}",
+                node.id, language
+            )));
+        }
+
+        let source = resolve_code_source(node)?;
+        let params = resolve_mapping(node, context);
+        let process_output = execute_js_code(&source, context, &params, node.timeout_ms)?;
+
+        Ok(build_code_result(process_output.result).with_logs(process_output.logs))
+    }
+}
+
 impl NodeExecutor for RespondExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::Respond
@@ -441,7 +479,9 @@ impl NodeExecutor for SubWorkflowExecutor {
             "runId": summary.run_id,
             "status": summary.status,
             "state": summary.state,
-            "timeline": summary.timeline
+            "timeline": summary.timeline,
+            "lastSignal": summary.last_signal,
+            "resumeState": summary.resume_state
         });
 
         let export_path = node.config.get("statePath").and_then(Value::as_str);
@@ -454,19 +494,32 @@ impl NodeExecutor for SubWorkflowExecutor {
                 }
                 Ok(result)
             }
-            WorkflowRunStatus::Failed => Ok(NodeExecutionResult::failed(
-                "sub_workflow_failed",
-                format!("sub-workflow {} failed", definition.meta.key),
-                false,
-            )),
-            WorkflowRunStatus::Waiting => Ok(NodeExecutionResult::failed(
-                "sub_workflow_waiting_not_supported",
-                format!(
-                    "sub-workflow {} entered waiting state which is not yet resumable from parent",
-                    definition.meta.key
-                ),
-                false,
-            )),
+            WorkflowRunStatus::Failed => {
+                let mut result = NodeExecutionResult::failed(
+                    "sub_workflow_failed",
+                    format!("sub-workflow {} failed", definition.meta.key),
+                    false,
+                );
+                if let Some(path) = export_path {
+                    result = result.with_state_patch(nested_state_patch(path, output));
+                }
+                Ok(result)
+            }
+            WorkflowRunStatus::Waiting => {
+                let nested_signal = summary.last_signal.clone().unwrap_or(NextSignal {
+                    signal_type: "sub_workflow_waiting".to_string(),
+                    payload: json!({
+                        "childWorkflowKey": summary.workflow_key,
+                        "childRunId": summary.run_id
+                    }),
+                });
+                let waiting_output = output.clone();
+                let mut result = NodeExecutionResult::waiting(nested_signal, output);
+                if let Some(path) = export_path {
+                    result = result.with_state_patch(nested_state_patch(path, waiting_output));
+                }
+                Ok(result)
+            }
         }
     }
 }
@@ -479,6 +532,215 @@ fn resolve_mapping(node: &NodeDefinition, context: &NodeExecutionContext<'_>) ->
     }
 
     template_context.resolve_value(&node.input_mapping)
+}
+
+fn resolve_code_source(node: &NodeDefinition) -> Result<String, RunnerError> {
+    node.config
+        .get("source")
+        .or_else(|| node.config.get("js"))
+        .or_else(|| node.config.get("code"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            RunnerError::CodeExecution(format!("node {} is missing config.source/js/code", node.id))
+        })
+}
+
+fn execute_js_code(
+    source: &str,
+    context: &NodeExecutionContext<'_>,
+    params: &Value,
+    timeout_ms: Option<u64>,
+) -> Result<CodeProcessOutput, RunnerError> {
+    let payload = json!({
+        "source": source,
+        "trigger": context.trigger,
+        "input": context.input,
+        "state": context.state,
+        "env": env_to_value(context.env),
+        "params": params
+    });
+    let request = serde_json::to_vec(&payload)
+        .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
+
+    let mut child = Command::new("node")
+        .args(["--input-type=module", "--eval", NODE_RUNNER_BOOTSTRAP])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
+
+    {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| RunnerError::CodeExecution("failed to open node stdin".to_string()))?;
+        stdin
+            .write_all(&request)
+            .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
+    }
+
+    let output = wait_for_code_process(child, timeout_ms)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(RunnerError::CodeExecution(if stderr.is_empty() {
+            format!("node process exited with status {}", output.status)
+        } else {
+            stderr
+        }));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() {
+        return Ok(CodeProcessOutput {
+            result: Value::Null,
+            logs: Vec::new(),
+        });
+    }
+
+    serde_json::from_str::<CodeProcessOutput>(&stdout).map_err(|error| {
+        RunnerError::CodeExecution(format!("code node returned non-JSON value: {error}"))
+    })
+}
+
+fn build_code_result(result: Value) -> NodeExecutionResult {
+    let Value::Object(mut object) = result.clone() else {
+        return NodeExecutionResult::success(result);
+    };
+
+    let envelope = object.contains_key("output")
+        || object.contains_key("statePatch")
+        || object.contains_key("state_patch")
+        || object.contains_key("state")
+        || object.contains_key("branchKey")
+        || object.contains_key("branch_key");
+    if !envelope {
+        return NodeExecutionResult::success(result);
+    }
+
+    let output = object.remove("output").unwrap_or(Value::Null);
+    let state_patch = object
+        .remove("statePatch")
+        .or_else(|| object.remove("state_patch"))
+        .or_else(|| object.remove("state"))
+        .unwrap_or(Value::Null);
+    let branch_key = object
+        .remove("branchKey")
+        .or_else(|| object.remove("branch_key"))
+        .and_then(value_to_branch_key);
+
+    let mut execution = NodeExecutionResult::success(output).with_state_patch(state_patch);
+    if let Some(branch_key) = branch_key {
+        execution = execution.with_branch_key(branch_key);
+    }
+    execution
+}
+
+fn value_to_branch_key(value: Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(value) => Some(value),
+        other => Some(other.to_string()),
+    }
+}
+
+fn wait_for_code_process(
+    mut child: std::process::Child,
+    timeout_ms: Option<u64>,
+) -> Result<std::process::Output, RunnerError> {
+    let Some(timeout_ms) = timeout_ms else {
+        return child
+            .wait_with_output()
+            .map_err(|error| RunnerError::CodeExecution(error.to_string()));
+    };
+
+    let started_at = Instant::now();
+    let timeout = Duration::from_millis(timeout_ms);
+    loop {
+        match child
+            .try_wait()
+            .map_err(|error| RunnerError::CodeExecution(error.to_string()))?
+        {
+            Some(_) => {
+                return child
+                    .wait_with_output()
+                    .map_err(|error| RunnerError::CodeExecution(error.to_string()));
+            }
+            None if started_at.elapsed() >= timeout => {
+                child
+                    .kill()
+                    .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
+                let _ = child.wait();
+                return Err(RunnerError::CodeExecution(format!(
+                    "code node exceeded timeout of {timeout_ms}ms"
+                )));
+            }
+            None => thread::sleep(Duration::from_millis(10)),
+        }
+    }
+}
+
+const NODE_RUNNER_BOOTSTRAP: &str = r#"
+import process from 'node:process';
+
+const chunks = [];
+for await (const chunk of process.stdin) {
+  chunks.push(chunk);
+}
+
+const raw = Buffer.concat(chunks).toString('utf8').trim();
+const payload = raw ? JSON.parse(raw) : {};
+const { source = '', trigger = null, input = null, state = null, env = null, params = null } = payload;
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const majorVersion = Number((process.versions.node || '0').split('.')[0] || '0');
+if (!Number.isFinite(majorVersion) || majorVersion < 22) {
+  throw new Error(`Code node requires Node.js 22+, got ${process.version}`);
+}
+const logs = [];
+const normalize = (value) => {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+const patchConsole = (level) => (...args) => {
+  logs.push({
+    level,
+    message: args.map(normalize).join(' ')
+  });
+};
+globalThis.console = {
+  ...console,
+  log: patchConsole('log'),
+  info: patchConsole('info'),
+  warn: patchConsole('warn'),
+  error: patchConsole('error'),
+  debug: patchConsole('debug')
+};
+
+try {
+  const fn = new AsyncFunction('trigger', 'input', 'state', 'env', 'params', source);
+  const result = await fn(trigger, input, state, env, params);
+  process.stdout.write(JSON.stringify({
+    result: result === undefined ? null : result,
+    logs
+  }));
+} catch (error) {
+  const message = error && typeof error.stack === 'string' ? error.stack : String(error);
+  process.stderr.write(message);
+  process.exit(1);
+}
+"#;
+
+#[derive(serde::Deserialize)]
+struct CodeProcessOutput {
+    result: Value,
+    #[serde(default)]
+    logs: Vec<NodeLogRecord>,
 }
 
 fn evaluation_context<'a>(
