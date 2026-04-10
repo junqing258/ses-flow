@@ -4,11 +4,15 @@ use std::sync::Arc;
 
 use runner::api::{ApiState, build_router};
 use runner::server::WorkflowServer;
+use runner::telemetry::init_tracing;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() {
+    init_tracing();
+
     if let Err(error) = run().await {
-        eprintln!("{error}");
+        error!(error = %error, "runner failed");
         std::process::exit(1);
     }
 }
@@ -22,7 +26,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         server: Arc::new(WorkflowServer::new()),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;
-    println!("runner api listening on http://{address}");
+    info!(address = %address, "runner api listening");
     axum::serve(listener, router).await?;
     Ok(())
 }

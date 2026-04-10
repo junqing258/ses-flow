@@ -7,13 +7,14 @@ use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
 use tokio::sync::broadcast;
+use tracing::{debug, error, info, warn};
 
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::{WorkflowEngine, new_run_id};
-use crate::error::RunnerError;
 use crate::core::runtime::{
     RunEnvironment, WorkflowRunEvent, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
 };
+use crate::error::RunnerError;
 use crate::store::{InMemoryRunStore, WorkflowRunStore, WorkflowRunner};
 
 #[derive(Debug, Error)]
@@ -67,6 +68,7 @@ pub struct WorkflowServer {
 
 impl WorkflowServer {
     pub fn new() -> Self {
+        debug!("initializing workflow server");
         let store: Arc<dyn WorkflowRunStore> = Arc::new(InMemoryRunStore::new());
         let (events, _) = broadcast::channel(256);
         let observer = Arc::new(BroadcastRunObserver {
@@ -97,9 +99,23 @@ impl WorkflowServer {
         workspace_name: Option<String>,
         definition: WorkflowDefinition,
     ) -> Result<WorkflowRegistration, ServerError> {
+        let requested_workspace_id = workspace_id.as_deref().unwrap_or("default");
+        info!(
+            workspace_id = requested_workspace_id,
+            workflow_key = definition.meta.key,
+            workflow_version = definition.meta.version,
+            "validating workflow registration",
+        );
         definition.validate()?;
         let workspace = self.catalog.ensure_workspace(workspace_id, workspace_name);
         let workflow = self.catalog.register_workflow(&workspace.id, definition);
+        info!(
+            workflow_id = %workflow.id,
+            workspace_id = %workflow.workspace_id,
+            workflow_key = %workflow.workflow_key,
+            workflow_version = workflow.workflow_version,
+            "workflow registration completed",
+        );
 
         Ok(WorkflowRegistration {
             workspace_id: workflow.workspace_id,
@@ -125,12 +141,21 @@ impl WorkflowServer {
         trigger: serde_json::Value,
         env: RunEnvironment,
     ) -> Result<WorkflowRunSummary, ServerError> {
+        info!(workflow_id = %workflow_id, "preparing workflow run");
         let workflow = self
             .catalog
             .get_definition(workflow_id)
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
         let run_id = new_run_id();
         let start_node = workflow.definition.start_node()?.id.clone();
+        info!(
+            workflow_id = %workflow.id,
+            run_id = %run_id,
+            start_node_id = %start_node,
+            workflow_key = workflow.definition.meta.key,
+            workflow_version = workflow.definition.meta.version,
+            "workflow run queued",
+        );
 
         self.run_registry.bind(&run_id, workflow.id.clone());
 
@@ -152,6 +177,12 @@ impl WorkflowServer {
         tokio::task::spawn_blocking(move || {
             let run_result = runner.run_with_id(&workflow.definition, run_id.clone(), trigger, env);
             if let Err(error) = run_result {
+                error!(
+                    workflow_id = %workflow.id,
+                    run_id = %run_id,
+                    error = %error,
+                    "workflow run failed in background task",
+                );
                 fallback.publish_summary(&WorkflowRunSummary {
                     run_id: run_id.clone(),
                     workflow_key: workflow.definition.meta.key.clone(),
@@ -176,6 +207,7 @@ impl WorkflowServer {
         run_id: &str,
         event: serde_json::Value,
     ) -> Result<WorkflowRunSummary, ServerError> {
+        info!(run_id = %run_id, "preparing workflow resume");
         let workflow_id = self
             .run_registry
             .resolve(run_id)
@@ -215,6 +247,12 @@ impl WorkflowServer {
         tokio::task::spawn_blocking(move || {
             let resume_result = runner.resume_by_run_id(&workflow.definition, &run_id, event);
             if let Err(error) = resume_result {
+                error!(
+                    workflow_id = %workflow.id,
+                    run_id = %run_id,
+                    error = %error,
+                    "workflow resume failed in background task",
+                );
                 fallback.publish_summary(&WorkflowRunSummary {
                     run_id: run_id.clone(),
                     workflow_key: workflow.definition.meta.key.clone(),
@@ -235,8 +273,15 @@ impl WorkflowServer {
     }
 
     fn publish_summary(&self, summary: &WorkflowRunSummary) {
-        let _ = self.store.save_summary(summary);
-        let _ = self.events.send(WorkflowRunEvent::from_summary(summary));
+        if let Err(error) = self.store.save_summary(summary) {
+            warn!(run_id = %summary.run_id, error = %error, "failed to persist workflow summary");
+        }
+        if let Err(error) = self.events.send(WorkflowRunEvent::from_summary(summary)) {
+            debug!(
+                run_id = %error.0.run_id,
+                "skipped workflow summary broadcast because there are no subscribers",
+            );
+        }
     }
 }
 
@@ -256,6 +301,8 @@ impl RunRegistry {
     fn bind(&self, run_id: &str, workflow_id: String) {
         if let Ok(mut state) = self.state.lock() {
             state.insert(run_id.to_string(), workflow_id);
+        } else {
+            warn!(run_id = %run_id, "failed to acquire run registry lock while binding run");
         }
     }
 
@@ -292,14 +339,16 @@ impl WorkflowCatalog {
         let name = workspace_name.unwrap_or(fallback_name);
 
         let mut state = self.state.lock().expect("workflow catalog lock poisoned");
-        state
+        let workspace = state
             .workspaces
             .entry(id.clone())
             .or_insert_with(|| WorkspaceRecord {
                 id: id.clone(),
                 name,
             })
-            .clone()
+            .clone();
+        debug!(workspace_id = %workspace.id, workspace_name = %workspace.name, "workspace resolved");
+        workspace
     }
 
     fn register_workflow(
@@ -323,6 +372,13 @@ impl WorkflowCatalog {
 
         let mut state = self.state.lock().expect("workflow catalog lock poisoned");
         state.workflows.insert(workflow_id, record);
+        debug!(
+            workflow_id = %workflow.id,
+            workspace_id = %workflow.workspace_id,
+            workflow_key = %workflow.workflow_key,
+            workflow_version = workflow.workflow_version,
+            "workflow stored in catalog",
+        );
         workflow
     }
 
@@ -350,8 +406,15 @@ struct BroadcastRunObserver {
 
 impl WorkflowRunObserver for BroadcastRunObserver {
     fn on_summary(&self, summary: &WorkflowRunSummary) {
-        let _ = self.store.save_summary(summary);
-        let _ = self.events.send(WorkflowRunEvent::from_summary(summary));
+        if let Err(error) = self.store.save_summary(summary) {
+            warn!(run_id = %summary.run_id, error = %error, "failed to persist observed summary");
+        }
+        if let Err(error) = self.events.send(WorkflowRunEvent::from_summary(summary)) {
+            debug!(
+                run_id = %error.0.run_id,
+                "skipped summary broadcast because there are no subscribers",
+            );
+        }
     }
 }
 

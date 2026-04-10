@@ -10,10 +10,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tracing::{debug, info, warn};
 
 use crate::core::definition::WorkflowDefinition;
-use crate::error::RunnerError;
 use crate::core::runtime::{RunEnvironment, WorkflowRunEvent, WorkflowRunSummary};
+use crate::error::RunnerError;
 use crate::server::{ServerError, WorkflowRegistration, WorkflowServer};
 
 #[derive(Clone)]
@@ -79,6 +80,7 @@ struct WorkflowExecutionAccepted {
 }
 
 async fn health() -> Json<HealthResponse> {
+    debug!("health check requested");
     Json(HealthResponse { status: "ok" })
 }
 
@@ -86,11 +88,24 @@ async fn upload_workflow(
     State(state): State<ApiState>,
     Json(request): Json<UploadWorkflowRequest>,
 ) -> Result<Json<WorkflowRegistration>, ApiError> {
+    info!(
+        workspace_id = request.workspace_id.as_deref().unwrap_or("default"),
+        workflow_key = request.workflow.meta.key,
+        workflow_version = request.workflow.meta.version,
+        "registering workflow",
+    );
     let registration = state.server.register_workflow(
         request.workspace_id,
         request.workspace_name,
         request.workflow,
     )?;
+    info!(
+        workflow_id = %registration.workflow_id,
+        workspace_id = %registration.workspace_id,
+        workflow_key = %registration.workflow_key,
+        workflow_version = registration.workflow_version,
+        "workflow registered",
+    );
     Ok(Json(registration))
 }
 
@@ -98,6 +113,7 @@ async fn get_workflow(
     State(state): State<ApiState>,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<crate::server::WorkflowRecord>, ApiError> {
+    debug!(workflow_id = %workflow_id, "fetching workflow");
     Ok(Json(state.server.get_workflow(&workflow_id)?))
 }
 
@@ -106,12 +122,14 @@ async fn execute_workflow(
     Path(workflow_id): Path<String>,
     Json(request): Json<ExecuteWorkflowRequest>,
 ) -> Result<(StatusCode, Json<WorkflowExecutionAccepted>), ApiError> {
+    info!(workflow_id = %workflow_id, "starting workflow run");
     let trigger = request.trigger.unwrap_or_else(default_trigger);
     let env = request.env.unwrap_or_default();
     let summary = state
         .server
         .start_workflow(&workflow_id, trigger, env)
         .await?;
+    info!(workflow_id = %workflow_id, run_id = %summary.run_id, "workflow run accepted");
 
     Ok((
         StatusCode::ACCEPTED,
@@ -130,7 +148,9 @@ async fn resume_workflow(
     Path(run_id): Path<String>,
     Json(request): Json<ResumeWorkflowRequest>,
 ) -> Result<(StatusCode, Json<WorkflowExecutionAccepted>), ApiError> {
+    info!(run_id = %run_id, "resuming workflow run");
     let summary = state.server.resume_workflow(&run_id, request.event).await?;
+    info!(run_id = %summary.run_id, "workflow resume accepted");
     Ok((
         StatusCode::ACCEPTED,
         Json(WorkflowExecutionAccepted {
@@ -147,6 +167,7 @@ async fn get_run_summary(
     State(state): State<ApiState>,
     Path(run_id): Path<String>,
 ) -> Result<Json<WorkflowRunSummary>, ApiError> {
+    debug!(run_id = %run_id, "fetching workflow summary");
     let summary = state
         .server
         .get_summary(&run_id)?
@@ -158,6 +179,7 @@ async fn stream_run_events(
     State(state): State<ApiState>,
     Path(run_id): Path<String>,
 ) -> Result<Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    info!(run_id = %run_id, "subscribing to workflow events");
     let initial_summary = state
         .server
         .get_summary(&run_id)?
@@ -174,6 +196,7 @@ async fn stream_run_events(
                 }
                 Ok(_) => {}
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    warn!(run_id = %run_id, skipped, "event subscriber lagged behind");
                     yield Ok(Event::default()
                         .event("warning")
                         .data(format!("lagged {skipped} run updates")));

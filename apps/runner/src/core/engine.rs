@@ -3,17 +3,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
+use tracing::{debug, error, info, warn};
 
 use super::definition::{NodeType, TransitionDefinition, WorkflowDefinition};
-use crate::error::RunnerError;
 use super::executors::ExecutorRegistry;
 use super::runtime::{
     ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunObserver,
     RunEnvironment, WorkflowRunObserver, WorkflowRunSnapshot, WorkflowRunStatus,
     WorkflowRunSummary,
 };
-use crate::services::WorkflowServices;
 use super::template::{merge_state, nested_state_patch};
+use crate::error::RunnerError;
+use crate::services::WorkflowServices;
 
 pub struct WorkflowEngine {
     registry: ExecutorRegistry,
@@ -61,6 +62,12 @@ impl WorkflowEngine {
         trigger: Value,
         env: RunEnvironment,
     ) -> Result<WorkflowRunSummary, RunnerError> {
+        info!(
+            run_id = %run_id,
+            workflow_key = definition.meta.key,
+            workflow_version = definition.meta.version,
+            "starting workflow execution",
+        );
         definition.validate()?;
         let current_node_id = definition.start_node()?.id.clone();
         let current_input = trigger
@@ -86,6 +93,13 @@ impl WorkflowEngine {
         snapshot: WorkflowRunSnapshot,
         resume_input: Value,
     ) -> Result<WorkflowRunSummary, RunnerError> {
+        info!(
+            run_id = %snapshot.run_id,
+            workflow_key = definition.meta.key,
+            workflow_version = definition.meta.version,
+            current_node_id = %snapshot.current_node_id,
+            "resuming workflow execution",
+        );
         definition.validate()?;
 
         if snapshot.workflow_key != definition.meta.key {
@@ -371,6 +385,14 @@ impl WorkflowEngine {
         let workflow_version = definition.meta.version;
         let max_steps = definition.nodes.len().saturating_mul(8).max(16);
         let mut last_signal = None;
+        info!(
+            run_id = %run_id,
+            workflow_key = %workflow_key,
+            workflow_version,
+            current_node_id = %current_node_id,
+            max_steps,
+            "entering workflow execution loop",
+        );
 
         self.emit_summary(&WorkflowRunSummary {
             run_id: run_id.clone(),
@@ -388,6 +410,13 @@ impl WorkflowEngine {
             let node = definition
                 .node(&current_node_id)
                 .ok_or_else(|| RunnerError::MissingNode(current_node_id.clone()))?;
+            debug!(
+                run_id = %run_id,
+                workflow_key = %workflow_key,
+                node_id = %node.id,
+                node_type = node.node_type.as_str(),
+                "executing workflow node",
+            );
             let executor = self
                 .registry
                 .resolve(node.node_type)
@@ -402,6 +431,17 @@ impl WorkflowEngine {
                 env: &env,
             };
             let result = executor.execute(node, &context)?;
+            info!(
+                run_id = %run_id,
+                workflow_key = %workflow_key,
+                node_id = %node.id,
+                node_type = node.node_type.as_str(),
+                execution_status = ?result.status,
+                branch_key = result.branch_key.as_deref().unwrap_or(""),
+                terminal = result.terminal,
+                log_count = result.logs.len(),
+                "workflow node executed",
+            );
             if let Some(signal) = result.next_signal.clone() {
                 last_signal = Some(signal);
             }
@@ -434,6 +474,12 @@ impl WorkflowEngine {
 
             match result.status {
                 ExecutionStatus::Waiting => {
+                    info!(
+                        run_id = %run_id,
+                        workflow_key = %workflow_key,
+                        node_id = %node.id,
+                        "workflow execution paused and is waiting for resume event",
+                    );
                     let waiting_output = result.output.clone();
                     let next_signal = result.next_signal;
                     let summary = WorkflowRunSummary {
@@ -462,6 +508,12 @@ impl WorkflowEngine {
                     return Ok(summary);
                 }
                 ExecutionStatus::Failed => {
+                    warn!(
+                        run_id = %run_id,
+                        workflow_key = %workflow_key,
+                        node_id = %node.id,
+                        "workflow execution entered failed state",
+                    );
                     let summary = WorkflowRunSummary {
                         run_id,
                         workflow_key,
@@ -480,6 +532,12 @@ impl WorkflowEngine {
             }
 
             if result.terminal || node.node_type == NodeType::End {
+                info!(
+                    run_id = %run_id,
+                    workflow_key = %workflow_key,
+                    node_id = %node.id,
+                    "workflow execution completed",
+                );
                 let summary = WorkflowRunSummary {
                     run_id,
                     workflow_key,
@@ -497,10 +555,24 @@ impl WorkflowEngine {
 
             let outgoing = definition.transitions_from(&node.id);
             let next = self.resolve_transition(&outgoing, result.branch_key.as_deref())?;
+            debug!(
+                run_id = %run_id,
+                workflow_key = %workflow_key,
+                from_node_id = %node.id,
+                to_node_id = %next.to,
+                branch_key = result.branch_key.as_deref().unwrap_or(""),
+                "resolved next workflow transition",
+            );
             current_node_id = next.to.clone();
             current_input = result.output;
         }
 
+        error!(
+            run_id = %run_id,
+            workflow_key = %workflow_key,
+            max_steps,
+            "workflow execution aborted after reaching the max step guard",
+        );
         Err(RunnerError::Transition(
             "execution aborted because the max step guard was reached".to_string(),
         ))
