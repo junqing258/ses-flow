@@ -1,18 +1,19 @@
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Instant;
 
 use async_stream::stream;
-use axum::extract::{Path, State};
-use axum::http::{Request, StatusCode};
+use axum::body::Body;
+use axum::extract::{MatchedPath, Path, State};
+use axum::http::{Method, Request, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tower_http::trace::TraceLayer;
-use tracing::{Level, debug, info, span, warn};
+use tracing::{debug, info, warn};
 
 use crate::core::definition::WorkflowDefinition;
 use crate::core::runtime::{RunEnvironment, WorkflowRunEvent, WorkflowRunSummary};
@@ -33,48 +34,51 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
         .route("/runs/{run_id}/events", get(stream_run_events))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<_>| {
-                    let request_id = request
-                        .headers()
-                        .get("x-request-id")
-                        .and_then(|value| value.to_str().ok())
-                        .unwrap_or("");
-                    let matched_path = request
-                        .extensions()
-                        .get::<axum::extract::MatchedPath>()
-                        .map(axum::extract::MatchedPath::as_str)
-                        .unwrap_or(request.uri().path());
-
-                    span!(
-                        Level::INFO,
-                        "REQ",
-                        method = %request.method(),
-                        matched_path = %matched_path,
-                        uri = %request.uri(),
-                        request_id = %request_id,
-                    )
-                })
-                .on_request(|request: &Request<_>, _span: &tracing::Span| {
-                    debug!(method = %request.method(), uri = %request.uri(), "started request");
-                })
-                .on_response(|response: &Response, latency: Duration, _span: &tracing::Span| {
-                    info!(
-                        status = response.status().as_u16(),
-                        latency_ms = latency.as_millis(),
-                        "finished request",
-                    );
-                })
-                .on_failure(|error, latency: Duration, _span: &tracing::Span| {
-                    warn!(
-                        error = %error,
-                        latency_ms = latency.as_millis(),
-                        "request failed",
-                    );
-                }),
-        )
+        .layer(middleware::from_fn(log_http_requests))
         .with_state(state)
+}
+
+async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let request_id = request
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let matched_path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str)
+        .unwrap_or(uri.path())
+        .to_string();
+    let should_skip_log = should_skip_access_log(&method, &matched_path);
+    let start = Instant::now();
+
+    if !should_skip_log {
+        debug!(method = %method, uri = %uri, "started request");
+    }
+
+    let response = next.run(request).await;
+
+    if !should_skip_log {
+        info!(
+            method = %method,
+            matched_path = %matched_path,
+            uri = %uri,
+            request_id = %request_id,
+            status = response.status().as_u16(),
+            latency_ms = start.elapsed().as_millis(),
+            "finished request",
+        );
+    }
+
+    response
+}
+
+fn should_skip_access_log(method: &Method, matched_path: &str) -> bool {
+    method == Method::GET && matched_path == "/runs/{run_id}"
 }
 
 #[derive(Debug, Deserialize)]
@@ -223,12 +227,31 @@ async fn get_run_summary(
     State(state): State<ApiState>,
     Path(run_id): Path<String>,
 ) -> Result<Json<WorkflowRunSummary>, ApiError> {
-    debug!(run_id = %run_id, "fetching workflow summary");
     let summary = state
         .server
         .get_summary(&run_id)?
         .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))?;
     Ok(Json(summary))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_skip_access_log;
+    use axum::http::Method;
+
+    #[test]
+    fn skips_run_summary_polling_access_logs() {
+        assert!(should_skip_access_log(&Method::GET, "/runs/{run_id}"));
+    }
+
+    #[test]
+    fn keeps_other_access_logs_enabled() {
+        assert!(!should_skip_access_log(&Method::POST, "/runs/{run_id}"));
+        assert!(!should_skip_access_log(
+            &Method::GET,
+            "/runs/{run_id}/events"
+        ));
+    }
 }
 
 async fn stream_run_events(

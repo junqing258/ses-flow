@@ -24,9 +24,6 @@ export default defineConfig(() => {
       tsconfigPaths: true,
     },
     build: {
-      cache: {
-        enabled: true,
-      },
     },
     server: {
       host: "0.0.0.0",

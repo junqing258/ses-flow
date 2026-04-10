@@ -35,7 +35,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let catalog_store = Arc::new(PostgresCatalogStore::new(run_store.get_pool()).await?);
 
     let router = build_router(ApiState {
-        server: Arc::new(WorkflowServer::with_store_and_catalog(run_store, catalog_store)),
+        server: Arc::new(WorkflowServer::with_store_and_catalog(
+            run_store,
+            catalog_store,
+        )),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;
     info!(address = %address, "runner api listening");

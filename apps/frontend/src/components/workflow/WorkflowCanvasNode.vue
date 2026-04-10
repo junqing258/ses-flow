@@ -108,10 +108,10 @@ const containerClass = computed(() =>
             :class="statusClass"
           >
             <span
-              class="h-1.5 w-1.5 rounded-full"
+              class="h-1.5 w-1.5 rounded-full "
               :class="executionStatus === 'running' ? 'animate-pulse bg-cyan-500' : 'bg-current opacity-70'"
             />
-            {{ statusLabel }}
+            <span class="truncate">{{ statusLabel }}</span>
           </span>
         </div>
 
