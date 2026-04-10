@@ -154,7 +154,7 @@ const createExampleWorkflowNodes = (): WorkflowFlowNode[] => [
 ];
 
 describe("buildRunnerWorkflowDefinition", () => {
-  it("maps the editor workflow graph into runner definition payload", () => {
+  it("maps switch fallback branches into runner default transitions", () => {
     const definition = buildRunnerWorkflowDefinition(
       createExampleWorkflowNodes(),
       createWorkflowEdges(),
@@ -199,6 +199,40 @@ describe("buildRunnerWorkflowDefinition", () => {
     expect(switchNode?.config).toEqual({
       expression: "{{input.bizType}}",
     });
+
+    expect(definition.transitions).toEqual([
+      { from: "start", to: "webhook_trigger" },
+      { from: "webhook_trigger", to: "fetch_order" },
+      { from: "fetch_order", to: "switch_biz_type" },
+      { from: "switch_biz_type", to: "assign_task", label: "A", priority: 100 },
+      { from: "switch_biz_type", to: "wait_callback", branchType: "default", priority: 1 },
+      { from: "assign_task", to: "end_left" },
+      { from: "wait_callback", to: "end_right" },
+    ]);
+  });
+
+  it("keeps explicit switch branch labels when no fallback branch is configured", () => {
+    const panels = createWorkflowPanels();
+    const fallbackField = panels.switch_biz_type.fieldsByTab.base.find(
+      (field) => field.key === "fallback",
+    );
+
+    if (!fallbackField) {
+      throw new Error("switch fallback field should exist");
+    }
+
+    fallbackField.value = "";
+
+    const definition = buildRunnerWorkflowDefinition(
+      createExampleWorkflowNodes(),
+      createWorkflowEdges(),
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
 
     expect(definition.transitions).toEqual([
       { from: "start", to: "webhook_trigger" },

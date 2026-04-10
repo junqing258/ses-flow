@@ -296,6 +296,53 @@ const extractSwitchBranchLabel = (panel: WorkflowNodePanel | undefined, sourceHa
   return undefined;
 };
 
+const normalizeSwitchFallbackKey = (rawValue: string) => {
+  const trimmed = rawValue.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const strictMatch = trimmed.match(/===\s*['"](.+?)['"]/);
+
+  if (strictMatch) {
+    return strictMatch[1] ?? "";
+  }
+
+  const looseMatch = trimmed.match(/=\s*['"]?([^'"]+?)['"]?$/);
+
+  if (looseMatch) {
+    return looseMatch[1] ?? "";
+  }
+
+  return trimmed.replace(/^['"]|['"]$/g, "");
+};
+
+const resolveSwitchDefaultHandle = (panel: WorkflowNodePanel | undefined) => {
+  const fallback = normalizeSwitchFallbackKey(getFieldValue(panel, "base", "fallback"));
+
+  if (!fallback) {
+    return undefined;
+  }
+
+  const branchALabel = extractSwitchBranchLabel(panel, "branch-a");
+  const branchBLabel = extractSwitchBranchLabel(panel, "branch-b");
+
+  if (fallback === "default" || fallback === "else") {
+    return "branch-b";
+  }
+
+  if (fallback === branchALabel) {
+    return "branch-a";
+  }
+
+  if (fallback === branchBLabel) {
+    return "branch-b";
+  }
+
+  return undefined;
+};
+
 const extractNodeType = (node: WorkflowFlowNode) => {
   if (node.data.kind === "start") {
     return "start";
@@ -448,7 +495,16 @@ const buildTransitions = (
 
     if (sourceNode?.data.kind === "switch") {
       const label = extractSwitchBranchLabel(sourcePanel, edge.sourceHandle);
-      const fallback = getFieldValue(sourcePanel, "base", "fallback");
+      const defaultHandle = resolveSwitchDefaultHandle(sourcePanel);
+
+      if (edge.sourceHandle && defaultHandle === edge.sourceHandle) {
+        return {
+          from: edge.source,
+          to: edge.target,
+          branchType: "default",
+          priority: 1,
+        };
+      }
 
       if (label) {
         return {
@@ -462,7 +518,6 @@ const buildTransitions = (
       return {
         from: edge.source,
         to: edge.target,
-        branchType: fallback ? "default" : undefined,
         priority: 1,
       };
     }

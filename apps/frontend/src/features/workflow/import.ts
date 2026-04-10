@@ -286,7 +286,7 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
 
       setPanelFieldValue(panel, "caseA", `${expression} === '${firstLabel}'`);
       setPanelFieldValue(panel, "caseB", `${expression} === '${secondLabel}'`);
-      setPanelFieldValue(panel, "fallback", defaultTransition?.label ?? "default");
+      setPanelFieldValue(panel, "fallback", defaultTransition?.label ?? "");
     }
   });
 

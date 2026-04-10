@@ -184,6 +184,23 @@ impl WorkflowEngine {
         )))
     }
 
+    fn describe_transitions(transitions: &[&TransitionDefinition]) -> String {
+        transitions
+            .iter()
+            .map(|transition| {
+                format!(
+                    "{}->{}(label={}, branch_type={}, condition={})",
+                    transition.from,
+                    transition.to,
+                    transition.label.as_deref().unwrap_or(""),
+                    transition.branch_type.as_deref().unwrap_or(""),
+                    transition.condition.as_deref().unwrap_or(""),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     fn validate_resume_input(
         &self,
         waiting_node: &super::definition::NodeDefinition,
@@ -554,7 +571,17 @@ impl WorkflowEngine {
             }
 
             let outgoing = definition.transitions_from(&node.id);
-            let next = self.resolve_transition(&outgoing, result.branch_key.as_deref())?;
+            let next = self
+                .resolve_transition(&outgoing, result.branch_key.as_deref())
+                .map_err(|error| match error {
+                    RunnerError::Transition(message) => RunnerError::Transition(format!(
+                        "{}; node_id={}; outgoing=[{}]",
+                        message,
+                        node.id,
+                        Self::describe_transitions(&outgoing),
+                    )),
+                    other => other,
+                })?;
             debug!(
                 run_id = %run_id,
                 workflow_key = %workflow_key,
