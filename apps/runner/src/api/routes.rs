@@ -1,16 +1,18 @@
 use std::convert::Infallible;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_stream::stream;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{Request, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tracing::{debug, info, warn};
+use tower_http::trace::TraceLayer;
+use tracing::{Level, debug, info, span, warn};
 
 use crate::core::definition::WorkflowDefinition;
 use crate::core::runtime::{RunEnvironment, WorkflowRunEvent, WorkflowRunSummary};
@@ -31,6 +33,47 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
         .route("/runs/{run_id}/events", get(stream_run_events))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<_>| {
+                    let request_id = request
+                        .headers()
+                        .get("x-request-id")
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or("");
+                    let matched_path = request
+                        .extensions()
+                        .get::<axum::extract::MatchedPath>()
+                        .map(axum::extract::MatchedPath::as_str)
+                        .unwrap_or(request.uri().path());
+
+                    span!(
+                        Level::INFO,
+                        "http_request",
+                        method = %request.method(),
+                        matched_path = %matched_path,
+                        uri = %request.uri(),
+                        request_id = %request_id,
+                    )
+                })
+                .on_request(|request: &Request<_>, _span: &tracing::Span| {
+                    debug!(method = %request.method(), uri = %request.uri(), "started request");
+                })
+                .on_response(|response: &Response, latency: Duration, _span: &tracing::Span| {
+                    info!(
+                        status = response.status().as_u16(),
+                        latency_ms = latency.as_millis(),
+                        "finished request",
+                    );
+                })
+                .on_failure(|error, latency: Duration, _span: &tracing::Span| {
+                    warn!(
+                        error = %error,
+                        latency_ms = latency.as_millis(),
+                        "request failed",
+                    );
+                }),
+        )
         .with_state(state)
 }
 

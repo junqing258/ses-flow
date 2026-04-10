@@ -1,6 +1,6 @@
 tasks:
   dev:
-    command: 'cargo run -- --host 127.0.0.1 --port 3002'
+    command: 'cargo watch -x ''run -- --host 127.0.0.1 --port 3002'''
     preset: 'server'
     inputs:
       - 'Cargo.toml'

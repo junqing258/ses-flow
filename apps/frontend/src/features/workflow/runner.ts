@@ -1,0 +1,500 @@
+import type { Edge } from "@vue-flow/core";
+
+import type { WorkflowFlowNode, WorkflowNodePanel, WorkflowTabId } from "./model";
+
+type WorkflowStatus = "draft" | "published";
+
+interface RunnerTriggerDefinition {
+  type: "manual" | "webhook";
+  path?: string;
+  responseMode?: "sync" | "async_ack";
+}
+
+interface RunnerRetryPolicy {
+  max_attempts?: number;
+}
+
+type RunnerMappingValue = Record<string, unknown> | string | null;
+
+interface RunnerNodeDefinition {
+  id: string;
+  type: string;
+  name: string;
+  config?: Record<string, unknown>;
+  inputMapping?: RunnerMappingValue;
+  outputMapping?: RunnerMappingValue;
+  timeoutMs?: number;
+  retryPolicy?: RunnerRetryPolicy;
+  annotations?: Record<string, unknown>;
+}
+
+interface RunnerTransitionDefinition {
+  from: string;
+  to: string;
+  label?: string;
+  branchType?: "default";
+  priority?: number;
+}
+
+export interface RunnerWorkflowDefinition {
+  meta: {
+    key: string;
+    name: string;
+    version: number;
+    status: WorkflowStatus;
+  };
+  trigger: RunnerTriggerDefinition;
+  inputSchema: {
+    type: "object";
+  };
+  nodes: RunnerNodeDefinition[];
+  transitions: RunnerTransitionDefinition[];
+  policies: {
+    allowManualRetry: boolean;
+  };
+}
+
+export interface PublishWorkflowOptions {
+  workflowId: string;
+  workflowName: string;
+  workflowVersion: string;
+  workflowStatus?: WorkflowStatus;
+}
+
+export interface RunnerWorkflowRegistration {
+  workspaceId: string;
+  workflowId: string;
+  workflowKey: string;
+  workflowVersion: number;
+}
+
+class RunnerRequestError extends Error {
+  status: number | null;
+
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.name = "RunnerRequestError";
+    this.status = status;
+  }
+}
+
+const RUNNER_BASE_URL = (import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api").replace(/\/$/, "");
+const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
+const DEFAULT_WORKSPACE_NAME = "SES Workflow Editor";
+
+const getFieldValue = (panel: WorkflowNodePanel | undefined, tab: WorkflowTabId, fieldKey: string) =>
+  panel?.fieldsByTab[tab]?.find((field) => field.key === fieldKey)?.value.trim() ?? "";
+
+const parsePositiveInteger = (value: string) => {
+  const parsed = Number.parseInt(value.replace(/[^\d]/g, ""), 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
+const normalizeReferencePath = (rawValue: string) => {
+  const value = rawValue.trim();
+
+  if (!value) {
+    return value;
+  }
+
+  if (value.startsWith("{{") && value.endsWith("}}")) {
+    return value;
+  }
+
+  if (/^['"].*['"]$/.test(value) || /^(true|false|null|-?\d+(\.\d+)?)$/i.test(value)) {
+    return value;
+  }
+
+  let normalized = value
+    .replace(/^trigger\.payload\./, "trigger.body.")
+    .replace(/^payload\./, "input.")
+    .replace(/^response\.data\./, "input.data.")
+    .replace(/^response\./, "input.");
+
+  if (/^(body|headers)\./.test(normalized)) {
+    normalized = `trigger.${normalized}`;
+  }
+
+  if (/^(trigger|input|state|env)\./.test(normalized)) {
+    return `{{${normalized}}}`;
+  }
+
+  return value;
+};
+
+const parseScalarValue = (rawValue: string): unknown => {
+  const value = rawValue.trim();
+
+  if (!value) {
+    return "";
+  }
+
+  if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith("\"") && value.endsWith("\""))) {
+    return value.slice(1, -1);
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  if (value === "null") {
+    return null;
+  }
+
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return Number(value);
+  }
+
+  return normalizeReferencePath(value);
+};
+
+const parseLooseObjectLiteral = (rawValue: string): Record<string, unknown> | null => {
+  const trimmed = rawValue.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!(trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+    return null;
+  }
+
+  const lines = trimmed
+    .slice(1, -1)
+    .split("\n")
+    .map((line) => line.trim().replace(/,$/, ""))
+    .filter(Boolean);
+
+  const entries = lines
+    .map((line) => {
+      const separatorIndex = line.indexOf(":");
+
+      if (separatorIndex <= 0) {
+        return null;
+      }
+
+      const key = line.slice(0, separatorIndex).trim().replace(/^['"]|['"]$/g, "");
+      const value = line.slice(separatorIndex + 1).trim();
+
+      if (!key) {
+        return null;
+      }
+
+      return [key, parseScalarValue(value)] as const;
+    })
+    .filter((entry): entry is readonly [string, unknown] => entry !== null);
+
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+};
+
+const parseMappingValue = (rawValue: string): RunnerMappingValue => {
+  const objectValue = parseLooseObjectLiteral(rawValue);
+
+  if (objectValue) {
+    return objectValue;
+  }
+
+  const scalarValue = parseScalarValue(rawValue);
+
+  if (typeof scalarValue === "string" || scalarValue === null) {
+    return scalarValue;
+  }
+
+  return JSON.stringify(scalarValue);
+};
+
+const normalizeExpression = (rawValue: string, fallback = "default") => {
+  const value = rawValue.trim();
+
+  if (!value) {
+    return fallback;
+  }
+
+  return normalizeReferencePath(value);
+};
+
+const extractSwitchBranchLabel = (panel: WorkflowNodePanel | undefined, sourceHandle?: string | null) => {
+  if (sourceHandle === "branch-a") {
+    const caseA = getFieldValue(panel, "mapping", "caseA");
+    const match = caseA.match(/===\s*['"](.+?)['"]/);
+    return match?.[1] ?? "branch-a";
+  }
+
+  if (sourceHandle === "branch-b") {
+    const caseB = getFieldValue(panel, "mapping", "caseB");
+    const match = caseB.match(/===\s*['"](.+?)['"]/);
+    return match?.[1] ?? "branch-b";
+  }
+
+  return undefined;
+};
+
+const extractNodeType = (node: WorkflowFlowNode) => {
+  if (node.data.kind === "start") {
+    return "start";
+  }
+
+  if (node.data.kind === "end") {
+    return "end";
+  }
+
+  if (node.data.kind === "fetch") {
+    return "fetch";
+  }
+
+  if (node.data.kind === "wait") {
+    return "wait";
+  }
+
+  if (node.data.kind === "switch") {
+    return "switch";
+  }
+
+  if (node.data.kind === "if-else") {
+    return "if_else";
+  }
+
+  if (node.data.title === "Webhook Trigger") {
+    return "webhook_trigger";
+  }
+
+  if (node.data.title === "Respond") {
+    return "respond";
+  }
+
+  if (node.data.title === "Task") {
+    return "task";
+  }
+
+  if (node.data.title === "Sub-Workflow") {
+    return "sub_workflow";
+  }
+
+  return "action";
+};
+
+const buildNodeDefinition = (
+  node: WorkflowFlowNode,
+  panel: WorkflowNodePanel | undefined,
+): RunnerNodeDefinition => {
+  const type = extractNodeType(node);
+  const timeoutMs = parsePositiveInteger(getFieldValue(panel, "base", "timeout"));
+  const maxAttempts =
+    parsePositiveInteger(getFieldValue(panel, "retry", "maxAttempts")) ??
+    parsePositiveInteger(getFieldValue(panel, "retry", "retryCount"));
+
+  const definition: RunnerNodeDefinition = {
+    id: node.id,
+    name: getFieldValue(panel, "base", "nodeName") || node.data.subtitle || node.data.title,
+    type,
+    annotations: {
+      editorPosition: node.position,
+      note: getFieldValue(panel, "base", "note") || undefined,
+    },
+  };
+
+  if (timeoutMs !== undefined) {
+    definition.timeoutMs = timeoutMs;
+  }
+
+  if (maxAttempts !== undefined) {
+    definition.retryPolicy = {
+      max_attempts: maxAttempts,
+    };
+  }
+
+  if (type === "fetch") {
+    definition.config = {
+      connector: getFieldValue(panel, "base", "connector") || "connector.unknown",
+    };
+    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "inputFrom"));
+  }
+
+  if (type === "switch" || type === "if_else") {
+    definition.config = {
+      expression: normalizeExpression(getFieldValue(panel, "base", "expression")),
+    };
+  }
+
+  if (type === "action") {
+    definition.config = {
+      action: getFieldValue(panel, "base", "command") || "action.unknown",
+    };
+    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+  }
+
+  if (type === "task") {
+    definition.config = {
+      taskType: getFieldValue(panel, "base", "command") || "task.unknown",
+      completeEvent: "task.completed",
+    };
+    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+  }
+
+  if (type === "respond") {
+    definition.config = {
+      statusCode: 200,
+    };
+    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+  }
+
+  if (type === "sub_workflow") {
+    definition.config = {
+      workflowKey: getFieldValue(panel, "base", "command") || undefined,
+    };
+    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+  }
+
+  if (type === "wait") {
+    definition.config = {
+      event: getFieldValue(panel, "base", "waitEvent") || "event.unknown",
+    };
+  }
+
+  if (type === "webhook_trigger") {
+    definition.config = {
+      mode: "body",
+    };
+  }
+
+  return definition;
+};
+
+const buildTransitions = (
+  nodes: WorkflowFlowNode[],
+  edges: Edge[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+): RunnerTransitionDefinition[] =>
+  edges.map((edge, index) => {
+    const sourceNode = nodes.find((node) => node.id === edge.source);
+    const sourcePanel = panelByNodeId[edge.source];
+
+    if (sourceNode?.data.kind === "if-else") {
+      const label = edge.sourceHandle === "branch-a" ? "then" : edge.sourceHandle === "branch-b" ? "else" : undefined;
+      return {
+        from: edge.source,
+        to: edge.target,
+        label,
+        priority: label === "then" ? 100 : label === "else" ? 90 : 50 - index,
+      };
+    }
+
+    if (sourceNode?.data.kind === "switch") {
+      const label = extractSwitchBranchLabel(sourcePanel, edge.sourceHandle);
+      const fallback = getFieldValue(sourcePanel, "base", "fallback");
+
+      if (label) {
+        return {
+          from: edge.source,
+          to: edge.target,
+          label,
+          priority: label === "A" ? 100 : label === "B" ? 90 : 80 - index,
+        };
+      }
+
+      return {
+        from: edge.source,
+        to: edge.target,
+        branchType: fallback ? "default" : undefined,
+        priority: 1,
+      };
+    }
+
+    return {
+      from: edge.source,
+      to: edge.target,
+    };
+  });
+
+const buildWorkflowTrigger = (nodes: WorkflowFlowNode[], panelByNodeId: Record<string, WorkflowNodePanel>): RunnerTriggerDefinition => {
+  const webhookNode = nodes.find((node) => extractNodeType(node) === "webhook_trigger");
+
+  if (!webhookNode) {
+    return {
+      type: "manual",
+    };
+  }
+
+  const panel = panelByNodeId[webhookNode.id];
+  const path = getFieldValue(panel, "base", "path") || `/workflows/${webhookNode.id}`;
+
+  return {
+    type: "webhook",
+    path,
+    responseMode: "async_ack",
+  };
+};
+
+export const buildRunnerWorkflowDefinition = (
+  nodes: WorkflowFlowNode[],
+  edges: Edge[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+  options: PublishWorkflowOptions,
+): RunnerWorkflowDefinition => ({
+  meta: {
+    key: options.workflowId,
+    name: options.workflowName,
+    version: parsePositiveInteger(options.workflowVersion) ?? 1,
+    status: options.workflowStatus ?? "published",
+  },
+  trigger: buildWorkflowTrigger(nodes, panelByNodeId),
+  inputSchema: {
+    type: "object",
+  },
+  nodes: nodes
+    .filter((node) => node.data.kind !== "branch-label")
+    .map((node) => buildNodeDefinition(node, panelByNodeId[node.id])),
+  transitions: buildTransitions(nodes, edges, panelByNodeId),
+  policies: {
+    allowManualRetry: true,
+  },
+});
+
+export const publishWorkflowToRunner = async (
+  nodes: WorkflowFlowNode[],
+  edges: Edge[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+  options: PublishWorkflowOptions,
+): Promise<RunnerWorkflowRegistration> => {
+  const workflow = buildRunnerWorkflowDefinition(nodes, edges, panelByNodeId, {
+    ...options,
+    workflowStatus: "published",
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(`${RUNNER_BASE_URL}/workflows`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        workspaceName: DEFAULT_WORKSPACE_NAME,
+        workflow,
+      }),
+    });
+  } catch {
+    throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const hasJsonBody = contentType.includes("application/json");
+  const payload = hasJsonBody ? ((await response.json()) as Record<string, unknown>) : null;
+
+  if (!response.ok) {
+    const errorMessage =
+      (typeof payload?.error === "string" && payload.error) ||
+      (typeof payload?.message === "string" && payload.message) ||
+      "发布到 Runner 失败";
+
+    throw new RunnerRequestError(errorMessage, response.status);
+  }
+
+  return payload as unknown as RunnerWorkflowRegistration;
+};

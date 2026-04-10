@@ -28,11 +28,12 @@ pnpm exec moon run runner:build
 pnpm exec moon run runner:test
 
 # direct cargo commands still work
+cargo watch -x 'run -- --host 127.0.0.1 --port 3002'
 cargo run -- --host 127.0.0.1 --port 3002
 cargo test
 ```
 
-`apps/runner` 现在默认以服务器模式启动。
+`apps/runner` 现在默认以服务器模式启动，开发模式会通过 `cargo watch` 在源码变化后自动重启。
 
 ## API
 

@@ -48,7 +48,7 @@
           <ChevronLeft class="h-5 w-5" />
         </Button>
         <span class="text-[16px] font-semibold tracking-tight text-slate-900">New workflow</span>
-        <span class="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Draft</span>
+        <span class="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{{ workflowStatusLabel }}</span>
       </div>
 
       <div class="absolute left-1/2 -translate-x-1/2 flex h-9 items-center rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 pointer-events-auto">
@@ -75,8 +75,12 @@
           <Code class="h-4 w-4" />
           JSON
         </Button>
-        <Button class="ml-1 h-8 rounded-full bg-slate-900 px-4 text-[13px] font-medium text-white hover:bg-slate-800 shadow-sm">
-          Publish
+        <Button
+          class="ml-1 h-8 rounded-full bg-slate-900 px-4 text-[13px] font-medium text-white hover:bg-slate-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="isPublishing"
+          @click="handlePublish"
+        >
+          {{ publishButtonLabel }}
         </Button>
       </div>
     </header>
@@ -242,6 +246,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createWorkflowExportDocument } from "@/features/workflow/export";
+import { publishWorkflowToRunner } from "@/features/workflow/runner";
 import {
   WORKFLOW_EMPTY_TAB_TEXT,
   WORKFLOW_ICON_MAP,
@@ -275,13 +280,14 @@ const selectedNodeId = ref("fetch_order");
 const activeTab = ref<WorkflowTabId>("base");
 const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
+const isPublishing = ref(false);
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
-const workflowMeta = {
+const workflowMeta = reactive({
   id: "sorting-main-flow",
   name: "sorting-main-flow",
-  status: "draft" as const,
+  status: "draft" as "draft" | "published",
   version: "v3",
-};
+});
 const expandedCategories = reactive<Record<string, boolean>>(
   Object.fromEntries(WORKFLOW_PALETTE_CATEGORIES.map((category) => [category.id, category.defaultOpen])),
 );
@@ -315,6 +321,8 @@ const selectedNodeData = ref<WorkflowNodeData>(EMPTY_NODE_DATA);
 const selectedPanel = computed(() => panelByNodeId.value[selectedNodeId.value]);
 const visibleTabs = computed(() => selectedPanel.value?.tabs ?? ["base"]);
 const selectedNodeIcon = computed(() => WORKFLOW_ICON_MAP[selectedNodeData.value.icon]);
+const workflowStatusLabel = computed(() => (workflowMeta.status === "published" ? "Published" : "Draft"));
+const publishButtonLabel = computed(() => (isPublishing.value ? "Publishing..." : "Publish"));
 
 const filteredCategories = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
@@ -705,6 +713,30 @@ const handleExportJson = () => {
     toast.success("工作流 JSON 已导出");
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "导出工作流 JSON 失败");
+  }
+};
+
+const handlePublish = async () => {
+  if (isPublishing.value) {
+    return;
+  }
+
+  isPublishing.value = true;
+
+  try {
+    const registration = await publishWorkflowToRunner(nodes.value, edges.value, panelByNodeId.value, {
+      workflowId: workflowMeta.id,
+      workflowName: workflowMeta.name,
+      workflowVersion: workflowMeta.version,
+      workflowStatus: workflowMeta.status,
+    });
+
+    workflowMeta.status = "published";
+    toast.success(`已发布到 Runner：${registration.workflowId}`);
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "发布到 Runner 失败");
+  } finally {
+    isPublishing.value = false;
   }
 };
 
