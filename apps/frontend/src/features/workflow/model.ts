@@ -1,0 +1,463 @@
+import type { Edge, Node } from "@vue-flow/core";
+import {
+  Activity,
+  Clock3,
+  Database,
+  GitBranch,
+  Hand,
+  Info,
+  ListTodo,
+  Lock,
+  Maximize2,
+  MoreHorizontal,
+  MousePointer2,
+  Play,
+  SendHorizontal,
+  ShieldCheck,
+  Webhook,
+  Zap,
+} from "lucide-vue-next";
+
+export const WORKFLOW_ICON_MAP = {
+  activity: Activity,
+  clock: Clock3,
+  database: Database,
+  gitBranch: GitBranch,
+  hand: Hand,
+  info: Info,
+  listTodo: ListTodo,
+  lock: Lock,
+  maximize: Maximize2,
+  more: MoreHorizontal,
+  mousePointer: MousePointer2,
+  play: Play,
+  send: SendHorizontal,
+  shield: ShieldCheck,
+  webhook: Webhook,
+  zap: Zap,
+} as const;
+
+export type WorkflowIconKey = keyof typeof WORKFLOW_ICON_MAP;
+export type WorkflowNodeKind =
+  | "start"
+  | "trigger"
+  | "fetch"
+  | "switch"
+  | "action"
+  | "wait"
+  | "end"
+  | "branch-label";
+export type WorkflowNodeType = "terminal" | "workflow-card" | "branch-chip";
+export type WorkflowTabId = "base" | "mapping" | "retry" | "error";
+export type WorkflowFieldType = "input" | "readonly" | "select" | "textarea";
+
+export interface WorkflowNodeData {
+  active?: boolean;
+  accent: string;
+  icon: WorkflowIconKey;
+  kind: WorkflowNodeKind;
+  nodeKey: string;
+  status?: "draft" | "published";
+  subtitle?: string;
+  title: string;
+}
+
+export interface WorkflowField {
+  key: string;
+  label: string;
+  type: WorkflowFieldType;
+  value: string;
+}
+
+export interface WorkflowNodePanel {
+  fieldsByTab: Partial<Record<WorkflowTabId, WorkflowField[]>>;
+  tabs: WorkflowTabId[];
+}
+
+export interface WorkflowPaletteItem {
+  accent: string;
+  icon: WorkflowIconKey;
+  id: string;
+  kind: WorkflowNodeKind;
+  label: string;
+}
+
+export interface WorkflowPaletteCategory {
+  defaultOpen: boolean;
+  icon: WorkflowIconKey;
+  id: string;
+  items: WorkflowPaletteItem[];
+  label: string;
+}
+
+export type WorkflowFlowNode = Node<WorkflowNodeData, Record<string, never>, WorkflowNodeType> & {
+  data: WorkflowNodeData;
+  type: WorkflowNodeType;
+};
+
+export const WORKFLOW_TAB_LABELS: Record<WorkflowTabId, string> = {
+  base: "基础配置",
+  mapping: "输入映射",
+  retry: "重试策略",
+  error: "错误处理",
+};
+
+export const WORKFLOW_EMPTY_TAB_TEXT: Record<WorkflowTabId, string> = {
+  base: "当前节点暂时没有更多基础配置项。",
+  error: "错误处理策略会在接入运行时后继续补充。",
+  mapping: "输入映射区域预留给变量绑定和表达式配置。",
+  retry: "重试策略会在接入执行引擎后和运行时规则联动。",
+};
+
+export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
+  {
+    id: "trigger",
+    label: "触发器",
+    icon: "zap",
+    defaultOpen: true,
+    items: [
+      { id: "palette-webhook", kind: "trigger", label: "Webhook Trigger", icon: "webhook", accent: "#6366F1" },
+      { id: "palette-respond", kind: "action", label: "Respond", icon: "send", accent: "#8B5CF6" },
+    ],
+  },
+  {
+    id: "control",
+    label: "流程控制",
+    icon: "gitBranch",
+    defaultOpen: true,
+    items: [
+      { id: "palette-start", kind: "start", label: "Start", icon: "play", accent: "#10B981" },
+      { id: "palette-end", kind: "end", label: "End", icon: "shield", accent: "#EF4444" },
+      { id: "palette-if-else", kind: "action", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
+      { id: "palette-switch", kind: "switch", label: "Switch", icon: "gitBranch", accent: "#EC4899" },
+      { id: "palette-subflow", kind: "trigger", label: "Sub-Workflow", icon: "webhook", accent: "#6366F1" },
+    ],
+  },
+  {
+    id: "data",
+    label: "数据处理",
+    icon: "database",
+    defaultOpen: false,
+    items: [{ id: "palette-fetch", kind: "fetch", label: "Fetch", icon: "database", accent: "#3B82F6" }],
+  },
+  {
+    id: "effect",
+    label: "副作用",
+    icon: "activity",
+    defaultOpen: false,
+    items: [{ id: "palette-action", kind: "action", label: "Action / Command", icon: "zap", accent: "#F97316" }],
+  },
+  {
+    id: "wait",
+    label: "等待 / 异步",
+    icon: "clock",
+    defaultOpen: false,
+    items: [{ id: "palette-wait", kind: "wait", label: "Wait", icon: "clock", accent: "#F59E0B" }],
+  },
+  {
+    id: "task",
+    label: "任务",
+    icon: "listTodo",
+    defaultOpen: false,
+    items: [{ id: "palette-task", kind: "action", label: "任务编排", icon: "listTodo", accent: "#8B5CF6" }],
+  },
+];
+
+const INITIAL_WORKFLOW_NODES: WorkflowFlowNode[] = [
+  {
+    id: "start",
+    type: "terminal",
+    position: { x: 372, y: 24 },
+    data: {
+      accent: "#10B981",
+      icon: "play",
+      kind: "start",
+      nodeKey: "start",
+      title: "Start",
+    },
+  },
+  {
+    id: "webhook_trigger",
+    type: "workflow-card",
+    position: { x: 262, y: 126 },
+    data: {
+      accent: "#6366F1",
+      icon: "webhook",
+      kind: "trigger",
+      nodeKey: "webhook_trigger",
+      status: "published",
+      subtitle: "接收入库订单",
+      title: "Webhook Trigger",
+    },
+  },
+  {
+    id: "fetch_order",
+    type: "workflow-card",
+    position: { x: 262, y: 286 },
+    data: {
+      active: true,
+      accent: "#3B82F6",
+      icon: "database",
+      kind: "fetch",
+      nodeKey: "fetch_order",
+      subtitle: "查询订单",
+      title: "Fetch",
+    },
+  },
+  {
+    id: "switch_biz_type",
+    type: "workflow-card",
+    position: { x: 262, y: 446 },
+    data: {
+      accent: "#EC4899",
+      icon: "gitBranch",
+      kind: "switch",
+      nodeKey: "switch_biz_type",
+      subtitle: "业务分流",
+      title: "Switch",
+    },
+  },
+  {
+    id: "branch_label_a",
+    type: "branch-chip",
+    position: { x: 185, y: 562 },
+    draggable: false,
+    selectable: false,
+    data: {
+      accent: "#E5E7EB",
+      icon: "gitBranch",
+      kind: "branch-label",
+      nodeKey: "branch_label_a",
+      title: "bizType=A",
+    },
+  },
+  {
+    id: "branch_label_b",
+    type: "branch-chip",
+    position: { x: 486, y: 562 },
+    draggable: false,
+    selectable: false,
+    data: {
+      accent: "#E5E7EB",
+      icon: "gitBranch",
+      kind: "branch-label",
+      nodeKey: "branch_label_b",
+      title: "bizType=B",
+    },
+  },
+  {
+    id: "assign_task",
+    type: "workflow-card",
+    position: { x: 58, y: 632 },
+    data: {
+      accent: "#F97316",
+      icon: "zap",
+      kind: "action",
+      nodeKey: "assign_task",
+      subtitle: "分配分拣任务",
+      title: "Action / Command",
+    },
+  },
+  {
+    id: "wait_callback",
+    type: "workflow-card",
+    position: { x: 520, y: 632 },
+    data: {
+      accent: "#F59E0B",
+      icon: "clock",
+      kind: "wait",
+      nodeKey: "wait_callback",
+      subtitle: "等待设备回调",
+      title: "Wait",
+    },
+  },
+  {
+    id: "end_left",
+    type: "terminal",
+    position: { x: 146, y: 792 },
+    data: {
+      accent: "#EF4444",
+      icon: "shield",
+      kind: "end",
+      nodeKey: "end_left",
+      title: "End",
+    },
+  },
+  {
+    id: "end_right",
+    type: "terminal",
+    position: { x: 608, y: 792 },
+    data: {
+      accent: "#EF4444",
+      icon: "shield",
+      kind: "end",
+      nodeKey: "end_right",
+      title: "End",
+    },
+  },
+];
+
+const EDGE_STYLE = {
+  stroke: "#CBD5E1",
+  strokeWidth: 2,
+};
+
+const INITIAL_WORKFLOW_EDGES: Edge[] = [
+  { id: "start->webhook", source: "start", target: "webhook_trigger", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+  { id: "webhook->fetch", source: "webhook_trigger", target: "fetch_order", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+  { id: "fetch->switch", source: "fetch_order", target: "switch_biz_type", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+  {
+    id: "switch->assign",
+    source: "switch_biz_type",
+    target: "assign_task",
+    sourceHandle: "branch-a",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
+  {
+    id: "switch->wait",
+    source: "switch_biz_type",
+    target: "wait_callback",
+    sourceHandle: "branch-b",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
+  { id: "assign->end-left", source: "assign_task", target: "end_left", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+  { id: "wait->end-right", source: "wait_callback", target: "end_right", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+];
+
+const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
+  assign_task: {
+    tabs: ["base", "mapping", "retry"],
+    fieldsByTab: {
+      base: [
+        { key: "command", label: "命令名称", type: "input", value: "sorting.assignTask" },
+        { key: "nodeName", label: "节点名称", type: "input", value: "分配分拣任务" },
+        { key: "timeout", label: "超时时间 (ms)", type: "input", value: "5000" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "assign_task" },
+        { key: "note", label: "备注", type: "textarea", value: "下发分拣任务到设备控制系统，并记录指令回执。" },
+      ],
+      mapping: [
+        { key: "payload", label: "指令载荷", type: "textarea", value: "{\n  orderId: payload.orderId,\n  lane: payload.laneCode\n}" },
+      ],
+      retry: [
+        { key: "retryPolicy", label: "失败重试", type: "select", value: "exponential_backoff" },
+        { key: "maxAttempts", label: "最大重试次数", type: "input", value: "3" },
+      ],
+    },
+  },
+  end_left: {
+    tabs: ["base"],
+    fieldsByTab: {
+      base: [
+        { key: "result", label: "结束状态", type: "readonly", value: "success" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "end_left" },
+      ],
+    },
+  },
+  end_right: {
+    tabs: ["base"],
+    fieldsByTab: {
+      base: [
+        { key: "result", label: "结束状态", type: "readonly", value: "waiting_callback" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "end_right" },
+      ],
+    },
+  },
+  fetch_order: {
+    tabs: ["base", "mapping", "retry", "error"],
+    fieldsByTab: {
+      base: [
+        { key: "connector", label: "连接器 (Connector)", type: "input", value: "oms.getOrder" },
+        { key: "nodeName", label: "节点名称", type: "input", value: "查询订单" },
+        { key: "timeout", label: "超时时间 (ms)", type: "input", value: "3000" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "fetch_order" },
+        { key: "onError", label: "错误处理策略", type: "select", value: "retry" },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value: "从 OMS 查询订单详情，获取 bizType 用于后续业务分流。",
+        },
+      ],
+      mapping: [
+        { key: "inputFrom", label: "入参映射", type: "textarea", value: "{\n  orderId: trigger.payload.orderId\n}" },
+        { key: "outputTo", label: "出参保存", type: "textarea", value: "{\n  order: response.data,\n  bizType: response.data.bizType\n}" },
+      ],
+      retry: [
+        { key: "retryPolicy", label: "重试策略", type: "select", value: "linear" },
+        { key: "retryCount", label: "重试次数", type: "input", value: "2" },
+      ],
+      error: [
+        { key: "fallback", label: "失败转向", type: "readonly", value: "notify_failure" },
+        { key: "alarm", label: "告警级别", type: "select", value: "warning" },
+      ],
+    },
+  },
+  start: {
+    tabs: ["base"],
+    fieldsByTab: {
+      base: [
+        { key: "nodeName", label: "节点名称", type: "readonly", value: "Start" },
+        { key: "entry", label: "入口模式", type: "readonly", value: "单入口" },
+      ],
+    },
+  },
+  switch_biz_type: {
+    tabs: ["base", "mapping", "error"],
+    fieldsByTab: {
+      base: [
+        { key: "expression", label: "分流表达式", type: "input", value: "payload.bizType" },
+        { key: "nodeName", label: "节点名称", type: "input", value: "业务分流" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "switch_biz_type" },
+        { key: "fallback", label: "默认分支", type: "select", value: "bizType=B" },
+      ],
+      mapping: [
+        { key: "caseA", label: "分支 A 条件", type: "readonly", value: "bizType === 'A'" },
+        { key: "caseB", label: "分支 B 条件", type: "readonly", value: "bizType === 'B'" },
+      ],
+      error: [
+        { key: "unknown", label: "未知分支策略", type: "select", value: "route_to_manual_review" },
+      ],
+    },
+  },
+  wait_callback: {
+    tabs: ["base", "retry", "error"],
+    fieldsByTab: {
+      base: [
+        { key: "waitEvent", label: "等待事件", type: "input", value: "device.sorting.callback" },
+        { key: "nodeName", label: "节点名称", type: "input", value: "等待设备回调" },
+        { key: "timeout", label: "最长等待 (ms)", type: "input", value: "15000" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "wait_callback" },
+      ],
+      retry: [
+        { key: "polling", label: "轮询补偿", type: "select", value: "enabled" },
+        { key: "interval", label: "补偿间隔 (ms)", type: "input", value: "2000" },
+      ],
+      error: [
+        { key: "timeoutAction", label: "超时处理", type: "select", value: "mark_pending" },
+      ],
+    },
+  },
+  webhook_trigger: {
+    tabs: ["base", "mapping", "error"],
+    fieldsByTab: {
+      base: [
+        { key: "path", label: "Webhook Path", type: "input", value: "/api/workflow/inbound-order" },
+        { key: "nodeName", label: "节点名称", type: "input", value: "接收入库订单" },
+        { key: "method", label: "请求方式", type: "select", value: "POST" },
+        { key: "nodeId", label: "节点 ID", type: "readonly", value: "webhook_trigger" },
+      ],
+      mapping: [
+        { key: "payload", label: "原始载荷", type: "textarea", value: "{\n  orderId: body.orderId,\n  laneCode: body.laneCode\n}" },
+      ],
+      error: [
+        { key: "onInvalid", label: "签名失败处理", type: "select", value: "reject_401" },
+      ],
+    },
+  },
+};
+
+export const createWorkflowNodes = () => structuredClone(INITIAL_WORKFLOW_NODES) as WorkflowFlowNode[];
+export const createWorkflowEdges = () => structuredClone(INITIAL_WORKFLOW_EDGES) as Edge[];
+export const createWorkflowPanels = () => structuredClone(INITIAL_WORKFLOW_PANELS) as Record<string, WorkflowNodePanel>;
