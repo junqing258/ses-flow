@@ -222,6 +222,123 @@ async fn streams_waiting_run_summary_over_sse() {
     assert!(text.contains("\"status\":\"waiting\""));
 }
 
+#[tokio::test]
+async fn lists_workflows_and_returns_editor_document_for_detail() {
+    let app = build_app();
+    let workflow = json!({
+        "meta": {
+            "key": "editor-backed-flow",
+            "name": "Editor Backed Flow",
+            "version": 3,
+            "status": "published"
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+    let editor_document = json!({
+        "schemaVersion": "1.0",
+        "workflow": {
+            "id": "editor-backed-flow",
+            "name": "Editor Backed Flow",
+            "status": "published",
+            "version": "v3"
+        },
+        "editor": {
+            "activeTab": "base",
+            "selectedNodeId": "start_1"
+        },
+        "graph": {
+            "nodes": [],
+            "edges": [],
+            "panels": {}
+        }
+    });
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/workflows")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "workspaceId": "ws-editor",
+                        "workspaceName": "Editor Workspace",
+                        "workflowId": "wf-editor",
+                        "editorDocument": editor_document,
+                        "workflow": workflow
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/workflows")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_body = list_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let list_payload: Value =
+        serde_json::from_slice(&list_body).expect("response body should be valid json");
+    assert_eq!(list_payload[0]["workflowId"], json!("wf-editor"));
+    assert_eq!(list_payload[0]["name"], json!("Editor Backed Flow"));
+    assert_eq!(list_payload[0]["status"], json!("published"));
+
+    let detail_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/workflows/wf-editor")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_body = detail_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let detail_payload: Value =
+        serde_json::from_slice(&detail_body).expect("response body should be valid json");
+    assert_eq!(detail_payload["workflowId"], json!("wf-editor"));
+    assert_eq!(detail_payload["document"]["workflow"]["version"], json!("v3"));
+}
+
 async fn wait_for_terminal_status(app: axum::Router, run_id: &str) -> Value {
     for _ in 0..40 {
         let summary = get_summary(app.clone(), run_id).await;

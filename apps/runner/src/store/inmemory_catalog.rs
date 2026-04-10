@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use chrono::Utc;
+
 use crate::error::RunnerError;
 
 use super::catalog::{StoredWorkflowDefinition, WorkflowCatalogStore, WorkspaceRecord};
@@ -62,7 +64,14 @@ impl WorkflowCatalogStore for InMemoryCatalogStore {
         let mut state = self.state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
-        state.workflows.insert(workflow.id.clone(), workflow.clone());
+        let mut workflow_record = workflow.clone();
+
+        if let Some(existing) = state.workflows.get(&workflow.id) {
+            workflow_record.created_at = existing.created_at;
+        }
+
+        workflow_record.updated_at = Utc::now();
+        state.workflows.insert(workflow.id.clone(), workflow_record);
         Ok(())
     }
 

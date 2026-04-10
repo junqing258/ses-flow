@@ -4,7 +4,7 @@ pub mod memory;
 pub mod postgres;
 pub mod runner;
 
-pub use catalog::{PostgresCatalogStore, WorkflowCatalogStore, StoredWorkflowDefinition, WorkspaceRecord, WorkflowRecord};
+pub use catalog::{PostgresCatalogStore, StoredWorkflowDefinition, WorkflowCatalogStore, WorkflowDetailRecord, WorkflowSummaryRecord, WorkspaceRecord};
 pub use inmemory_catalog::InMemoryCatalogStore;
 pub use memory::{InMemoryRunStore, WorkflowRunStore};
 pub use postgres::PostgresRunStore;

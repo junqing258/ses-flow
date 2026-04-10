@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
@@ -15,7 +16,10 @@ use crate::core::runtime::{
     RunEnvironment, WorkflowRunEvent, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
-use crate::store::{InMemoryCatalogStore, InMemoryRunStore, WorkflowCatalogStore, WorkspaceRecord, WorkflowRunner, WorkflowRunStore};
+use crate::store::{
+    InMemoryCatalogStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
+    WorkflowDetailRecord, WorkflowRunner, WorkflowRunStore, WorkflowSummaryRecord, WorkspaceRecord,
+};
 
 #[derive(Debug, Error)]
 pub enum ServerError {
@@ -95,7 +99,9 @@ impl WorkflowServer {
         &self,
         workspace_id: Option<String>,
         workspace_name: Option<String>,
+        workflow_id: Option<String>,
         definition: WorkflowDefinition,
+        editor_document: Option<serde_json::Value>,
     ) -> Result<WorkflowRegistration, ServerError> {
         let requested_workspace_id = workspace_id.as_deref().unwrap_or("default");
         info!(
@@ -113,12 +119,22 @@ impl WorkflowServer {
         };
         self.catalog.save_workspace(&workspace_record)?;
 
-        // Generate workflow ID and save
-        let workflow_id = new_workflow_id();
-        let stored_workflow = crate::store::StoredWorkflowDefinition {
+        let workflow_id = workflow_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(new_workflow_id);
+        let existing_workflow = self.catalog.load_workflow(&workflow_id)?;
+        let now = Utc::now();
+        let stored_workflow = StoredWorkflowDefinition {
             id: workflow_id.clone(),
             workspace_id: workspace_record.id.clone(),
             definition,
+            editor_document,
+            created_at: existing_workflow
+                .as_ref()
+                .map(|workflow| workflow.created_at)
+                .unwrap_or(now),
+            updated_at: now,
         };
         self.catalog.save_workflow(&stored_workflow)?;
 
@@ -138,17 +154,26 @@ impl WorkflowServer {
         })
     }
 
-    pub fn get_workflow(&self, workflow_id: &str) -> Result<crate::store::WorkflowRecord, ServerError> {
+    pub fn list_workflows(&self) -> Result<Vec<WorkflowSummaryRecord>, ServerError> {
+        let mut workflows = self
+            .catalog
+            .load_all_workflows()?
+            .into_iter()
+            .map(|workflow| self.to_workflow_summary(workflow))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        workflows.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+        Ok(workflows)
+    }
+
+    pub fn get_workflow(&self, workflow_id: &str) -> Result<WorkflowDetailRecord, ServerError> {
         let stored_workflow = self.catalog
             .load_workflow(workflow_id)?
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
 
-        Ok(crate::store::WorkflowRecord {
-            id: stored_workflow.id,
-            workspace_id: stored_workflow.workspace_id,
-            workflow_key: stored_workflow.definition.meta.key,
-            workflow_version: stored_workflow.definition.meta.version,
-            name: stored_workflow.definition.meta.name,
+        Ok(WorkflowDetailRecord {
+            summary: self.to_workflow_summary(stored_workflow.clone())?,
+            document: stored_workflow.editor_document,
         })
     }
 
@@ -302,6 +327,50 @@ impl WorkflowServer {
                 "skipped workflow summary broadcast because there are no subscribers",
             );
         }
+    }
+
+    fn to_workflow_summary(
+        &self,
+        workflow: StoredWorkflowDefinition,
+    ) -> Result<WorkflowSummaryRecord, ServerError> {
+        let workspace_name = self
+            .catalog
+            .load_workspace(&workflow.workspace_id)?
+            .map(|workspace| workspace.name);
+        let status = workflow
+            .definition
+            .meta
+            .status
+            .clone()
+            .unwrap_or_else(|| "draft".to_string());
+        let normalized_status = if status.eq_ignore_ascii_case("published") {
+            "published".to_string()
+        } else {
+            "draft".to_string()
+        };
+
+        Ok(WorkflowSummaryRecord {
+            workflow_id: workflow.id,
+            workspace_id: workflow.workspace_id,
+            workflow_key: workflow.definition.meta.key.clone(),
+            workflow_version: workflow.definition.meta.version,
+            name: workflow
+                .definition
+                .meta
+                .name
+                .clone()
+                .unwrap_or_else(|| workflow.definition.meta.key.clone()),
+            status: normalized_status.clone(),
+            version: format!("v{}", workflow.definition.meta.version),
+            owner_name: workspace_name,
+            created_at: workflow.created_at,
+            updated_at: workflow.updated_at,
+            published_at: if normalized_status == "published" {
+                Some(workflow.updated_at)
+            } else {
+                None
+            },
+        })
     }
 }
 

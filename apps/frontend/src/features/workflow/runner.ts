@@ -3,6 +3,7 @@ import type { Edge } from "@vue-flow/core";
 import { request as sendRequest } from "@/lib/request";
 
 import type { WorkflowFlowNode, WorkflowNodePanel, WorkflowTabId } from "./model";
+import type { PersistedWorkflowDocument } from "./persistence";
 
 type WorkflowStatus = "draft" | "published";
 
@@ -57,6 +58,8 @@ export interface RunnerWorkflowDefinition {
 }
 
 export interface PublishWorkflowOptions {
+  editorDocument?: PersistedWorkflowDocument;
+  persistedWorkflowId?: string;
   workflowId: string;
   workflowName: string;
   workflowVersion: string;
@@ -478,6 +481,8 @@ export const publishWorkflowToRunner = async (
       body: JSON.stringify({
         workspaceId: DEFAULT_WORKSPACE_ID,
         workspaceName: DEFAULT_WORKSPACE_NAME,
+        workflowId: options.persistedWorkflowId,
+        editorDocument: options.editorDocument,
         workflow,
       }),
     });

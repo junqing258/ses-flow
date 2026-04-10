@@ -27,7 +27,7 @@ pub struct ApiState {
 pub fn build_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/workflows", post(upload_workflow))
+        .route("/workflows", get(list_workflows).post(upload_workflow))
         .route("/workflows/{workflow_id}", get(get_workflow))
         .route("/workflows/{workflow_id}/runs", post(execute_workflow))
         .route("/runs/{run_id}", get(get_run_summary))
@@ -83,6 +83,10 @@ pub struct UploadWorkflowRequest {
     pub workspace_id: Option<String>,
     #[serde(rename = "workspaceName", default)]
     pub workspace_name: Option<String>,
+    #[serde(rename = "workflowId", default)]
+    pub workflow_id: Option<String>,
+    #[serde(rename = "editorDocument", default)]
+    pub editor_document: Option<Value>,
     pub workflow: WorkflowDefinition,
 }
 
@@ -127,6 +131,13 @@ async fn health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
 }
 
+async fn list_workflows(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<crate::store::WorkflowSummaryRecord>>, ApiError> {
+    debug!("listing workflows");
+    Ok(Json(state.server.list_workflows()?))
+}
+
 async fn upload_workflow(
     State(state): State<ApiState>,
     Json(request): Json<UploadWorkflowRequest>,
@@ -140,7 +151,9 @@ async fn upload_workflow(
     let registration = state.server.register_workflow(
         request.workspace_id,
         request.workspace_name,
+        request.workflow_id,
         request.workflow,
+        request.editor_document,
     )?;
     info!(
         workflow_id = %registration.workflow_id,
@@ -155,7 +168,7 @@ async fn upload_workflow(
 async fn get_workflow(
     State(state): State<ApiState>,
     Path(workflow_id): Path<String>,
-) -> Result<Json<crate::store::WorkflowRecord>, ApiError> {
+) -> Result<Json<crate::store::WorkflowDetailRecord>, ApiError> {
     debug!(workflow_id = %workflow_id, "fetching workflow");
     Ok(Json(state.server.get_workflow(&workflow_id)?))
 }

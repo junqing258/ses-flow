@@ -1,4 +1,6 @@
+use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::Value;
 use sqlx::{postgres::PgPool, Row};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -13,15 +15,34 @@ pub struct WorkspaceRecord {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct WorkflowRecord {
-    pub id: String,
+pub struct WorkflowSummaryRecord {
+    #[serde(rename = "workflowId")]
+    pub workflow_id: String,
     #[serde(rename = "workspaceId")]
     pub workspace_id: String,
     #[serde(rename = "workflowKey")]
     pub workflow_key: String,
     #[serde(rename = "workflowVersion")]
     pub workflow_version: u32,
-    pub name: Option<String>,
+    pub name: String,
+    pub status: String,
+    pub version: String,
+    #[serde(rename = "ownerName", skip_serializing_if = "Option::is_none")]
+    pub owner_name: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
+    #[serde(rename = "publishedAt", skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowDetailRecord {
+    #[serde(flatten)]
+    pub summary: WorkflowSummaryRecord,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +50,9 @@ pub struct StoredWorkflowDefinition {
     pub id: String,
     pub workspace_id: String,
     pub definition: WorkflowDefinition,
+    pub editor_document: Option<Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 pub trait WorkflowCatalogStore: Send + Sync {
@@ -101,6 +125,16 @@ impl PostgresCatalogStore {
 
         sqlx::query(
             r#"
+            ALTER TABLE workflow_definitions
+            ADD COLUMN IF NOT EXISTS editor_document JSONB
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to alter workflow_definitions table: {}", e)))?;
+
+        sqlx::query(
+            r#"
             CREATE INDEX IF NOT EXISTS idx_workflow_definitions_workspace_id ON workflow_definitions(workspace_id)
             "#,
         )
@@ -165,9 +199,9 @@ impl PostgresCatalogStore {
     async fn load_all_workflows_from_db(&self) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, workflow_key, workflow_version, name, definition
+            SELECT id, workspace_id, workflow_key, workflow_version, name, definition, editor_document, created_at, updated_at
             FROM workflow_definitions
-            ORDER BY created_at
+            ORDER BY updated_at DESC, created_at DESC
             "#,
         )
         .fetch_all(&self.pool)
@@ -182,6 +216,12 @@ impl PostgresCatalogStore {
                     .map_err(|e| RunnerError::Store(format!("Failed to get workspace_id: {}", e)))?;
                 let definition_json: serde_json::Value = row.try_get("definition")
                     .map_err(|e| RunnerError::Store(format!("Failed to get definition: {}", e)))?;
+                let editor_document: Option<serde_json::Value> = row.try_get("editor_document")
+                    .map_err(|e| RunnerError::Store(format!("Failed to get editor_document: {}", e)))?;
+                let created_at: DateTime<Utc> = row.try_get("created_at")
+                    .map_err(|e| RunnerError::Store(format!("Failed to get created_at: {}", e)))?;
+                let updated_at: DateTime<Utc> = row.try_get("updated_at")
+                    .map_err(|e| RunnerError::Store(format!("Failed to get updated_at: {}", e)))?;
                 let definition: WorkflowDefinition = serde_json::from_value(definition_json)
                     .map_err(|e| RunnerError::Store(format!("Failed to deserialize workflow definition: {}", e)))?;
 
@@ -189,6 +229,9 @@ impl PostgresCatalogStore {
                     id,
                     workspace_id,
                     definition,
+                    editor_document,
+                    created_at,
+                    updated_at,
                 })
             })
             .collect()
@@ -203,7 +246,7 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let result = sqlx::query(
+                let _result = sqlx::query(
                     r#"
                     INSERT INTO workspaces (id, name)
                     VALUES ($1, $2)
@@ -245,20 +288,22 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
         let workflow_clone = workflow.clone();
         let definition_value = serde_json::to_value(&workflow.definition)
             .map_err(|e| RunnerError::Store(format!("Failed to serialize workflow definition: {}", e)))?;
+        let editor_document_value = workflow.editor_document.clone();
         let cache = self.cache.clone();
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let result = sqlx::query(
+                let _result = sqlx::query(
                     r#"
-                    INSERT INTO workflow_definitions (id, workspace_id, workflow_key, workflow_version, name, definition)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO workflow_definitions (id, workspace_id, workflow_key, workflow_version, name, definition, editor_document, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     ON CONFLICT (id) DO UPDATE SET
                         workspace_id = EXCLUDED.workspace_id,
                         workflow_key = EXCLUDED.workflow_key,
                         workflow_version = EXCLUDED.workflow_version,
                         name = EXCLUDED.name,
                         definition = EXCLUDED.definition,
+                        editor_document = EXCLUDED.editor_document,
                         updated_at = NOW()
                     "#,
                 )
@@ -268,6 +313,9 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
                 .bind(workflow_clone.definition.meta.version as i32)
                 .bind(&workflow_clone.definition.meta.name)
                 .bind(definition_value)
+                .bind(editor_document_value)
+                .bind(workflow_clone.created_at)
+                .bind(workflow_clone.updated_at)
                 .execute(&pool)
                 .await
                 .map_err(|e| RunnerError::Store(format!("Failed to save workflow: {}", e)))?;

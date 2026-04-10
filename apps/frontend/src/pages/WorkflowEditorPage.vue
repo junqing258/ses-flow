@@ -44,10 +44,10 @@
     <!-- Floating Top Header -->
     <header class="pointer-events-none absolute inset-x-0 top-4 z-20 flex h-14 items-center justify-between px-6">
       <div class="flex items-center gap-3 pointer-events-auto">
-        <Button variant="ghost" size="icon" class="h-8 w-8 text-slate-500 rounded-full hover:bg-slate-200">
+        <Button variant="ghost" size="icon" class="h-8 w-8 text-slate-500 rounded-full hover:bg-slate-200" @click="handleBackToList">
           <ChevronLeft class="h-5 w-5" />
         </Button>
-        <span class="text-[16px] font-semibold tracking-tight text-slate-900">New workflow</span>
+        <span class="text-[16px] font-semibold tracking-tight text-slate-900">{{ workflowTitle }}</span>
         <span class="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{{ workflowStatusLabel }}</span>
       </div>
 
@@ -231,6 +231,15 @@
         <Redo2 class="h-4 w-4" />
       </button>
     </div>
+
+    <div
+      v-if="isLoadingWorkflow"
+      class="absolute inset-0 z-30 flex items-center justify-center bg-white/55 backdrop-blur-[2px]"
+    >
+      <div class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
+        Loading workflow...
+      </div>
+    </div>
   </section>
 </template>
 
@@ -247,17 +256,21 @@ import WorkflowTerminalNode from "@/components/workflow/WorkflowTerminalNode.vue
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { fetchWorkflowDetail } from "@/features/workflow/api";
 import { createWorkflowExportDocument } from "@/features/workflow/export";
+import {
+  createInitialWorkflowEditorState,
+  createPersistedWorkflowDocument,
+  createWorkflowEditorStateFromDocument,
+  type WorkflowEditorState,
+} from "@/features/workflow/persistence";
 import { publishWorkflowToRunner } from "@/features/workflow/runner";
 import {
   WORKFLOW_EMPTY_TAB_TEXT,
   WORKFLOW_ICON_MAP,
   WORKFLOW_PALETTE_CATEGORIES,
   WORKFLOW_TAB_LABELS,
-  createWorkflowEdges,
   createWorkflowNodeDraft,
-  createWorkflowNodes,
-  createWorkflowPanels,
   type WorkflowFlowNode,
   type WorkflowIconKey,
   type WorkflowNodeData,
@@ -277,15 +290,17 @@ const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
 
 const route = useRoute();
 const router = useRouter();
-const nodes = ref<WorkflowFlowNode[]>(createWorkflowNodes());
-const edges = ref<Edge[]>(createWorkflowEdges());
-const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(createWorkflowPanels());
+const initialEditorState = createInitialWorkflowEditorState();
+const nodes = ref<WorkflowFlowNode[]>(initialEditorState.nodes);
+const edges = ref<Edge[]>(initialEditorState.edges);
+const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(initialEditorState.panelByNodeId);
 const searchQuery = ref("");
-const selectedNodeId = ref("fetch_order");
-const activeTab = ref<WorkflowTabId>("base");
+const selectedNodeId = ref(initialEditorState.selectedNodeId);
+const activeTab = ref<WorkflowTabId>(initialEditorState.activeTab);
 const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
+const isLoadingWorkflow = ref(false);
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
@@ -335,6 +350,10 @@ const visibleTabs = computed(() => selectedPanel.value?.tabs ?? ["base"]);
 const selectedNodeIcon = computed(() => WORKFLOW_ICON_MAP[selectedNodeData.value.icon]);
 const workflowStatusLabel = computed(() => (workflowMeta.status === "published" ? "Published" : "Draft"));
 const publishButtonLabel = computed(() => (isPublishing.value ? "Publishing..." : "Publish"));
+const persistedWorkflowId = computed(() =>
+  route.name === "workflow-editor" && typeof route.params.id === "string" ? route.params.id : undefined,
+);
+const workflowTitle = computed(() => workflowMeta.name || "New workflow");
 
 const filteredCategories = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
@@ -364,20 +383,58 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => route.params.id,
-  (routeWorkflowId) => {
-    const nextWorkflowId = getRouteWorkflowId(routeWorkflowId as string | string[] | undefined);
-
-    if (workflowMeta.id !== nextWorkflowId) {
-      workflowMeta.id = nextWorkflowId;
-    }
-  },
-);
-
 const resolveIcon = (icon: WorkflowIconKey) => WORKFLOW_ICON_MAP[icon];
 
 const getFieldsForTab = (tab: WorkflowTabId) => selectedPanel.value?.fieldsByTab[tab] ?? [];
+
+const handleBackToList = () => {
+  void router.push({ name: "workflow-list" });
+};
+
+const applyWorkflowEditorState = (state: WorkflowEditorState) => {
+  nodes.value = state.nodes;
+  edges.value = state.edges;
+  panelByNodeId.value = state.panelByNodeId;
+  selectedNodeId.value = state.selectedNodeId;
+  activeTab.value = state.activeTab;
+  historyStack.value = [];
+  syncSelectedNodeData();
+};
+
+const resetToInitialWorkflow = () => {
+  const nextState = createInitialWorkflowEditorState();
+
+  workflowMeta.id = DEFAULT_WORKFLOW_ID;
+  workflowMeta.name = DEFAULT_WORKFLOW_ID;
+  workflowMeta.status = "draft";
+  workflowMeta.version = "v3";
+  applyWorkflowEditorState(nextState);
+};
+
+const loadWorkflowDetail = async (workflowId: string) => {
+  isLoadingWorkflow.value = true;
+
+  try {
+    const workflow = await fetchWorkflowDetail(workflowId);
+
+    if (!workflow.document) {
+      throw new Error("该工作流缺少编辑器文档，暂时无法在可视化编辑器中还原");
+    }
+
+    const state = createWorkflowEditorStateFromDocument(workflow.document);
+
+    workflowMeta.id = workflow.workflowId;
+    workflowMeta.name = workflow.name;
+    workflowMeta.status = workflow.status;
+    workflowMeta.version = workflow.version;
+    applyWorkflowEditorState(state);
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "加载工作流详情失败");
+    void router.replace({ name: "workflow-list" });
+  } finally {
+    isLoadingWorkflow.value = false;
+  }
+};
 
 const handleTabChange = (value: string | number) => {
   if (typeof value === "string" && visibleTabs.value.includes(value as WorkflowTabId)) {
@@ -388,6 +445,19 @@ const handleTabChange = (value: string | number) => {
 const syncSelectedNodeData = () => {
   selectedNodeData.value = nodes.value.find((node) => node.id === selectedNodeId.value)?.data ?? EMPTY_NODE_DATA;
 };
+
+watch(
+  [() => route.name, () => route.params.id],
+  async ([routeName, routeWorkflowId]) => {
+    if (routeName === "workflow-editor" && typeof routeWorkflowId === "string" && routeWorkflowId.trim()) {
+      await loadWorkflowDetail(routeWorkflowId);
+      return;
+    }
+
+    resetToInitialWorkflow();
+  },
+  { immediate: true },
+);
 
 const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
   active: data.active,
@@ -747,7 +817,17 @@ const handlePublish = async () => {
   isPublishing.value = true;
 
   try {
+    const persistedDocument = createPersistedWorkflowDocument(nodes.value, edges.value, panelByNodeId.value, {
+      activeTab: activeTab.value,
+      selectedNodeId: selectedNodeId.value,
+      status: "published",
+      version: workflowMeta.version,
+      workflowId: workflowMeta.id,
+      workflowName: workflowMeta.name,
+    });
     const registration = await publishWorkflowToRunner(nodes.value, edges.value, panelByNodeId.value, {
+      editorDocument: persistedDocument,
+      persistedWorkflowId: persistedWorkflowId.value,
       workflowId: workflowMeta.id,
       workflowName: workflowMeta.name,
       workflowVersion: workflowMeta.version,
@@ -758,7 +838,7 @@ const handlePublish = async () => {
     workflowMeta.id = publishedWorkflowId;
     workflowMeta.status = "published";
     await router.replace({
-      name: "workflow",
+      name: "workflow-editor",
       params: {
         id: publishedWorkflowId,
       },
