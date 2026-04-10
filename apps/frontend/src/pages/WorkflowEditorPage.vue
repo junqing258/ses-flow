@@ -26,7 +26,7 @@
           <Button variant="secondary" class="border border-white/6 bg-white/8 text-slate-200 hover:bg-white/12">
             校验
           </Button>
-          <Button class="bg-[#4f6af5] text-white hover:bg-[#435ce0]">发布</Button>
+          <Button class="bg-[#4f6af5] text-white hover:bg-[#435ce0]" @click="handleExportJson">导出 JSON</Button>
           <Button variant="secondary" size="icon" class="border border-white/6 bg-white/8 text-slate-300 hover:bg-white/12">
             <MoreHorizontal class="h-4 w-4" />
           </Button>
@@ -234,6 +234,7 @@ import { Controls } from "@vue-flow/controls";
 import { type Edge, VueFlow } from "@vue-flow/core";
 import { MiniMap } from "@vue-flow/minimap";
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Search } from "lucide-vue-next";
+import { toast } from "vue-sonner";
 
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
@@ -241,6 +242,7 @@ import WorkflowTerminalNode from "@/components/workflow/WorkflowTerminalNode.vue
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { createWorkflowExportDocument } from "@/features/workflow/export";
 import {
   WORKFLOW_EMPTY_TAB_TEXT,
   WORKFLOW_ICON_MAP,
@@ -263,6 +265,12 @@ const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(createWorkflowPanel
 const searchQuery = ref("");
 const selectedNodeId = ref("fetch_order");
 const activeTab = ref<WorkflowTabId>("base");
+const workflowMeta = {
+  id: "sorting-main-flow",
+  name: "sorting-main-flow",
+  status: "draft" as const,
+  version: "v3",
+};
 const expandedCategories = reactive<Record<string, boolean>>(
   Object.fromEntries(WORKFLOW_PALETTE_CATEGORIES.map((category) => [category.id, category.defaultOpen])),
 );
@@ -388,6 +396,34 @@ const handleFieldUpdate = (tab: WorkflowTabId, fieldKey: string, value: string) 
         : node,
     ) as WorkflowFlowNode[];
     syncSelectedNodeData();
+  }
+};
+
+const handleExportJson = () => {
+  try {
+    const exportDocument = createWorkflowExportDocument(nodes.value, edges.value, panelByNodeId.value, {
+      selectedNodeId: selectedNodeId.value,
+      status: workflowMeta.status,
+      version: workflowMeta.version,
+      workflowId: workflowMeta.id,
+      workflowName: workflowMeta.name,
+    });
+    const blob = new Blob([`${JSON.stringify(exportDocument, null, 2)}\n`], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `${workflowMeta.name}.${workflowMeta.version}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    toast.success("工作流 JSON 已导出");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "导出工作流 JSON 失败");
   }
 };
 
