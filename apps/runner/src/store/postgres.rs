@@ -1,3 +1,4 @@
+use serde::de::DeserializeOwned;
 use sqlx::{postgres::PgPool, Row};
 
 use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunSummary};
@@ -86,6 +87,21 @@ impl PostgresRunStore {
         .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
 
         Ok(())
+    }
+}
+
+fn deserialize_optional_json_field<T>(
+    value: Option<serde_json::Value>,
+    field_name: &str,
+) -> Result<Option<T>, RunnerError>
+where
+    T: DeserializeOwned,
+{
+    match value {
+        Some(serde_json::Value::Null) | None => Ok(None),
+        Some(value) => serde_json::from_value(value)
+            .map(Some)
+            .map_err(|e| RunnerError::Store(format!("Failed to deserialize {field_name}: {e}"))),
     }
 }
 
@@ -256,11 +272,8 @@ impl WorkflowRunStore for PostgresRunStore {
                             .map_err(|e| RunnerError::Store(format!("Failed to deserialize state: {}", e)))?;
                         let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> = serde_json::from_value(timeline)
                             .map_err(|e| RunnerError::Store(format!("Failed to deserialize timeline: {}", e)))?;
-                        let last_signal_typed: Option<crate::core::runtime::NextSignal> = match last_signal {
-                            Some(s) => Some(serde_json::from_value(s)
-                                .map_err(|e| RunnerError::Store(format!("Failed to deserialize last_signal: {}", e)))?),
-                            None => None,
-                        };
+                        let last_signal_typed: Option<crate::core::runtime::NextSignal> =
+                            deserialize_optional_json_field(last_signal, "last_signal")?;
                         let env_typed: crate::core::runtime::RunEnvironment = serde_json::from_value(env)
                             .map_err(|e| RunnerError::Store(format!("Failed to deserialize env: {}", e)))?;
 
@@ -332,11 +345,8 @@ impl WorkflowRunStore for PostgresRunStore {
                             .map_err(|e| RunnerError::Store(format!("Failed to deserialize state: {}", e)))?;
                         let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> = serde_json::from_value(timeline)
                             .map_err(|e| RunnerError::Store(format!("Failed to deserialize timeline: {}", e)))?;
-                        let last_signal_typed: Option<crate::core::runtime::NextSignal> = match last_signal {
-                            Some(s) => Some(serde_json::from_value(s)
-                                .map_err(|e| RunnerError::Store(format!("Failed to deserialize last_signal: {}", e)))?),
-                            None => None,
-                        };
+                        let last_signal_typed: Option<crate::core::runtime::NextSignal> =
+                            deserialize_optional_json_field(last_signal, "last_signal")?;
 
                         Ok(Some(WorkflowRunSummary {
                             run_id,
@@ -426,5 +436,39 @@ impl WorkflowRunStore for PostgresRunStore {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::core::runtime::NextSignal;
+
+    use super::deserialize_optional_json_field;
+
+    #[test]
+    fn treats_json_null_as_missing_optional_field() {
+        let value = Some(serde_json::Value::Null);
+
+        let parsed = deserialize_optional_json_field::<NextSignal>(value, "last_signal")
+            .expect("json null should be treated as missing");
+
+        assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn deserializes_optional_field_when_payload_exists() {
+        let value = Some(json!({
+            "type": "event",
+            "payload": {
+                "id": "evt-1"
+            }
+        }));
+
+        let parsed = deserialize_optional_json_field::<NextSignal>(value, "last_signal")
+            .expect("valid payload should deserialize");
+
+        assert_eq!(parsed.expect("signal should be present").signal_type, "event");
     }
 }

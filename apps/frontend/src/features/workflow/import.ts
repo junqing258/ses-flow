@@ -7,7 +7,7 @@ import {
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
 } from "./model";
-import type { WorkflowEditorState } from "./persistence";
+import { createNewWorkflowEditorState, type WorkflowEditorState } from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 
 const paletteItemById = WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).reduce<Record<string, WorkflowPaletteItem>>(
@@ -241,6 +241,7 @@ const createBranchLabelNode = (
 export const createWorkflowEditorStateFromRunnerDefinition = (
   definition: RunnerWorkflowDefinition,
 ): WorkflowEditorState => {
+  const fallbackState = createNewWorkflowEditorState();
   const nodes: WorkflowFlowNode[] = [];
   const panelByNodeId: Record<string, WorkflowNodePanel> = {};
   const edges: Edge[] = [];
@@ -342,6 +343,8 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
       },
     })) as WorkflowFlowNode[],
     panelByNodeId,
+    pageMode: fallbackState.pageMode,
+    runDraft: fallbackState.runDraft,
     selectedNodeId,
   };
 };

@@ -14,6 +14,8 @@ import {
 export interface PersistedWorkflowDocument {
   editor: {
     activeTab?: WorkflowTabId;
+    pageMode?: WorkflowPageMode;
+    runDraft?: WorkflowRunDraft;
     selectedNodeId?: string;
   };
   graph: {
@@ -32,6 +34,8 @@ export interface PersistedWorkflowDocument {
 
 interface PersistedWorkflowOptions {
   activeTab?: WorkflowTabId;
+  pageMode?: WorkflowPageMode;
+  runDraft?: WorkflowRunDraft;
   selectedNodeId?: string;
   status: "draft" | "published";
   version: string;
@@ -39,13 +43,42 @@ interface PersistedWorkflowOptions {
   workflowName: string;
 }
 
+export type WorkflowPageMode = "edit" | "run";
+
+export interface WorkflowRunDraft {
+  body: string;
+  env: string;
+  headers: string;
+  triggerMode: "manual" | "webhook";
+}
+
 export interface WorkflowEditorState {
   activeTab: WorkflowTabId;
   edges: Edge[];
   nodes: WorkflowFlowNode[];
   panelByNodeId: Record<string, WorkflowNodePanel>;
+  pageMode: WorkflowPageMode;
+  runDraft: WorkflowRunDraft;
   selectedNodeId: string;
 }
+
+const createDefaultWorkflowRunDraft = (): WorkflowRunDraft => ({
+  body: '{\n  "orderId": "SO-10001",\n  "laneCode": "A-01",\n  "bizType": "A"\n}',
+  env: '{\n  "tenantId": "tenant-a",\n  "warehouseId": "WHS-SH-01",\n  "operatorId": "demo-user"\n}',
+  headers: '{\n  "x-request-id": "wf-run-demo-001",\n  "x-source": "workflow-editor"\n}',
+  triggerMode: "manual",
+});
+
+const cloneRunDraft = (runDraft?: WorkflowRunDraft): WorkflowRunDraft => {
+  const defaultRunDraft = createDefaultWorkflowRunDraft();
+
+  return {
+    body: runDraft?.body ?? defaultRunDraft.body,
+    env: runDraft?.env ?? defaultRunDraft.env,
+    headers: runDraft?.headers ?? defaultRunDraft.headers,
+    triggerMode: runDraft?.triggerMode ?? defaultRunDraft.triggerMode,
+  };
+};
 
 const cloneNodeData = (data: WorkflowFlowNode["data"]): WorkflowFlowNode["data"] => ({
   active: data.active,
@@ -176,6 +209,8 @@ export const createNewWorkflowEditorState = (): WorkflowEditorState => {
       [startNode.id]: startDraft.panel,
       [endNode.id]: endDraft.panel,
     },
+    pageMode: "edit",
+    runDraft: createDefaultWorkflowRunDraft(),
     selectedNodeId: startNode.id,
   };
 };
@@ -190,6 +225,8 @@ export const createPersistedWorkflowDocument = (
 ): PersistedWorkflowDocument => ({
   editor: {
     activeTab: options.activeTab,
+    pageMode: options.pageMode,
+    runDraft: cloneRunDraft(options.runDraft),
     selectedNodeId: options.selectedNodeId,
   },
   graph: {
@@ -216,6 +253,8 @@ export const createWorkflowEditorStateFromDocument = (
     edges: cloneEdges(document.graph.edges),
     nodes: cloneNodes(document.graph.nodes),
     panelByNodeId: clonePanels(document.graph.panels),
+    pageMode: document.editor.pageMode ?? fallbackState.pageMode,
+    runDraft: cloneRunDraft(document.editor.runDraft),
     selectedNodeId: document.editor.selectedNodeId ?? fallbackState.selectedNodeId,
   };
 };

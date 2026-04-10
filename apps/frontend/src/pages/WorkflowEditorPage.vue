@@ -52,11 +52,18 @@
       </div>
 
       <div class="absolute left-1/2 -translate-x-1/2 flex h-9 items-center rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 pointer-events-auto">
-        <button class="flex h-7 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-800 transition-colors">
+        <button
+          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
+          :class="isEditMode ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800'"
+          @click="handlePageModeChange('edit')"
+        >
           <Pencil class="h-3.5 w-3.5" />
         </button>
-        <!-- 运行 -->
-        <button class="flex h-7 w-11 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-800 transition-colors">
+        <button
+          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
+          :class="isRunMode ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800'"
+          @click="handlePageModeChange('run')"
+        >
           <Play class="h-3.5 w-3.5" />
         </button>
       </div>
@@ -87,7 +94,10 @@
     </header>
 
     <!-- Floating Left Panel -->
-    <aside class="pointer-events-auto absolute left-6 top-24 bottom-6 z-10 flex w-[240px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50">
+    <aside
+      v-if="isEditMode"
+      class="pointer-events-auto absolute left-6 top-24 bottom-6 z-10 flex w-[240px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    >
       <div class="min-h-0 flex-1 overflow-y-auto py-3 px-2">
         <div v-for="category in filteredCategories" :key="category.id" class="mb-4 last:mb-0">
           <div class="mb-1.5 px-3 text-[11px] font-medium text-slate-400">
@@ -120,8 +130,108 @@
       </div>
     </aside>
 
+    <aside
+      v-else
+      class="pointer-events-auto absolute left-6 top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    >
+      <div class="flex h-[84px] shrink-0 items-center justify-between border-b border-slate-50 px-4">
+        <div>
+          <p class="text-[14px] font-semibold text-slate-900">运行配置</p>
+          <p class="mt-1 text-[11px] leading-5 text-slate-400">同步当前画布到 Runner 后立即执行，适合联调节点映射和分支结果。</p>
+        </div>
+        <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{ runnerTriggerSummaryLabel }}</span>
+      </div>
+
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div class="rounded-[18px] border border-slate-200/80 bg-slate-50/70 p-3">
+          <p class="text-xs font-semibold tracking-wide text-slate-500">触发载荷</p>
+          <div class="mt-3 flex rounded-full bg-white p-1 ring-1 ring-slate-200">
+            <button
+              type="button"
+              class="flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+              :class="runDraft.triggerMode === 'manual' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+              @click="handleRunDraftUpdate('triggerMode', 'manual')"
+            >
+              Manual
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+              :class="runDraft.triggerMode === 'webhook' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'"
+              @click="handleRunDraftUpdate('triggerMode', 'webhook')"
+            >
+              Webhook
+            </button>
+          </div>
+          <p class="mt-3 text-[11px] leading-5 text-slate-500">
+            `Manual` 只发送 `body`，`Webhook` 会附带 `headers + body`，方便模拟真实入口。
+          </p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold tracking-wide text-slate-500">Trigger Body</label>
+          <textarea
+            :value="runDraft.body"
+            class="min-h-[148px] w-full rounded-[16px] border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            @input="handleRunDraftUpdate('body', ($event.target as HTMLTextAreaElement).value)"
+          />
+        </div>
+
+        <div v-if="runDraft.triggerMode === 'webhook'" class="space-y-1.5">
+          <label class="block text-xs font-semibold tracking-wide text-slate-500">Webhook Headers</label>
+          <textarea
+            :value="runDraft.headers"
+            class="min-h-[112px] w-full rounded-[16px] border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            @input="handleRunDraftUpdate('headers', ($event.target as HTMLTextAreaElement).value)"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold tracking-wide text-slate-500">Run Env</label>
+          <textarea
+            :value="runDraft.env"
+            class="min-h-[112px] w-full rounded-[16px] border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            @input="handleRunDraftUpdate('env', ($event.target as HTMLTextAreaElement).value)"
+          />
+        </div>
+
+        <div class="rounded-[18px] border border-slate-200/80 bg-white p-3">
+          <div class="flex items-center justify-between text-xs text-slate-500">
+            <span class="font-semibold">执行预览</span>
+            <span>{{ runnerWorkflowPreview.nodes.length }} nodes</span>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div class="rounded-xl bg-slate-50 px-3 py-2">
+              <p class="text-slate-400">Trigger</p>
+              <p class="mt-1 font-semibold text-slate-700">{{ runnerWorkflowPreview.trigger.type }}</p>
+            </div>
+            <div class="rounded-xl bg-slate-50 px-3 py-2">
+              <p class="text-slate-400">Transitions</p>
+              <p class="mt-1 font-semibold text-slate-700">{{ runnerWorkflowPreview.transitions.length }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shrink-0 border-t border-slate-100 px-4 py-4">
+        <Button
+          class="h-10 w-full rounded-full bg-slate-900 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="isRunningWorkflow"
+          @click="handleRunWorkflow"
+        >
+          <LoaderCircle v-if="isRunningWorkflow" class="h-4 w-4 animate-spin" />
+          <Play v-else class="h-4 w-4" />
+          {{ runActionLabel }}
+        </Button>
+        <p class="mt-2 text-[11px] leading-5 text-slate-400">运行不会自动发布正式版本，但会把当前画布同步到 Runner 进行一次最新执行。</p>
+      </div>
+    </aside>
+
     <!-- Floating Right Properties Panel -->
-    <aside v-if="selectedNodeId" class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50">
+    <aside
+      v-if="isEditMode && selectedNodeId"
+      class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    >
       <div class="flex h-[68px] shrink-0 items-center gap-3 px-4 border-b border-slate-50">
         <div
           class="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm"
@@ -215,8 +325,131 @@
       </Tabs>
     </aside>
 
+    <aside
+      v-else-if="isRunMode"
+      class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    >
+      <div class="flex h-[72px] shrink-0 items-center gap-3 border-b border-slate-50 px-4">
+        <div class="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-slate-900 text-white shadow-sm">
+          <Webhook v-if="runDraft.triggerMode === 'webhook'" class="h-4 w-4" />
+          <Play v-else class="h-4 w-4" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-[14px] font-semibold text-slate-900">运行结果</p>
+          <p class="truncate text-[11px] text-slate-400">{{ activeRunId ? `Run ${activeRunId}` : "执行后会在这里看到状态和 timeline" }}</p>
+        </div>
+        <button
+          type="button"
+          class="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!activeRunId"
+          @click="handleRefreshRunSummary"
+        >
+          <LoaderCircle class="h-4 w-4" :class="activeRunStatus === 'running' ? 'animate-spin' : ''" />
+        </button>
+      </div>
+
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold tracking-wide text-slate-500">运行状态</p>
+              <p class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{{ activeRunStatusLabel }}</p>
+            </div>
+            <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="activeRunStatusClass">
+              {{ activeRunStatusLabel }}
+            </span>
+          </div>
+
+          <div class="mt-4 space-y-2 text-xs text-slate-500">
+            <div class="flex items-center justify-between gap-3">
+              <span>Workflow ID</span>
+              <span class="truncate font-medium text-slate-700">{{ activeRunWorkflowId || workflowMeta.id }}</span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <span>Current Node</span>
+              <span class="truncate font-medium text-slate-700">{{ activeRunSummary?.currentNodeId ?? "--" }}</span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <span>Timeline Steps</span>
+              <span class="font-medium text-slate-700">{{ runTimeline.length }}</span>
+            </div>
+          </div>
+
+          <p v-if="runErrorMessage" class="mt-4 rounded-[14px] bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
+            {{ runErrorMessage }}
+          </p>
+        </div>
+
+        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold tracking-wide text-slate-500">执行时间线</p>
+            <span class="text-[11px] text-slate-400">{{ runTimeline.length ? `${runTimeline.length} steps` : "No steps yet" }}</span>
+          </div>
+
+          <div v-if="runTimeline.length" class="mt-4 space-y-3">
+            <article
+              v-for="(item, index) in runTimeline"
+              :key="`${item.nodeId}-${index}`"
+              class="rounded-[16px] border border-slate-200/80 bg-slate-50/70 p-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-[13px] font-semibold text-slate-800">{{ workflowNodeNameMap[item.nodeId] ?? item.nodeId }}</p>
+                  <p class="mt-1 text-[11px] text-slate-400">{{ item.nodeType }} · {{ item.nodeId }}</p>
+                </div>
+                <span
+                  class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  :class="
+                    item.status === 'success'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : item.status === 'waiting'
+                        ? 'bg-amber-50 text-amber-700'
+                        : item.status === 'failed'
+                          ? 'bg-rose-50 text-rose-700'
+                          : 'bg-cyan-50 text-cyan-700'
+                  "
+                >
+                  {{ item.status }}
+                </span>
+              </div>
+
+              <div v-if="item.logs?.length" class="mt-3 space-y-1">
+                <p
+                  v-for="(log, logIndex) in item.logs"
+                  :key="`${item.nodeId}-log-${logIndex}`"
+                  class="rounded-xl bg-white px-2.5 py-2 font-mono text-[11px] leading-5 text-slate-500 ring-1 ring-slate-200/80"
+                >
+                  [{{ log.level }}] {{ log.message }}
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <div
+            v-else
+            class="mt-4 flex min-h-[160px] items-center justify-center rounded-[16px] border border-dashed border-slate-200 bg-slate-50/60 px-6 text-center text-xs leading-5 text-slate-400"
+          >
+            运行后会按顺序展示每个节点的执行结果和日志。
+          </div>
+        </div>
+
+        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
+          <p class="text-xs font-semibold tracking-wide text-slate-500">State Snapshot</p>
+          <pre class="mt-3 max-h-[180px] overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100">{{ runStatePreview }}</pre>
+        </div>
+
+        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
+          <p class="text-xs font-semibold tracking-wide text-slate-500">Last Output</p>
+          <pre class="mt-3 max-h-[180px] overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100">{{ runOutputPreview }}</pre>
+        </div>
+      </div>
+    </aside>
+
     <!-- Floating Bottom Control Toolbar -->
-    <div class="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100">
+    <div
+      v-if="isEditMode"
+      class="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100"
+    >
       <button class="flex h-9 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition-colors">
         <Hand class="h-4 w-4" />
       </button>
@@ -246,7 +479,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { type Connection, type Edge, VueFlow, useVueFlow } from "@vue-flow/core";
-import { ChevronDown, ChevronLeft, Compass, Code, Hand, MoreHorizontal, MousePointer2, Pencil, Play, Redo2, Settings, Undo2 } from "lucide-vue-next";
+import { ChevronDown, ChevronLeft, Compass, Code, Hand, LoaderCircle, MoreHorizontal, MousePointer2, Pencil, Play, Redo2, Settings, Undo2, Webhook } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
@@ -264,9 +497,20 @@ import {
   createNewWorkflowEditorState,
   createPersistedWorkflowDocument,
   createWorkflowEditorStateFromDocument,
+  type WorkflowPageMode,
+  type WorkflowRunDraft,
   type WorkflowEditorState,
 } from "@/features/workflow/persistence";
-import { publishWorkflowToRunner } from "@/features/workflow/runner";
+import {
+  buildRunnerWorkflowDefinition,
+  executeWorkflowRun,
+  fetchWorkflowRunSummary,
+  publishWorkflowToRunner,
+  syncWorkflowToRunner,
+  type RunnerWorkflowDefinition,
+  type WorkflowRunStatus,
+  type WorkflowRunSummary,
+} from "@/features/workflow/runner";
 import {
   WORKFLOW_EMPTY_TAB_TEXT,
   WORKFLOW_ICON_MAP,
@@ -299,11 +543,19 @@ const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(initialEditorState.
 const searchQuery = ref("");
 const selectedNodeId = ref(initialEditorState.selectedNodeId);
 const activeTab = ref<WorkflowTabId>(initialEditorState.activeTab);
+const pageMode = ref<WorkflowPageMode>(initialEditorState.pageMode);
+const runDraft = ref<WorkflowRunDraft>(initialEditorState.runDraft);
 const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
 const isLoadingWorkflow = ref(false);
+const isRunningWorkflow = ref(false);
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
+const activeRunSummary = ref<WorkflowRunSummary | null>(null);
+const activeRunId = ref("");
+const activeRunWorkflowId = ref("");
+const runErrorMessage = ref("");
+let runSummaryPollTimer: number | null = null;
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();
@@ -350,12 +602,71 @@ const selectedNodeData = ref<WorkflowNodeData>(EMPTY_NODE_DATA);
 const selectedPanel = computed(() => panelByNodeId.value[selectedNodeId.value]);
 const visibleTabs = computed(() => selectedPanel.value?.tabs ?? ["base"]);
 const selectedNodeIcon = computed(() => WORKFLOW_ICON_MAP[selectedNodeData.value.icon]);
+const isEditMode = computed(() => pageMode.value === "edit");
+const isRunMode = computed(() => pageMode.value === "run");
 const workflowStatusLabel = computed(() => (workflowMeta.status === "published" ? "Published" : "Draft"));
 const publishButtonLabel = computed(() => (isPublishing.value ? "Publishing..." : "Publish"));
+const runActionLabel = computed(() => (isRunningWorkflow.value ? "运行中..." : activeRunId.value ? "重新运行" : "运行当前工作流"));
 const persistedWorkflowId = computed(() =>
   route.name === "workflow-editor" && typeof route.params.id === "string" ? route.params.id : undefined,
 );
 const workflowTitle = computed(() => workflowMeta.name || "New workflow");
+const workflowNodeNameMap = computed<Record<string, string>>(() =>
+  nodes.value.reduce<Record<string, string>>((accumulator, node) => {
+    accumulator[node.id] = node.data.subtitle ?? node.data.title;
+    return accumulator;
+  }, {}),
+);
+const getRunnerWorkflowPreview = (): RunnerWorkflowDefinition =>
+  buildRunnerWorkflowDefinition(nodes.value, edges.value, panelByNodeId.value, {
+    workflowId: workflowMeta.id,
+    workflowName: workflowMeta.name,
+    workflowVersion: workflowMeta.version,
+    workflowStatus: workflowMeta.status,
+  });
+const runnerWorkflowPreview = computed<RunnerWorkflowDefinition>(getRunnerWorkflowPreview);
+const runnerTriggerSummaryLabel = computed(() => {
+  if (runnerWorkflowPreview.value.trigger.type === "webhook") {
+    return "Webhook Trigger";
+  }
+
+  return "Manual Trigger";
+});
+const activeRunStatus = computed<WorkflowRunStatus | null>(() => activeRunSummary.value?.status ?? null);
+const activeRunStatusLabel = computed(() => {
+  switch (activeRunStatus.value) {
+    case "running":
+      return "运行中";
+    case "completed":
+      return "已完成";
+    case "waiting":
+      return "等待恢复";
+    case "failed":
+      return "失败";
+    default:
+      return "未运行";
+  }
+});
+const activeRunStatusClass = computed(() => {
+  switch (activeRunStatus.value) {
+    case "running":
+      return "bg-cyan-50 text-cyan-700";
+    case "completed":
+      return "bg-emerald-50 text-emerald-700";
+    case "waiting":
+      return "bg-amber-50 text-amber-700";
+    case "failed":
+      return "bg-rose-50 text-rose-700";
+    default:
+      return "bg-slate-100 text-slate-500";
+  }
+});
+const runTimeline = computed(() => activeRunSummary.value?.timeline ?? []);
+const runStatePreview = computed(() => formatJsonPreview(activeRunSummary.value?.state ?? {}));
+const runOutputPreview = computed(() => {
+  const lastItem = runTimeline.value[runTimeline.value.length - 1];
+  return formatJsonPreview(lastItem?.output ?? {});
+});
 
 const filteredCategories = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
@@ -399,8 +710,18 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   panelByNodeId.value = state.panelByNodeId;
   selectedNodeId.value = state.selectedNodeId;
   activeTab.value = state.activeTab;
+  pageMode.value = state.pageMode;
+  runDraft.value = { ...state.runDraft };
   historyStack.value = [];
   syncSelectedNodeData();
+};
+
+const resetRunSession = () => {
+  clearRunSummaryPolling();
+  activeRunSummary.value = null;
+  activeRunId.value = "";
+  activeRunWorkflowId.value = "";
+  runErrorMessage.value = "";
 };
 
 const resetToInitialWorkflow = () => {
@@ -410,6 +731,7 @@ const resetToInitialWorkflow = () => {
   workflowMeta.name = DEFAULT_WORKFLOW_ID;
   workflowMeta.status = "draft";
   workflowMeta.version = "v3";
+  resetRunSession();
   applyWorkflowEditorState(nextState);
 };
 
@@ -421,6 +743,10 @@ const loadWorkflowDetail = async (workflowId: string) => {
     const state = workflow.document
       ? createWorkflowEditorStateFromDocument(workflow.document)
       : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow);
+
+    if (activeRunWorkflowId.value && activeRunWorkflowId.value !== workflowId) {
+      resetRunSession();
+    }
 
     workflowMeta.id = workflow.workflowId;
     workflowMeta.name = workflow.name;
@@ -439,6 +765,10 @@ const handleTabChange = (value: string | number) => {
   if (typeof value === "string" && visibleTabs.value.includes(value as WorkflowTabId)) {
     activeTab.value = value as WorkflowTabId;
   }
+};
+
+const handlePageModeChange = (mode: WorkflowPageMode) => {
+  pageMode.value = mode;
 };
 
 const syncSelectedNodeData = () => {
@@ -600,6 +930,10 @@ const handleNodeClick = (payload: any) => {
 };
 
 const deleteSelectedNode = () => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   const targetId = selectedNodeId.value;
 
   if (!targetId) {
@@ -631,6 +965,10 @@ const getEdgeId = (connection: Connection) => {
 };
 
 const handleConnect = (connection: Connection) => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   if (!connection.source || !connection.target) {
     return;
   }
@@ -672,6 +1010,10 @@ const isCategoryOpen = (categoryId: string) => {
 };
 
 const focusPaletteItem = (kind: WorkflowNodeKind) => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   const targetNode = nodes.value.find((node) => node.data.kind === kind && node.type !== "branch-chip");
 
   if (targetNode) {
@@ -680,7 +1022,7 @@ const focusPaletteItem = (kind: WorkflowNodeKind) => {
 };
 
 const handlePaletteDragStart = (event: DragEvent, itemId: string) => {
-  if (!event.dataTransfer) {
+  if (!isEditMode.value || !event.dataTransfer) {
     return;
   }
 
@@ -696,6 +1038,10 @@ const handlePaletteDragEnd = () => {
 };
 
 const handleCanvasDragEnter = (event: DragEvent) => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   if (!event.dataTransfer?.types.includes(DRAG_DATA_TYPE)) {
     return;
   }
@@ -704,6 +1050,10 @@ const handleCanvasDragEnter = (event: DragEvent) => {
 };
 
 const handleCanvasDragOver = (event: DragEvent) => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   if (!event.dataTransfer?.types.includes(DRAG_DATA_TYPE)) {
     return;
   }
@@ -713,6 +1063,10 @@ const handleCanvasDragOver = (event: DragEvent) => {
 };
 
 const handleCanvasDrop = (event: DragEvent) => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   isCanvasDropTarget.value = false;
 
   const itemId = event.dataTransfer?.getData(DRAG_DATA_TYPE);
@@ -749,6 +1103,10 @@ const handleCanvasDrop = (event: DragEvent) => {
 };
 
 const handleFieldUpdate = (tab: WorkflowTabId, fieldKey: string, value: string) => {
+  if (!isEditMode.value) {
+    return;
+  }
+
   const panel = selectedPanel.value;
 
   if (!panel) {
@@ -777,6 +1135,186 @@ const handleFieldUpdate = (tab: WorkflowTabId, fieldKey: string, value: string) 
         : node,
     ) as WorkflowFlowNode[];
     syncSelectedNodeData();
+  }
+};
+
+const handleRunDraftUpdate = <K extends keyof WorkflowRunDraft>(key: K, value: WorkflowRunDraft[K]) => {
+  runDraft.value = {
+    ...runDraft.value,
+    [key]: value,
+  };
+};
+
+const parseJsonRecord = (rawValue: string, fieldLabel: string) => {
+  const trimmed = rawValue.trim();
+
+  if (!trimmed) {
+    return {};
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${fieldLabel} 需要是合法的 JSON 对象`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${fieldLabel} 需要是 JSON 对象`);
+  }
+
+  return parsed as Record<string, unknown>;
+};
+
+const normalizeRunEnvRecord = (env: Record<string, unknown>) => {
+  const nextEnv = { ...env };
+
+  if (typeof nextEnv.siteCode === "string" && typeof nextEnv.warehouseId !== "string") {
+    nextEnv.warehouseId = nextEnv.siteCode;
+  }
+
+  if (typeof nextEnv.tenantId !== "string" || !nextEnv.tenantId.trim()) {
+    nextEnv.tenantId = "tenant-a";
+  }
+
+  return nextEnv;
+};
+
+const buildRunExecutionRequest = () => {
+  const body = parseJsonRecord(runDraft.value.body, "Trigger Body");
+  const env = normalizeRunEnvRecord(parseJsonRecord(runDraft.value.env, "运行环境变量"));
+
+  if (runDraft.value.triggerMode === "webhook") {
+    return {
+      env,
+      trigger: {
+        body,
+        headers: parseJsonRecord(runDraft.value.headers, "Webhook Headers"),
+      },
+    };
+  }
+
+  return {
+    env,
+    trigger: {
+      body,
+    },
+  };
+};
+
+const formatJsonPreview = (value: unknown) => JSON.stringify(value ?? {}, null, 2);
+
+const clearRunSummaryPolling = () => {
+  if (runSummaryPollTimer !== null) {
+    window.clearTimeout(runSummaryPollTimer);
+    runSummaryPollTimer = null;
+  }
+};
+
+const selectRunFocusedNode = (summary: WorkflowRunSummary) => {
+  const candidateNodeId = summary.currentNodeId ?? summary.timeline[summary.timeline.length - 1]?.nodeId;
+
+  if (candidateNodeId && nodes.value.some((node) => node.id === candidateNodeId)) {
+    setSelectedNode(candidateNodeId);
+  }
+};
+
+const refreshRunSummary = async () => {
+  if (!activeRunId.value) {
+    return;
+  }
+
+  try {
+    const summary = await fetchWorkflowRunSummary(activeRunId.value);
+
+    activeRunSummary.value = summary;
+    runErrorMessage.value = "";
+    selectRunFocusedNode(summary);
+
+    if (summary.status === "running") {
+      clearRunSummaryPolling();
+      runSummaryPollTimer = window.setTimeout(() => {
+        void refreshRunSummary();
+      }, 1200);
+      return;
+    }
+
+    clearRunSummaryPolling();
+  } catch (error) {
+    clearRunSummaryPolling();
+    runErrorMessage.value = error instanceof Error ? error.message : "获取运行状态失败";
+  }
+};
+
+const handleRefreshRunSummary = async () => {
+  if (!activeRunId.value) {
+    toast.info("当前还没有运行记录");
+    return;
+  }
+
+  await refreshRunSummary();
+};
+
+const handleRunWorkflow = async () => {
+  if (isRunningWorkflow.value) {
+    return;
+  }
+
+  isRunningWorkflow.value = true;
+  runErrorMessage.value = "";
+  pageMode.value = "run";
+
+  try {
+    const editorDocument = createPersistedWorkflowDocument(nodes.value, edges.value, panelByNodeId.value, {
+      activeTab: activeTab.value,
+      pageMode: "run",
+      runDraft: runDraft.value,
+      selectedNodeId: selectedNodeId.value,
+      status: workflowMeta.status,
+      version: workflowMeta.version,
+      workflowId: workflowMeta.id,
+      workflowName: workflowMeta.name,
+    });
+    const registration = await syncWorkflowToRunner(nodes.value, edges.value, panelByNodeId.value, {
+      editorDocument,
+      persistedWorkflowId: persistedWorkflowId.value,
+      workflowId: workflowMeta.id,
+      workflowName: workflowMeta.name,
+      workflowVersion: workflowMeta.version,
+      workflowStatus: workflowMeta.status,
+    });
+    const execution = await executeWorkflowRun(registration.workflowId, buildRunExecutionRequest());
+
+    workflowMeta.id = registration.workflowId;
+    activeRunWorkflowId.value = registration.workflowId;
+    activeRunId.value = execution.runId;
+    activeRunSummary.value = {
+      currentNodeId: undefined,
+      runId: execution.runId,
+      state: {},
+      status: "running",
+      timeline: [],
+      workflowKey: registration.workflowKey,
+      workflowVersion: registration.workflowVersion,
+    };
+
+    if (persistedWorkflowId.value !== registration.workflowId) {
+      void router.replace({
+        name: "workflow-editor",
+        params: {
+          id: registration.workflowId,
+        },
+      });
+    }
+
+    toast.success(`已启动运行：${execution.runId}`);
+    await refreshRunSummary();
+  } catch (error) {
+    runErrorMessage.value = error instanceof Error ? error.message : "启动工作流运行失败";
+    toast.error(runErrorMessage.value);
+  } finally {
+    isRunningWorkflow.value = false;
   }
 };
 
@@ -818,6 +1356,8 @@ const handlePublish = async () => {
   try {
     const persistedDocument = createPersistedWorkflowDocument(nodes.value, edges.value, panelByNodeId.value, {
       activeTab: activeTab.value,
+      pageMode: pageMode.value,
+      runDraft: runDraft.value,
       selectedNodeId: selectedNodeId.value,
       status: "published",
       version: workflowMeta.version,
@@ -870,6 +1410,10 @@ const handleWindowKeydown = (event: KeyboardEvent) => {
     return;
   }
 
+  if (!isEditMode.value) {
+    return;
+  }
+
   if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undoLastChange();
@@ -887,6 +1431,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  clearRunSummaryPolling();
   window.removeEventListener("keydown", handleWindowKeydown);
 });
 

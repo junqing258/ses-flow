@@ -39,6 +39,46 @@ interface RunnerTransitionDefinition {
   priority?: number;
 }
 
+export type WorkflowRunStatus = "running" | "completed" | "waiting" | "failed";
+
+export interface WorkflowExecutionRequest {
+  env?: Record<string, unknown>;
+  trigger?: Record<string, unknown>;
+}
+
+export interface WorkflowExecutionAccepted {
+  eventsUrl: string;
+  runId: string;
+  status: string;
+  statusUrl: string;
+  workflowId?: string;
+}
+
+export interface WorkflowRunTimelineItem {
+  branchKey?: string;
+  logs?: Array<{
+    level: string;
+    message: string;
+  }>;
+  nodeId: string;
+  nodeType: string;
+  output: unknown;
+  statePatch: unknown;
+  status: string;
+}
+
+export interface WorkflowRunSummary {
+  currentNodeId?: string;
+  lastSignal?: unknown;
+  resumeState?: unknown;
+  runId: string;
+  state: unknown;
+  status: WorkflowRunStatus;
+  timeline: WorkflowRunTimelineItem[];
+  workflowKey: string;
+  workflowVersion: number;
+}
+
 export interface RunnerWorkflowDefinition {
   meta: {
     key: string;
@@ -86,6 +126,23 @@ class RunnerRequestError extends Error {
 const RUNNER_BASE_URL = (import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api").replace(/\/$/, "");
 const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
 const DEFAULT_WORKSPACE_NAME = "SES Workflow Editor";
+
+const parseRunnerResponse = async <T>(response: Response, fallbackMessage: string): Promise<T> => {
+  const contentType = response.headers.get("content-type") ?? "";
+  const hasJsonBody = contentType.includes("application/json");
+  const payload = hasJsonBody ? ((await response.json()) as Record<string, unknown>) : null;
+
+  if (!response.ok) {
+    const errorMessage =
+      (typeof payload?.error === "string" && payload.error) ||
+      (typeof payload?.message === "string" && payload.message) ||
+      fallbackMessage;
+
+    throw new RunnerRequestError(errorMessage, response.status);
+  }
+
+  return payload as T;
+};
 
 const getFieldValue = (panel: WorkflowNodePanel | undefined, tab: WorkflowTabId, fieldKey: string) =>
   panel?.fieldsByTab[tab]?.find((field) => field.key === fieldKey)?.value.trim() ?? "";
@@ -460,7 +517,7 @@ export const buildRunnerWorkflowDefinition = (
   },
 });
 
-export const publishWorkflowToRunner = async (
+export const syncWorkflowToRunner = async (
   nodes: WorkflowFlowNode[],
   edges: Edge[],
   panelByNodeId: Record<string, WorkflowNodePanel>,
@@ -468,10 +525,11 @@ export const publishWorkflowToRunner = async (
 ): Promise<RunnerWorkflowRegistration> => {
   const workflow = buildRunnerWorkflowDefinition(nodes, edges, panelByNodeId, {
     ...options,
-    workflowStatus: "published",
+    workflowStatus: options.workflowStatus ?? "draft",
   });
 
   let response: Response;
+
   try {
     response = await sendRequest(`${RUNNER_BASE_URL}/workflows`, {
       method: "POST",
@@ -486,22 +544,54 @@ export const publishWorkflowToRunner = async (
         workflow,
       }),
     });
+
   } catch {
     throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
-  const hasJsonBody = contentType.includes("application/json");
-  const payload = hasJsonBody ? ((await response.json()) as Record<string, unknown>) : null;
+  return parseRunnerResponse<RunnerWorkflowRegistration>(response, "同步工作流到 Runner 失败");
+};
 
-  if (!response.ok) {
-    const errorMessage =
-      (typeof payload?.error === "string" && payload.error) ||
-      (typeof payload?.message === "string" && payload.message) ||
-      "发布到 Runner 失败";
+export const publishWorkflowToRunner = async (
+  nodes: WorkflowFlowNode[],
+  edges: Edge[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+  options: PublishWorkflowOptions,
+): Promise<RunnerWorkflowRegistration> =>
+  syncWorkflowToRunner(nodes, edges, panelByNodeId, {
+    ...options,
+    workflowStatus: "published",
+  });
 
-    throw new RunnerRequestError(errorMessage, response.status);
+export const executeWorkflowRun = async (
+  workflowId: string,
+  request: WorkflowExecutionRequest,
+): Promise<WorkflowExecutionAccepted> => {
+  let response: Response;
+
+  try {
+    response = await sendRequest(`${RUNNER_BASE_URL}/workflows/${encodeURIComponent(workflowId)}/runs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
 
-  return payload as unknown as RunnerWorkflowRegistration;
+  return parseRunnerResponse<WorkflowExecutionAccepted>(response, "启动工作流运行失败");
+};
+
+export const fetchWorkflowRunSummary = async (runId: string): Promise<WorkflowRunSummary> => {
+  let response: Response;
+
+  try {
+    response = await sendRequest(`${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}`);
+  } catch {
+    throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
+  }
+
+  return parseRunnerResponse<WorkflowRunSummary>(response, "获取运行状态失败");
 };
