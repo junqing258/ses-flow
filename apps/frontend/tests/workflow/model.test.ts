@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   WORKFLOW_PALETTE_CATEGORIES,
   createWorkflowNodeDraft,
-  createWorkflowNodes,
 } from "@/features/workflow/model";
 
 describe("createWorkflowNodeDraft", () => {
@@ -14,7 +13,7 @@ describe("createWorkflowNodeDraft", () => {
 
     expect(taskPaletteItem).toBeDefined();
 
-    const { node } = createWorkflowNodeDraft(taskPaletteItem!, { x: 120, y: 240 }, createWorkflowNodes());
+    const { node } = createWorkflowNodeDraft(taskPaletteItem!, { x: 120, y: 240 }, []);
 
     expect(node.id).toBe("task");
     expect(node.data.nodeKey).toBe("task");

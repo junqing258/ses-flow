@@ -261,6 +261,7 @@ import { createWorkflowExportDocument } from "@/features/workflow/export";
 import { createWorkflowEditorStateFromRunnerDefinition } from "@/features/workflow/import";
 import {
   createInitialWorkflowEditorState,
+  createNewWorkflowEditorState,
   createPersistedWorkflowDocument,
   createWorkflowEditorStateFromDocument,
   type WorkflowEditorState,
@@ -403,7 +404,7 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
 };
 
 const resetToInitialWorkflow = () => {
-  const nextState = createInitialWorkflowEditorState();
+  const nextState = createNewWorkflowEditorState();
 
   workflowMeta.id = DEFAULT_WORKFLOW_ID;
   workflowMeta.name = DEFAULT_WORKFLOW_ID;

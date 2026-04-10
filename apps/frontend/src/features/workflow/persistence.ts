@@ -1,11 +1,13 @@
 import type { Edge } from "@vue-flow/core";
 
 import {
+  WORKFLOW_PALETTE_CATEGORIES,
   createWorkflowEdges,
-  createWorkflowNodes,
+  createWorkflowNodeDraft,
   createWorkflowPanels,
   type WorkflowFlowNode,
   type WorkflowNodePanel,
+  type WorkflowPaletteItem,
   type WorkflowTabId,
 } from "./model";
 
@@ -125,13 +127,60 @@ const clonePanels = (panelByNodeId: Record<string, WorkflowNodePanel>): Record<s
     ]),
   ) as Record<string, WorkflowNodePanel>;
 
-export const createInitialWorkflowEditorState = (): WorkflowEditorState => ({
-  activeTab: "base",
-  edges: createWorkflowEdges(),
-  nodes: createWorkflowNodes(),
-  panelByNodeId: createWorkflowPanels(),
-  selectedNodeId: "fetch_order",
-});
+const findPaletteItem = (paletteItemId: string): WorkflowPaletteItem => {
+  const paletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).find((item) => item.id === paletteItemId);
+
+  if (!paletteItem) {
+    throw new Error(`Workflow palette item not found: ${paletteItemId}`);
+  }
+
+  return paletteItem;
+};
+
+export const createNewWorkflowEditorState = (): WorkflowEditorState => {
+  const startDraft = createWorkflowNodeDraft(findPaletteItem("palette-start"), { x: 120, y: 260 }, []);
+  const endDraft = createWorkflowNodeDraft(findPaletteItem("palette-end"), { x: 520, y: 260 }, [startDraft.node]);
+  const startNode: WorkflowFlowNode = {
+    ...startDraft.node,
+    data: {
+      ...startDraft.node.data,
+      active: true,
+    },
+  };
+  const endNode: WorkflowFlowNode = {
+    ...endDraft.node,
+    data: {
+      ...endDraft.node.data,
+      active: false,
+    },
+  };
+
+  return {
+    activeTab: "base",
+    edges: [
+      {
+        id: "edge:start:out->end:in",
+        source: startNode.id,
+        sourceHandle: "out",
+        target: endNode.id,
+        targetHandle: "in",
+        type: "smoothstep",
+        style: {
+          stroke: "#CBD5E1",
+          strokeWidth: 2,
+        },
+      },
+    ],
+    nodes: [startNode, endNode],
+    panelByNodeId: {
+      [startNode.id]: startDraft.panel,
+      [endNode.id]: endDraft.panel,
+    },
+    selectedNodeId: startNode.id,
+  };
+};
+
+export const createInitialWorkflowEditorState = (): WorkflowEditorState => createNewWorkflowEditorState();
 
 export const createPersistedWorkflowDocument = (
   nodes: WorkflowFlowNode[],
