@@ -6,6 +6,7 @@ import {
   readPersistedAccessToken,
   resolveAuthStorage,
 } from "@/lib/auth-storage";
+import { request as sendRequest } from "@/lib/request";
 import type {
   AuthDialogMode,
   AuthPayload,
@@ -107,7 +108,7 @@ const request = async <T>(path: string, init: RequestInit = {}) => {
 
   let response: Response;
   try {
-    response = await fetch(`${AUTH_BASE_URL}${path}`, {
+    response = await sendRequest(`${AUTH_BASE_URL}${path}`, {
       ...init,
       headers,
     });

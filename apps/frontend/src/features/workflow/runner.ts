@@ -1,5 +1,7 @@
 import type { Edge } from "@vue-flow/core";
 
+import { request as sendRequest } from "@/lib/request";
+
 import type { WorkflowFlowNode, WorkflowNodePanel, WorkflowTabId } from "./model";
 
 type WorkflowStatus = "draft" | "published";
@@ -468,7 +470,7 @@ export const publishWorkflowToRunner = async (
 
   let response: Response;
   try {
-    response = await fetch(`${RUNNER_BASE_URL}/workflows`, {
+    response = await sendRequest(`${RUNNER_BASE_URL}/workflows`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
