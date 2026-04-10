@@ -174,6 +174,7 @@ impl WorkflowServer {
         Ok(WorkflowDetailRecord {
             summary: self.to_workflow_summary(stored_workflow.clone())?,
             document: stored_workflow.editor_document,
+            workflow: stored_workflow.definition,
         })
     }
 

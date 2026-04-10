@@ -1,5 +1,6 @@
 import { request as sendRequest } from "@/lib/request";
 
+import type { RunnerWorkflowDefinition } from "./runner";
 import type { PersistedWorkflowDocument } from "./persistence";
 
 export interface WorkflowSummary {
@@ -15,6 +16,7 @@ export interface WorkflowSummary {
 
 export interface WorkflowDetail extends WorkflowSummary {
   document: PersistedWorkflowDocument | null;
+  workflow: RunnerWorkflowDefinition;
 }
 
 const WORKFLOW_API_BASE_URL = "/runner-api/workflows";

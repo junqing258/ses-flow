@@ -258,6 +258,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchWorkflowDetail } from "@/features/workflow/api";
 import { createWorkflowExportDocument } from "@/features/workflow/export";
+import { createWorkflowEditorStateFromRunnerDefinition } from "@/features/workflow/import";
 import {
   createInitialWorkflowEditorState,
   createPersistedWorkflowDocument,
@@ -416,12 +417,9 @@ const loadWorkflowDetail = async (workflowId: string) => {
 
   try {
     const workflow = await fetchWorkflowDetail(workflowId);
-
-    if (!workflow.document) {
-      throw new Error("该工作流缺少编辑器文档，暂时无法在可视化编辑器中还原");
-    }
-
-    const state = createWorkflowEditorStateFromDocument(workflow.document);
+    const state = workflow.document
+      ? createWorkflowEditorStateFromDocument(workflow.document)
+      : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow);
 
     workflowMeta.id = workflow.workflowId;
     workflowMeta.name = workflow.name;
@@ -846,6 +844,7 @@ const handlePublish = async () => {
     toast.success(`已发布到 Runner：${publishedWorkflowId}`);
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "发布到 Runner 失败");
+    console.error(error);
   } finally {
     isPublishing.value = false;
   }
