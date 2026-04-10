@@ -8,18 +8,9 @@ importers:
 
   .:
     devDependencies:
-      '@types/node':
-        specifier: ^20.11.0
-        version: 20.19.37
-      prettier:
-        specifier: ^3.2.0
-        version: 3.8.1
-      turbo:
-        specifier: ^1.13.4
-        version: 1.13.4
-      typescript:
-        specifier: ^5.3.0
-        version: 5.9.3
+      '@moonrepo/cli':
+        specifier: 2.1.4
+        version: 2.1.4
 
   apps/backend:
     dependencies:
@@ -232,8 +223,6 @@ importers:
       vue-tsc:
         specifier: ^3.0.4
         version: 3.2.6(typescript@5.9.3)
-
-  apps/runner: {}
 
   packages/scheme: {}
 
@@ -819,6 +808,44 @@ packages:
   '@lukeed/ms@2.0.2':
     resolution: {integrity: sha512-9I2Zn6+NJLfaGoz9jN3lpwDgAYvfGeNYdbAIjJOqzs4Tpc+VU3Jqq4IofSUBKajiDS8k9fZIg18/z13mpk1bsA==}
     engines: {node: '>=8'}
+
+  '@moonrepo/cli@2.1.4':
+    resolution: {integrity: sha512-u8PZQIT/k9h/EIQEjEcmtd4vQBr7KqnLaG+uFqhiZTIe++RTtgMlH8GYMoqLwg2VHGIxV0OURMGt9x8Qjm9/EQ==}
+    hasBin: true
+
+  '@moonrepo/core-linux-arm64-gnu@2.1.4':
+    resolution: {integrity: sha512-pEp0GMHOT5hJrfL4q3zecvbUJ0xYWVqNzWFPFJWTZxbhTWYCbuOTGTPCpT21XY9URIJHUGKc+m8PXMc7DrRYow==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@moonrepo/core-linux-arm64-musl@2.1.4':
+    resolution: {integrity: sha512-U42RJD2io986lQQ+uUmWElAIMSWfuoyXpao2aHuMn/ACxOi5xPTozPWkoLb1v53w+irCbsD8WVovJ4wY+vB/VQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@moonrepo/core-linux-x64-gnu@2.1.4':
+    resolution: {integrity: sha512-NvcevuDLzMeGFAYqNVNHZJ5C2hx5GJerUW5Snwi+28/KcPpNq2z31W5c8EivUzsc1iopV6Oy85FEohNzci9sPw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@moonrepo/core-linux-x64-musl@2.1.4':
+    resolution: {integrity: sha512-f00vupGU1pUie/ycuj9v6iRL2cP318pS2dxBH4iI6M83xVw3BL2FxIoXklk5Ji3P7EJhIG48j7dKVID6VdrNVA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@moonrepo/core-macos-arm64@2.1.4':
+    resolution: {integrity: sha512-4bdSgstioFiBKx26uu6U1G0n5Sk8JpkpxfVj3zsNITFfT3fdS5oBMU8Z18uYIf4v1l3poIQ7r0T2R1MdMOkJyw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@moonrepo/core-windows-x64-msvc@2.1.4':
+    resolution: {integrity: sha512-KhkxZ1aJVeRsrOOrDlE6oB5gDny0ETOQdIoDFBFR6hDEGZ4OFHrRBScLjwK7RteQGCV1YKo47uIiIbmIN1wMvg==}
+    cpu: [x64]
+    os: [win32]
 
   '@napi-rs/wasm-runtime@0.2.12':
     resolution: {integrity: sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ==}
@@ -3361,40 +3388,6 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  turbo-darwin-64@1.13.4:
-    resolution: {integrity: sha512-A0eKd73R7CGnRinTiS7txkMElg+R5rKFp9HV7baDiEL4xTG1FIg/56Vm7A5RVgg8UNgG2qNnrfatJtb+dRmNdw==}
-    cpu: [x64]
-    os: [darwin]
-
-  turbo-darwin-arm64@1.13.4:
-    resolution: {integrity: sha512-eG769Q0NF6/Vyjsr3mKCnkG/eW6dKMBZk6dxWOdrHfrg6QgfkBUk0WUUujzdtVPiUIvsh4l46vQrNVd9EOtbyA==}
-    cpu: [arm64]
-    os: [darwin]
-
-  turbo-linux-64@1.13.4:
-    resolution: {integrity: sha512-Bq0JphDeNw3XEi+Xb/e4xoKhs1DHN7OoLVUbTIQz+gazYjigVZvtwCvgrZI7eW9Xo1eOXM2zw2u1DGLLUfmGkQ==}
-    cpu: [x64]
-    os: [linux]
-
-  turbo-linux-arm64@1.13.4:
-    resolution: {integrity: sha512-BJcXw1DDiHO/okYbaNdcWN6szjXyHWx9d460v6fCHY65G8CyqGU3y2uUTPK89o8lq/b2C8NK0yZD+Vp0f9VoIg==}
-    cpu: [arm64]
-    os: [linux]
-
-  turbo-windows-64@1.13.4:
-    resolution: {integrity: sha512-OFFhXHOFLN7A78vD/dlVuuSSVEB3s9ZBj18Tm1hk3aW1HTWTuAw0ReN6ZNlVObZUHvGy8d57OAGGxf2bT3etQw==}
-    cpu: [x64]
-    os: [win32]
-
-  turbo-windows-arm64@1.13.4:
-    resolution: {integrity: sha512-u5A+VOKHswJJmJ8o8rcilBfU5U3Y1TTAfP9wX8bFh8teYF1ghP0EhtMRLjhtp6RPa+XCxHHVA2CiC3gbh5eg5g==}
-    cpu: [arm64]
-    os: [win32]
-
-  turbo@1.13.4:
-    resolution: {integrity: sha512-1q7+9UJABuBAHrcC4Sxp5lOqYS5mvxRrwa33wpIyM18hlOCpRD/fTJNxZ0vhbMcJmz15o9kkVm743mPn7p6jpQ==}
-    hasBin: true
-
   tw-animate-css@1.4.0:
     resolution: {integrity: sha512-7bziOlRqH0hJx80h/3mbicLW7o8qLsH5+RaLR2t+OHM3D0JlWGODQKQ4cxbK7WlvmUxpcj6Kgu6EKqjrGFe3QQ==}
 
@@ -4391,6 +4384,35 @@ snapshots:
   '@lukeed/csprng@1.1.0': {}
 
   '@lukeed/ms@2.0.2': {}
+
+  '@moonrepo/cli@2.1.4':
+    dependencies:
+      detect-libc: 2.1.2
+    optionalDependencies:
+      '@moonrepo/core-linux-arm64-gnu': 2.1.4
+      '@moonrepo/core-linux-arm64-musl': 2.1.4
+      '@moonrepo/core-linux-x64-gnu': 2.1.4
+      '@moonrepo/core-linux-x64-musl': 2.1.4
+      '@moonrepo/core-macos-arm64': 2.1.4
+      '@moonrepo/core-windows-x64-msvc': 2.1.4
+
+  '@moonrepo/core-linux-arm64-gnu@2.1.4':
+    optional: true
+
+  '@moonrepo/core-linux-arm64-musl@2.1.4':
+    optional: true
+
+  '@moonrepo/core-linux-x64-gnu@2.1.4':
+    optional: true
+
+  '@moonrepo/core-linux-x64-musl@2.1.4':
+    optional: true
+
+  '@moonrepo/core-macos-arm64@2.1.4':
+    optional: true
+
+  '@moonrepo/core-windows-x64-msvc@2.1.4':
+    optional: true
 
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
@@ -7049,33 +7071,6 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
     optional: true
-
-  turbo-darwin-64@1.13.4:
-    optional: true
-
-  turbo-darwin-arm64@1.13.4:
-    optional: true
-
-  turbo-linux-64@1.13.4:
-    optional: true
-
-  turbo-linux-arm64@1.13.4:
-    optional: true
-
-  turbo-windows-64@1.13.4:
-    optional: true
-
-  turbo-windows-arm64@1.13.4:
-    optional: true
-
-  turbo@1.13.4:
-    optionalDependencies:
-      turbo-darwin-64: 1.13.4
-      turbo-darwin-arm64: 1.13.4
-      turbo-linux-64: 1.13.4
-      turbo-linux-arm64: 1.13.4
-      turbo-windows-64: 1.13.4
-      turbo-windows-arm64: 1.13.4
 
   tw-animate-css@1.4.0: {}
 

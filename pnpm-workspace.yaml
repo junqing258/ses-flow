@@ -2,4 +2,3 @@ packages:
   - packages/*
   - apps/backend
   - apps/frontend
-  - apps/runner

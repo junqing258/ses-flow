@@ -3,18 +3,15 @@
   "private": true,
   "packageManager": "pnpm@10.21.0",
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "start": "turbo start",
-    "test": "turbo test",
-    "lint": "turbo lint",
-    "format": "turbo format",
-    "format:check": "turbo format:check"
+    "dev": "moon run :dev",
+    "build": "moon run :build",
+    "start": "moon run :start",
+    "test": "moon run :test",
+    "lint": "moon run :lint",
+    "format": "moon run :format",
+    "format:check": "moon run :formatCheck"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "prettier": "^3.2.0",
-    "typescript": "^5.3.0",
-    "turbo": "^1.13.4"
+    "@moonrepo/cli": "2.1.4"
   }
 }

@@ -18,6 +18,16 @@
 ## Commands
 
 ```bash
+pnpm run dev
+pnpm run build
+pnpm run test
+
+# or run only the runner tasks
+pnpm exec moon run runner:dev
+pnpm exec moon run runner:build
+pnpm exec moon run runner:test
+
+# direct cargo commands still work
 cargo run -- --host 127.0.0.1 --port 3002
 cargo test
 ```

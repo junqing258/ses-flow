@@ -1,0 +1,38 @@
+tasks:
+  dev:
+    command: 'cargo run -- --host 127.0.0.1 --port 3002'
+    preset: 'server'
+    inputs:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**/*'
+      - 'examples/**/*'
+
+  build:
+    command: 'cargo build --release'
+    inputs:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**/*'
+      - 'examples/**/*'
+    outputs:
+      - 'target/release/runner'
+
+  start:
+    command: 'cargo run --release -- --host 127.0.0.1 --port 3002'
+    deps:
+      - '~:build'
+    preset: 'server'
+    inputs:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**/*'
+      - 'examples/**/*'
+
+  test:
+    command: 'cargo test'
+    inputs:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**/*'
+      - 'examples/**/*'
