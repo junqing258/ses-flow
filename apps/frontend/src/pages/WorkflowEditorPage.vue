@@ -517,6 +517,7 @@ import {
   WORKFLOW_PALETTE_CATEGORIES,
   WORKFLOW_TAB_LABELS,
   createWorkflowNodeDraft,
+  type WorkflowExecutionStatus,
   type WorkflowFlowNode,
   type WorkflowIconKey,
   type WorkflowNodeData,
@@ -583,6 +584,7 @@ const canvasTools = [
 
 const EMPTY_NODE_DATA: WorkflowNodeData = {
   accent: "#3B82F6",
+  executionStatus: undefined,
   icon: "database",
   kind: "fetch",
   nodeKey: "unselected",
@@ -714,6 +716,33 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   runDraft.value = { ...state.runDraft };
   historyStack.value = [];
   syncSelectedNodeData();
+
+  if (activeRunSummary.value && activeRunWorkflowId.value === workflowMeta.id) {
+    setNodeExecutionStatuses(activeRunSummary.value);
+  }
+};
+
+const setNodeExecutionStatuses = (summary: WorkflowRunSummary | null) => {
+  const statusByNodeId = new Map<string, WorkflowExecutionStatus>();
+
+  if (summary) {
+    summary.timeline.forEach((item) => {
+      statusByNodeId.set(item.nodeId, item.status as WorkflowExecutionStatus);
+    });
+
+    if (summary.status === "running" && summary.currentNodeId) {
+      statusByNodeId.set(summary.currentNodeId, "running");
+    }
+  }
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      executionStatus: node.data.kind === "branch-label" ? undefined : statusByNodeId.get(node.id),
+    },
+  })) as WorkflowFlowNode[];
+  syncSelectedNodeData();
 };
 
 const resetRunSession = () => {
@@ -722,6 +751,7 @@ const resetRunSession = () => {
   activeRunId.value = "";
   activeRunWorkflowId.value = "";
   runErrorMessage.value = "";
+  setNodeExecutionStatuses(null);
 };
 
 const resetToInitialWorkflow = () => {
@@ -791,6 +821,7 @@ watch(
 const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
   active: data.active,
   accent: data.accent,
+  executionStatus: data.executionStatus,
   icon: data.icon,
   kind: data.kind,
   nodeKey: data.nodeKey,
@@ -1230,6 +1261,7 @@ const refreshRunSummary = async () => {
 
     activeRunSummary.value = summary;
     runErrorMessage.value = "";
+    setNodeExecutionStatuses(summary);
     selectRunFocusedNode(summary);
 
     if (summary.status === "running") {
@@ -1298,6 +1330,7 @@ const handleRunWorkflow = async () => {
       workflowKey: registration.workflowKey,
       workflowVersion: registration.workflowVersion,
     };
+    setNodeExecutionStatuses(activeRunSummary.value);
 
     if (persistedWorkflowId.value !== registration.workflowId) {
       void router.replace({

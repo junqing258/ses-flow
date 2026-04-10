@@ -83,6 +83,7 @@ const cloneRunDraft = (runDraft?: WorkflowRunDraft): WorkflowRunDraft => {
 const cloneNodeData = (data: WorkflowFlowNode["data"]): WorkflowFlowNode["data"] => ({
   active: data.active,
   accent: data.accent,
+  executionStatus: data.executionStatus,
   icon: data.icon,
   kind: data.kind,
   nodeKey: data.nodeKey,

@@ -51,10 +51,12 @@ export type WorkflowNodeKind =
 export type WorkflowNodeType = "terminal" | "workflow-card" | "branch-chip";
 export type WorkflowTabId = "base" | "mapping" | "retry" | "error";
 export type WorkflowFieldType = "input" | "readonly" | "select" | "textarea";
+export type WorkflowExecutionStatus = "running" | "success" | "waiting" | "failed" | "skipped";
 
 export interface WorkflowNodeData {
   active?: boolean;
   accent: string;
+  executionStatus?: WorkflowExecutionStatus;
   icon: WorkflowIconKey;
   kind: WorkflowNodeKind;
   nodeKey: string;
