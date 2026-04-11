@@ -1168,6 +1168,14 @@ const handleTabChange = (value: string | number) => {
 };
 
 const handlePageModeChange = (mode: WorkflowPageMode) => {
+  if (mode === "edit") {
+    resetRunSession();
+
+    if (getRouteRunId(route.query.runId)) {
+      void clearRouteRunId(workflowMeta.id);
+    }
+  }
+
   pageMode.value = mode;
 };
 
