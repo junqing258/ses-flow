@@ -127,39 +127,38 @@ impl WorkflowRunStore for PostgresRunStore {
         let workflow_version = summary.workflow_version as i32;
         let current_node_id = summary.current_node_id.clone();
 
-        tokio::spawn(async move {
-            let result = sqlx::query(
-                r#"
-                INSERT INTO workflow_runs (
-                    run_id, workflow_key, workflow_version, status, current_node_id,
-                    state, timeline, last_signal
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (run_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    current_node_id = EXCLUDED.current_node_id,
-                    state = EXCLUDED.state,
-                    timeline = EXCLUDED.timeline,
-                    last_signal = EXCLUDED.last_signal,
-                    updated_at = NOW()
-                "#,
-            )
-            .bind(&run_id)
-            .bind(&workflow_key)
-            .bind(workflow_version)
-            .bind(&status_str)
-            .bind(&current_node_id)
-            .bind(state_value)
-            .bind(timeline_value)
-            .bind(last_signal_value)
-            .execute(&pool)
-            .await;
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                sqlx::query(
+                    r#"
+                    INSERT INTO workflow_runs (
+                        run_id, workflow_key, workflow_version, status, current_node_id,
+                        state, timeline, last_signal
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        current_node_id = EXCLUDED.current_node_id,
+                        state = EXCLUDED.state,
+                        timeline = EXCLUDED.timeline,
+                        last_signal = EXCLUDED.last_signal,
+                        updated_at = NOW()
+                    "#,
+                )
+                .bind(&run_id)
+                .bind(&workflow_key)
+                .bind(workflow_version)
+                .bind(&status_str)
+                .bind(&current_node_id)
+                .bind(state_value)
+                .bind(timeline_value)
+                .bind(last_signal_value)
+                .execute(&pool)
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to save summary: {}", e)))?;
 
-            if let Err(e) = result {
-                tracing::error!(error = %e, "Failed to save summary to PostgreSQL");
-            }
-        });
-
-        Ok(())
+                Ok(())
+            })
+        })
     }
 
     fn save_snapshot(&self, snapshot: WorkflowRunSnapshot) -> Result<(), RunnerError> {
@@ -182,45 +181,44 @@ impl WorkflowRunStore for PostgresRunStore {
         let workflow_version = snapshot.workflow_version as i32;
         let current_node_id = snapshot.current_node_id.clone();
 
-        tokio::spawn(async move {
-            let result = sqlx::query(
-                r#"
-                INSERT INTO workflow_snapshots (
-                    run_id, workflow_key, workflow_version, current_node_id,
-                    trigger, last_input, state, timeline, last_signal, env
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                ON CONFLICT (run_id) DO UPDATE SET
-                    workflow_key = EXCLUDED.workflow_key,
-                    workflow_version = EXCLUDED.workflow_version,
-                    current_node_id = EXCLUDED.current_node_id,
-                    trigger = EXCLUDED.trigger,
-                    last_input = EXCLUDED.last_input,
-                    state = EXCLUDED.state,
-                    timeline = EXCLUDED.timeline,
-                    last_signal = EXCLUDED.last_signal,
-                    env = EXCLUDED.env,
-                    updated_at = NOW()
-                "#,
-            )
-            .bind(&run_id)
-            .bind(&workflow_key)
-            .bind(workflow_version)
-            .bind(&current_node_id)
-            .bind(trigger_value)
-            .bind(last_input_value)
-            .bind(state_value)
-            .bind(timeline_value)
-            .bind(last_signal_value)
-            .bind(env_value)
-            .execute(&pool)
-            .await;
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                sqlx::query(
+                    r#"
+                    INSERT INTO workflow_snapshots (
+                        run_id, workflow_key, workflow_version, current_node_id,
+                        trigger, last_input, state, timeline, last_signal, env
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        workflow_key = EXCLUDED.workflow_key,
+                        workflow_version = EXCLUDED.workflow_version,
+                        current_node_id = EXCLUDED.current_node_id,
+                        trigger = EXCLUDED.trigger,
+                        last_input = EXCLUDED.last_input,
+                        state = EXCLUDED.state,
+                        timeline = EXCLUDED.timeline,
+                        last_signal = EXCLUDED.last_signal,
+                        env = EXCLUDED.env,
+                        updated_at = NOW()
+                    "#,
+                )
+                .bind(&run_id)
+                .bind(&workflow_key)
+                .bind(workflow_version)
+                .bind(&current_node_id)
+                .bind(trigger_value)
+                .bind(last_input_value)
+                .bind(state_value)
+                .bind(timeline_value)
+                .bind(last_signal_value)
+                .bind(env_value)
+                .execute(&pool)
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to save snapshot: {}", e)))?;
 
-            if let Err(e) = result {
-                tracing::error!(error = %e, "Failed to save snapshot to PostgreSQL");
-            }
-        });
-
-        Ok(())
+                Ok(())
+            })
+        })
     }
 
     fn load_snapshot(&self, run_id: &str) -> Result<Option<WorkflowRunSnapshot>, RunnerError> {
@@ -507,55 +505,50 @@ impl WorkflowRunStore for PostgresRunStore {
         let workflow_version = summary.workflow_version as i32;
         let current_node_id = summary.current_node_id.clone();
 
-        tokio::spawn(async move {
-            let result = sqlx::query(
-                r#"
-                INSERT INTO workflow_runs (
-                    run_id, workflow_key, workflow_version, status, current_node_id,
-                    state, timeline, last_signal
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (run_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    current_node_id = EXCLUDED.current_node_id,
-                    state = EXCLUDED.state,
-                    timeline = EXCLUDED.timeline,
-                    last_signal = EXCLUDED.last_signal,
-                    updated_at = NOW()
-                "#,
-            )
-            .bind(&run_id)
-            .bind(&workflow_key)
-            .bind(workflow_version)
-            .bind(&status_str)
-            .bind(&current_node_id)
-            .bind(state_value)
-            .bind(timeline_value)
-            .bind(last_signal_value)
-            .execute(&pool)
-            .await;
-
-            if let Err(e) = result {
-                tracing::error!(error = %e, "Failed to update summary in PostgreSQL");
-            }
-
-            // Remove snapshot if workflow is completed or failed
-            if is_completed {
-                let delete_result = sqlx::query(
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                sqlx::query(
                     r#"
-                    DELETE FROM workflow_snapshots WHERE run_id = $1
+                    INSERT INTO workflow_runs (
+                        run_id, workflow_key, workflow_version, status, current_node_id,
+                        state, timeline, last_signal
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        current_node_id = EXCLUDED.current_node_id,
+                        state = EXCLUDED.state,
+                        timeline = EXCLUDED.timeline,
+                        last_signal = EXCLUDED.last_signal,
+                        updated_at = NOW()
                     "#,
                 )
                 .bind(&run_id)
+                .bind(&workflow_key)
+                .bind(workflow_version)
+                .bind(&status_str)
+                .bind(&current_node_id)
+                .bind(state_value)
+                .bind(timeline_value)
+                .bind(last_signal_value)
                 .execute(&pool)
-                .await;
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to update summary: {}", e)))?;
 
-                if let Err(e) = delete_result {
-                    tracing::error!(error = %e, "Failed to delete snapshot from PostgreSQL");
+                if is_completed {
+                    sqlx::query(
+                        r#"
+                        DELETE FROM workflow_snapshots WHERE run_id = $1
+                        "#,
+                    )
+                    .bind(&run_id)
+                    .execute(&pool)
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to delete snapshot: {}", e)))?;
                 }
-            }
-        });
 
-        Ok(())
+                Ok(())
+            })
+        })
     }
 }
 

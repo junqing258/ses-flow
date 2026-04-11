@@ -140,6 +140,16 @@ fn resumes_waiting_callback_to_completion() {
     assert_eq!(
         resumed
             .timeline
+            .iter()
+            .rev()
+            .find(|record| record.node_id == "wait_dispatch_callback")
+            .expect("resumed wait node should exist in timeline")
+            .status,
+        crate::runtime::ExecutionStatus::Success
+    );
+    assert_eq!(
+        resumed
+            .timeline
             .last()
             .expect("timeline should not be empty")
             .output,
@@ -222,6 +232,16 @@ fn resumes_task_branch_when_event_and_task_id_match() {
 
     assert!(matches!(resumed.status, WorkflowRunStatus::Completed));
     assert_eq!(resumed.current_node_id.as_deref(), Some("end_1"));
+    assert_eq!(
+        resumed
+            .timeline
+            .iter()
+            .rev()
+            .find(|record| record.node_id == "manual_review_task")
+            .expect("resumed task node should exist in timeline")
+            .status,
+        crate::runtime::ExecutionStatus::Success
+    );
 }
 
 #[test]

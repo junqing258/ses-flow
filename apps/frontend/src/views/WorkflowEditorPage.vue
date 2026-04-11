@@ -994,12 +994,11 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   nodes.value = state.nodes;
   edges.value = state.edges;
   panelByNodeId.value = state.panelByNodeId;
-  selectedNodeId.value = state.selectedNodeId;
   activeTab.value = state.activeTab;
   pageMode.value = state.pageMode;
   runDraft.value = { ...state.runDraft };
   historyStack.value = [];
-  syncSelectedNodeData();
+  setSelectedNode(state.selectedNodeId);
 
   if (activeRunSummary.value && activeRunWorkflowId.value === workflowMeta.id) {
     setNodeExecutionStatuses(activeRunSummary.value);
@@ -1350,6 +1349,7 @@ const setSelectedNode = (nodeId: string) => {
   selectedNodeId.value = nodeId;
   nodes.value = nodes.value.map((node) => ({
     ...node,
+    selected: node.id === nodeId,
     data: {
       ...node.data,
       active: node.id === nodeId,

@@ -147,6 +147,16 @@ impl WorkflowEngine {
         self.validate_resume_input(waiting_node, &snapshot, &resume_input)?;
         let outgoing = definition.transitions_from(&waiting_node.id);
         let next = self.resolve_transition(&outgoing, None)?;
+        let mut timeline = snapshot.timeline.clone();
+        timeline.push(NodeExecutionRecord {
+            node_id: waiting_node.id.clone(),
+            node_type: waiting_node.node_type,
+            status: ExecutionStatus::Success,
+            output: resume_input.clone(),
+            state_patch: Value::Null,
+            branch_key: None,
+            logs: Vec::new(),
+        });
 
         self.execute_from(
             definition,
@@ -154,7 +164,7 @@ impl WorkflowEngine {
             snapshot.trigger,
             snapshot.env,
             snapshot.state,
-            snapshot.timeline,
+            timeline,
             next.to.clone(),
             resume_input,
         )
