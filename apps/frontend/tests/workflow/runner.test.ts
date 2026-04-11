@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { Position } from "@vue-flow/core";
 
 import { createWorkflowEdges, createWorkflowPanels, type WorkflowFlowNode } from "@/features/workflow/model";
-import { buildRunnerWorkflowDefinition } from "@/features/workflow/runner";
+import {
+  buildRunnerWorkflowDefinition,
+  shouldPollWorkflowRunSummary,
+} from "@/features/workflow/runner";
 
 const createExampleWorkflowNodes = (): WorkflowFlowNode[] => [
   {
@@ -243,5 +246,18 @@ describe("buildRunnerWorkflowDefinition", () => {
       { from: "assign_task", to: "end_left" },
       { from: "wait_callback", to: "end_right" },
     ]);
+  });
+});
+
+describe("shouldPollWorkflowRunSummary", () => {
+  it("keeps polling while a run is active or waiting for resume", () => {
+    expect(shouldPollWorkflowRunSummary("running")).toBe(true);
+    expect(shouldPollWorkflowRunSummary("waiting")).toBe(true);
+  });
+
+  it("stops polling after a run reaches a terminal state", () => {
+    expect(shouldPollWorkflowRunSummary("completed")).toBe(false);
+    expect(shouldPollWorkflowRunSummary("failed")).toBe(false);
+    expect(shouldPollWorkflowRunSummary("terminated")).toBe(false);
   });
 });

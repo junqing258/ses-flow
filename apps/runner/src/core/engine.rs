@@ -541,18 +541,6 @@ impl WorkflowEngine {
                 logs: result.logs.clone(),
             });
 
-            self.emit_summary(&WorkflowRunSummary {
-                run_id: run_id.clone(),
-                workflow_key: workflow_key.clone(),
-                workflow_version,
-                status: WorkflowRunStatus::Running,
-                current_node_id: Some(node.id.clone()),
-                state: state.clone(),
-                timeline: timeline.clone(),
-                last_signal: last_signal.clone(),
-                resume_state: None,
-            });
-
             if self.controller.should_terminate(&run_id) {
                 let summary = self.terminated_summary(
                     &run_id,
@@ -670,6 +658,18 @@ impl WorkflowEngine {
             );
             current_node_id = next.to.clone();
             current_input = result.output;
+
+            self.emit_summary(&WorkflowRunSummary {
+                run_id: run_id.clone(),
+                workflow_key: workflow_key.clone(),
+                workflow_version,
+                status: WorkflowRunStatus::Running,
+                current_node_id: Some(current_node_id.clone()),
+                state: state.clone(),
+                timeline: timeline.clone(),
+                last_signal: last_signal.clone(),
+                resume_state: None,
+            });
         }
 
         error!(

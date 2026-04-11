@@ -16,7 +16,6 @@ export interface WorkflowExportFieldMap {
 
 export interface WorkflowExportNode {
   config: Partial<Record<WorkflowTabId, WorkflowExportFieldMap>>;
-  executionStatus?: WorkflowFlowNode["data"]["executionStatus"];
   id: string;
   kind: WorkflowFlowNode["data"]["kind"];
   position: WorkflowFlowNode["position"];
@@ -116,7 +115,6 @@ export const createWorkflowExportDocument = (
     .filter((node) => node.data.kind !== "branch-label")
     .map<WorkflowExportNode>((node) => ({
       config: serializePanelConfig(panelByNodeId[node.id]),
-      executionStatus: node.data.executionStatus,
       id: node.id,
       kind: node.data.kind,
       position: node.position,

@@ -58,4 +58,39 @@ describe("workflow persistence", () => {
     expect(restored.runDraft.env).toContain('"tenantId": "tenant-a"');
     expect(restored.runDraft.env).toContain('"warehouseId": "WHS-SH-01"');
   });
+
+  it("does not persist runtime execution status into workflow documents", () => {
+    const state = createNewWorkflowEditorState();
+
+    state.nodes[0]!.data.executionStatus = "success";
+
+    const document = createPersistedWorkflowDocument(state.nodes, state.edges, state.panelByNodeId, {
+      activeTab: state.activeTab,
+      selectedNodeId: state.selectedNodeId,
+      status: "draft",
+      version: "v3",
+      workflowId: "sorting-main-flow",
+      workflowName: "sorting-main-flow",
+    });
+
+    expect(document.graph.nodes[0]?.data.executionStatus).toBeUndefined();
+  });
+
+  it("clears historical execution status when restoring older documents", () => {
+    const state = createNewWorkflowEditorState();
+    const document = createPersistedWorkflowDocument(state.nodes, state.edges, state.panelByNodeId, {
+      activeTab: state.activeTab,
+      selectedNodeId: state.selectedNodeId,
+      status: "draft",
+      version: "v3",
+      workflowId: "sorting-main-flow",
+      workflowName: "sorting-main-flow",
+    });
+
+    document.graph.nodes[0]!.data.executionStatus = "success";
+
+    const restored = createWorkflowEditorStateFromDocument(document);
+
+    expect(restored.nodes[0]?.data.executionStatus).toBeUndefined();
+  });
 });

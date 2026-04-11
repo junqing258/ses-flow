@@ -745,6 +745,7 @@ import {
   executeWorkflowRun,
   fetchWorkflowRunSummary,
   publishWorkflowToRunner,
+  shouldPollWorkflowRunSummary,
   syncWorkflowToRunner,
   terminateWorkflowRun,
   type RunnerWorkflowDefinition,
@@ -1005,6 +1006,21 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   }
 };
 
+const updateNodeExecutionStatus = (
+  node: WorkflowFlowNode,
+  statusByNodeId: Map<string, WorkflowExecutionStatus>,
+): WorkflowFlowNode => {
+  const newNode = { ...node };
+  newNode.data = {
+    ...node.data,
+    executionStatus:
+      node.data.kind === "branch-label"
+        ? undefined
+        : statusByNodeId.get(node.id),
+  };
+  return newNode;
+};
+
 const setNodeExecutionStatuses = (summary: WorkflowRunSummary | null) => {
   const statusByNodeId = new Map<string, WorkflowExecutionStatus>();
 
@@ -1018,16 +1034,9 @@ const setNodeExecutionStatuses = (summary: WorkflowRunSummary | null) => {
     }
   }
 
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      executionStatus:
-        node.data.kind === "branch-label"
-          ? undefined
-          : statusByNodeId.get(node.id),
-    },
-  })) as WorkflowFlowNode[];
+  nodes.value = nodes.value.map((node) =>
+    updateNodeExecutionStatus(node, statusByNodeId),
+  );
   syncSelectedNodeData();
 };
 
@@ -1105,7 +1114,7 @@ const restoreWorkflowRunFromRoute = async (
     setNodeExecutionStatuses(summary);
     selectRunFocusedNode(summary);
 
-    if (summary.status === "running") {
+    if (shouldPollWorkflowRunSummary(summary.status)) {
       await refreshRunSummary();
       return;
     }
@@ -1689,7 +1698,7 @@ const refreshRunSummary = async () => {
     setNodeExecutionStatuses(summary);
     selectRunFocusedNode(summary);
 
-    if (summary.status === "running") {
+    if (shouldPollWorkflowRunSummary(summary.status)) {
       clearRunSummaryPolling();
       runSummaryPollTimer = window.setTimeout(() => {
         void refreshRunSummary();

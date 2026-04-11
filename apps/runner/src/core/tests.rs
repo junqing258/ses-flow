@@ -1,9 +1,36 @@
+use std::sync::{Arc, Mutex};
+
 use serde_json::json;
 
 use super::definition::WorkflowDefinition;
 use super::engine::WorkflowEngine;
-use super::runtime::{RunEnvironment, WorkflowRunStatus};
+use super::runtime::{
+    RunEnvironment, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
+};
 use crate::services::{FetchConnector, WorkflowServices};
+
+#[derive(Default)]
+struct RecordingObserver {
+    summaries: Mutex<Vec<WorkflowRunSummary>>,
+}
+
+impl RecordingObserver {
+    fn snapshot(&self) -> Vec<WorkflowRunSummary> {
+        self.summaries
+            .lock()
+            .expect("observer summaries lock should not be poisoned")
+            .clone()
+    }
+}
+
+impl WorkflowRunObserver for RecordingObserver {
+    fn on_summary(&self, summary: &WorkflowRunSummary) {
+        self.summaries
+            .lock()
+            .expect("observer summaries lock should not be poisoned")
+            .push(summary.clone());
+    }
+}
 
 struct CustomOrderConnector;
 
@@ -348,6 +375,46 @@ fn supports_if_else_false_branch_and_default_switch_branch() {
         json!(true)
     );
     assert_eq!(summary.state["subWorkflow"], serde_json::Value::Null);
+}
+
+#[test]
+fn emits_running_summary_for_the_next_node_after_switch_branch_resolution() {
+    let definition: WorkflowDefinition =
+        serde_json::from_str(include_str!("../examples/sorting-main-flow.json"))
+            .expect("example workflow should deserialize");
+    let observer = Arc::new(RecordingObserver::default());
+    let engine = WorkflowEngine::with_observer(observer.clone());
+
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "headers": { "requestId": "req-switch-focus-1" },
+                "body": { "orderNo": "SO-SWITCH-1", "bizType": "auto_sort" }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("workflow run should succeed");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Waiting));
+
+    let summaries = observer.snapshot();
+    let switch_running_summary = summaries
+        .iter()
+        .find(|item| {
+            matches!(item.status, WorkflowRunStatus::Running)
+                && item
+                    .timeline
+                    .last()
+                    .map(|record| record.node_id.as_str() == "route_switch")
+                    .unwrap_or(false)
+        })
+        .expect("running summary after switch should exist");
+
+    assert_eq!(
+        switch_running_summary.current_node_id.as_deref(),
+        Some("dispatch_rcs_action")
+    );
 }
 
 #[test]

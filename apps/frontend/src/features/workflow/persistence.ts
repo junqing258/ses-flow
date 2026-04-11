@@ -80,10 +80,17 @@ const cloneRunDraft = (runDraft?: WorkflowRunDraft): WorkflowRunDraft => {
   };
 };
 
-const cloneNodeData = (data: WorkflowFlowNode["data"]): WorkflowFlowNode["data"] => ({
+interface CloneNodeOptions {
+  includeExecutionStatus?: boolean;
+}
+
+const cloneNodeData = (
+  data: WorkflowFlowNode["data"],
+  options: CloneNodeOptions = {},
+): WorkflowFlowNode["data"] => ({
   active: data.active,
   accent: data.accent,
-  executionStatus: data.executionStatus,
+  executionStatus: options.includeExecutionStatus ? data.executionStatus : undefined,
   icon: data.icon,
   kind: data.kind,
   nodeKey: data.nodeKey,
@@ -92,9 +99,12 @@ const cloneNodeData = (data: WorkflowFlowNode["data"]): WorkflowFlowNode["data"]
   title: data.title,
 });
 
-const cloneNodes = (nodes: WorkflowFlowNode[]): WorkflowFlowNode[] =>
+const cloneNodes = (
+  nodes: WorkflowFlowNode[],
+  options: CloneNodeOptions = {},
+): WorkflowFlowNode[] =>
   nodes.map((node) => ({
-    data: cloneNodeData(node.data),
+    data: cloneNodeData(node.data, options),
     deletable: node.deletable,
     draggable: node.draggable,
     id: node.id,

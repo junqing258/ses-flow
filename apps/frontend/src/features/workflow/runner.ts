@@ -41,6 +41,9 @@ interface RunnerTransitionDefinition {
 
 export type WorkflowRunStatus = "running" | "completed" | "waiting" | "failed" | "terminated";
 
+export const shouldPollWorkflowRunSummary = (status: WorkflowRunStatus) =>
+  status === "running" || status === "waiting" || status === "terminated";
+
 export interface WorkflowExecutionRequest {
   env?: Record<string, unknown>;
   trigger?: Record<string, unknown>;
