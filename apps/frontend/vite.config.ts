@@ -13,7 +13,7 @@ export default defineConfig(() => {
       tailwindcss(),
       vue(),
       Pages({
-        dirs: [{ dir: "src/route-pages", baseRoute: "" }],
+        dirs: [{ dir: "src/routes", baseRoute: "" }],
         exclude: ['**/component(s)?/**/*.(vue|ts|tsx)', '**/component(s)?/*.(vue|ts|tsx)'],
         extensions: ['vue', 'tsx'],
       }),
