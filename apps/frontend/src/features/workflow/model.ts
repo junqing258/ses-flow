@@ -136,7 +136,7 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     items: [
       { id: "palette-start", kind: "start", label: "Start", icon: "play", accent: "#10B981" },
       { id: "palette-end", kind: "end", label: "End", icon: "shield", accent: "#EF4444" },
-      { id: "palette-if-else", kind: "if-else", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
+      // { id: "palette-if-else", kind: "if-else", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
       { id: "palette-switch", kind: "switch", label: "Switch", icon: "gitBranch", accent: "#EC4899" },
       { id: "palette-subflow", kind: "trigger", label: "Sub-Workflow", icon: "webhook", accent: "#6366F1" },
     ],
