@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { codeInspectorPlugin } from "code-inspector-plugin";
 import { defineConfig } from "vite";
+import Pages from "vite-plugin-pages";
 
 export default defineConfig(() => {
   const isVitest = process.env.VITEST === "true";
@@ -11,6 +12,11 @@ export default defineConfig(() => {
     plugins: [
       tailwindcss(),
       vue(),
+      Pages({
+        dirs: [{ dir: "src/route-pages", baseRoute: "" }],
+        exclude: ['**/component(s)?/**/*.(vue|ts|tsx)', '**/component(s)?/*.(vue|ts|tsx)'],
+        extensions: ['vue', 'tsx'],
+      }),
       ...(!isVitest
         ? [
           codeInspectorPlugin({

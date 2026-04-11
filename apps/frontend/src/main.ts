@@ -5,7 +5,23 @@ import { createApp } from "vue";
 
 import App from "./App.vue";
 import { i18n } from "./i18n";
-import router from "./router";
+import { createRouter, createWebHashHistory } from "vue-router";
+import generatedRoutes from "~pages";
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    ...generatedRoutes,
+    {
+      path: "/",
+      redirect: { name: "workflow-list" },
+    },
+    {
+      path: "/:pathMatch(.*)*",
+      redirect: { name: "workflow-list" },
+    },
+  ],
+});
 
 const app = createApp(App);
 

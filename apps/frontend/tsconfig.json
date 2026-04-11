@@ -10,7 +10,7 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "lib": ["ES2021", "DOM", "DOM.Iterable", "ESNext.Disposable"],
-    "types": ["vite/client", "web-bluetooth"],
+    "types": ["vite/client", "vite-plugin-pages/client", "web-bluetooth"],
     "paths": {
       "@/*": ["./src/*"]
     }
