@@ -502,17 +502,26 @@ impl WorkflowEngine {
                 state: &state,
                 env: &env,
             };
+            info!(
+                run_id = %run_id,
+                workflow_key = %workflow_key,
+                node_id = %node.id,
+                node_type = node.node_type.as_str(),
+                input = %serde_json::to_string(&current_input).unwrap_or_else(|_| "serialize error".to_string()),
+                "node input before execution",
+            );
             let result = executor.execute(node, &context)?;
             info!(
                 run_id = %run_id,
                 workflow_key = %workflow_key,
                 node_id = %node.id,
                 node_type = node.node_type.as_str(),
+                output = %serde_json::to_string(&result.output).unwrap_or_else(|_| "serialize error".to_string()),
                 execution_status = ?result.status,
                 branch_key = result.branch_key.as_deref().unwrap_or(""),
                 terminal = result.terminal,
                 log_count = result.logs.len(),
-                "workflow node executed",
+                "node output after execution",
             );
             if let Some(signal) = result.next_signal.clone() {
                 last_signal = Some(signal);

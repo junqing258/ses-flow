@@ -1,0 +1,269 @@
+### Runner REST Client
+#
+# 使用方式：
+# 1. 先启动 runner：cargo run -- --host 127.0.0.1 --port 3002
+# 2. 用 VS Code REST Client 或 JetBrains HTTP Client 打开本文件
+# 3. 按顺序执行请求；`workflowId` 固定，`runId` 会在执行后自动写入全局变量
+
+@baseUrl = http://127.0.0.1:3002
+@workspaceId = ws-runner-rest
+@workspaceName = Runner REST Client
+@workflowId = runner-rest-demo
+@waitRunId = run-1775885937139-1
+
+@taskRunId = run-1775885937139-2
+
+### 健康检查
+# @name health
+GET {{baseUrl}}/health
+
+### 注册用于接口联调的 demo workflow
+# @name uploadDemoWorkflow
+POST {{baseUrl}}/workflows
+Content-Type: application/json
+
+{
+  "workspaceId": "{{workspaceId}}",
+  "workspaceName": "{{workspaceName}}",
+  "workflowId": "{{workflowId}}",
+  "workflow": {
+    "meta": {
+      "key": "runner.rest.demo",
+      "name": "Runner REST Demo",
+      "version": 1
+    },
+    "trigger": {
+      "type": "manual"
+    },
+    "inputSchema": {
+      "type": "object"
+    },
+    "nodes": [
+      {
+        "id": "start_1",
+        "type": "start",
+        "name": "Start"
+      },
+      {
+        "id": "mode_switch",
+        "type": "switch",
+        "name": "Mode Switch",
+        "config": {
+          "expression": "{{trigger.body.mode}}"
+        }
+      },
+      {
+        "id": "wait_callback",
+        "type": "wait",
+        "name": "Wait Callback",
+        "config": {
+          "event": "rcs.callback"
+        },
+        "inputMapping": {
+          "correlationKey": "{{trigger.headers.requestId}}",
+          "orderNo": "{{trigger.body.orderNo}}"
+        }
+      },
+      {
+        "id": "manual_review_task",
+        "type": "task",
+        "name": "Manual Review Task",
+        "config": {
+          "taskType": "manual_review",
+          "completeEvent": "task.completed"
+        },
+        "inputMapping": {
+          "orderNo": "{{trigger.body.orderNo}}",
+          "reason": "created by runner-api.http"
+        }
+      },
+      {
+        "id": "end_1",
+        "type": "end",
+        "name": "End"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "start_1",
+        "to": "mode_switch"
+      },
+      {
+        "from": "mode_switch",
+        "to": "wait_callback",
+        "label": "wait",
+        "priority": 100
+      },
+      {
+        "from": "mode_switch",
+        "to": "manual_review_task",
+        "label": "task",
+        "priority": 90
+      },
+      {
+        "from": "mode_switch",
+        "to": "end_1",
+        "branchType": "default",
+        "priority": 1
+      },
+      {
+        "from": "wait_callback",
+        "to": "end_1"
+      },
+      {
+        "from": "manual_review_task",
+        "to": "end_1"
+      }
+    ],
+    "policies": {}
+  }
+}
+
+> {%
+client.global.set("workflowId", response.body.workflowId);
+%}
+
+### 列出已注册 workflows
+# @name listWorkflows
+GET {{baseUrl}}/workflows
+
+### 查询 workflow 详情
+# @name getWorkflow
+GET {{baseUrl}}/workflows/{{workflowId}}
+
+### 启动一个 wait 类型 run
+# 预期：返回 202，并生成 waitRunId；后续可配合状态查询、SSE、resume 使用
+# @name startWaitRun
+POST {{baseUrl}}/workflows/{{workflowId}}/runs
+Content-Type: application/json
+
+{
+  "trigger": {
+    "headers": {
+      "requestId": "req-rest-wait-1"
+    },
+    "body": {
+      "mode": "wait",
+      "orderNo": "SO-REST-WAIT-1"
+    }
+  },
+  "env": {
+    "tenantId": "tenant-a",
+    "warehouseId": "WH-1",
+    "operatorId": "rest-client"
+  }
+}
+
+> {%
+client.global.set("waitRunId", response.body.runId);
+%}
+
+### 查询 wait run 执行摘要
+# @name getWaitRunSummary
+GET {{baseUrl}}/runs/{{waitRunId}}
+
+### 订阅 wait run SSE 事件
+# 手动执行后保持连接，可观察 summary 事件；恢复或终止后会继续推送更新
+# @name streamWaitRunEvents
+GET {{baseUrl}}/runs/{{waitRunId}}/events
+Accept: text/event-stream
+
+### 恢复 wait run
+# 预期：event 必须匹配 rcs.callback，correlationKey 必须和等待时写入的一致
+# @name resumeWaitRun
+POST {{baseUrl}}/runs/{{waitRunId}}/resume
+Content-Type: application/json
+
+{
+  "event": {
+    "event": "rcs.callback",
+    "correlationKey": "req-rest-wait-1",
+    "status": "done",
+    "orderNo": "SO-REST-WAIT-1",
+    "dispatchId": "dispatch-rest-1"
+  }
+}
+
+### 恢复后再次查询 run
+# @name getResumedWaitRunSummary
+GET {{baseUrl}}/runs/{{waitRunId}}
+
+### 启动一个 task 类型 run
+# 预期：返回 202，并生成 taskRunId；run 会停在 task 节点等待完成事件
+# @name startTaskRun
+POST {{baseUrl}}/workflows/{{workflowId}}/runs
+Content-Type: application/json
+
+{
+  "trigger": {
+    "headers": {
+      "requestId": "req-rest-task-1"
+    },
+    "body": {
+      "mode": "task",
+      "orderNo": "SO-REST-TASK-1"
+    }
+  }
+}
+
+> {%
+client.global.set("taskRunId", response.body.runId);
+%}
+
+### 查询 task run 执行摘要
+# @name getTaskRunSummary
+GET {{baseUrl}}/runs/{{taskRunId}}
+
+> {%
+if (response.body && response.body.lastSignal && response.body.lastSignal.payload) {
+  client.global.set("taskRunTaskId", response.body.lastSignal.payload.taskId);
+}
+%}
+
+### 恢复 task run
+# taskId 会从上一条查询结果自动提取到 `taskRunTaskId`
+# @name resumeTaskRun
+POST {{baseUrl}}/runs/{{taskRunId}}/resume
+Content-Type: application/json
+
+{
+  "event": {
+    "event": "task.completed",
+    "taskId": "{{taskRunTaskId}}",
+    "status": "approved",
+    "operatorId": "reviewer-1"
+  }
+}
+
+### 恢复后再次查询 task run
+# @name getResumedTaskRunSummary
+GET {{baseUrl}}/runs/{{taskRunId}}
+
+### 启动一个用于 terminate 的 wait run
+# @name startTerminateRun
+POST {{baseUrl}}/workflows/{{workflowId}}/runs
+Content-Type: application/json
+
+{
+  "trigger": {
+    "headers": {
+      "requestId": "req-rest-term-1"
+    },
+    "body": {
+      "mode": "wait",
+      "orderNo": "SO-REST-TERM-1"
+    }
+  }
+}
+
+> {%
+client.global.set("terminateRunId", response.body.runId);
+%}
+
+### 终止 waiting run
+# @name terminateRun
+POST {{baseUrl}}/runs/{{terminateRunId}}/terminate
+
+### 查询终止后的 run
+# @name getTerminatedRunSummary
+GET {{baseUrl}}/runs/{{terminateRunId}}

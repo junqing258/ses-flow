@@ -1,10 +1,11 @@
+use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
 use sqlx::{Row, postgres::PgPool};
 
-use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunSummary};
+use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary};
 use crate::error::RunnerError;
 
-use super::WorkflowRunStore;
+use super::{WorkflowRunRecord, WorkflowRunStore};
 
 pub struct PostgresRunStore {
     pool: PgPool,
@@ -410,6 +411,74 @@ impl WorkflowRunStore for PostgresRunStore {
                 };
 
                 summary
+            })
+        })
+    }
+
+    fn list_runs(
+        &self,
+        workflow_key: &str,
+        workflow_version: u32,
+    ) -> Result<Vec<WorkflowRunRecord>, RunnerError> {
+        let pool = self.pool.clone();
+        let workflow_key = workflow_key.to_string();
+        let workflow_version = workflow_version as i32;
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let rows = sqlx::query(
+                    r#"
+                    SELECT run_id, workflow_key, workflow_version, status, current_node_id, created_at, updated_at
+                    FROM workflow_runs
+                    WHERE workflow_key = $1 AND workflow_version = $2
+                    ORDER BY updated_at DESC, created_at DESC
+                    "#,
+                )
+                .bind(&workflow_key)
+                .bind(workflow_version)
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to list workflow runs: {}", e)))?;
+
+                rows.into_iter()
+                    .map(|row| {
+                        let status_str: String = row.try_get("status").map_err(|e| {
+                            RunnerError::Store(format!("Failed to get status: {}", e))
+                        })?;
+
+                        let status: WorkflowRunStatus =
+                            serde_json::from_str(&status_str).map_err(|e| {
+                                RunnerError::Store(format!("Failed to deserialize status: {}", e))
+                            })?;
+
+                        Ok(WorkflowRunRecord {
+                            run_id: row.try_get("run_id").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get run_id: {}", e))
+                            })?,
+                            workflow_key: row.try_get("workflow_key").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get workflow_key: {}", e))
+                            })?,
+                            workflow_version: row
+                                .try_get::<i32, _>("workflow_version")
+                                .map_err(|e| {
+                                    RunnerError::Store(format!(
+                                        "Failed to get workflow_version: {}",
+                                        e
+                                    ))
+                                })? as u32,
+                            status,
+                            current_node_id: row.try_get("current_node_id").map_err(|e| {
+                                RunnerError::Store(format!("Failed to get current_node_id: {}", e))
+                            })?,
+                            created_at: row.try_get::<DateTime<Utc>, _>("created_at").map_err(
+                                |e| RunnerError::Store(format!("Failed to get created_at: {}", e)),
+                            )?,
+                            updated_at: row.try_get::<DateTime<Utc>, _>("updated_at").map_err(
+                                |e| RunnerError::Store(format!("Failed to get updated_at: {}", e)),
+                            )?,
+                        })
+                    })
+                    .collect()
             })
         })
     }

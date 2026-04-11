@@ -30,7 +30,10 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/health", get(health))
         .route("/workflows", get(list_workflows).post(upload_workflow))
         .route("/workflows/{workflow_id}", get(get_workflow))
-        .route("/workflows/{workflow_id}/runs", post(execute_workflow))
+        .route(
+            "/workflows/{workflow_id}/runs",
+            get(list_workflow_runs).post(execute_workflow),
+        )
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
         .route("/runs/{run_id}/terminate", post(terminate_workflow))
@@ -176,6 +179,14 @@ async fn get_workflow(
 ) -> Result<Json<crate::store::WorkflowDetailRecord>, ApiError> {
     debug!(workflow_id = %workflow_id, "fetching workflow");
     Ok(Json(state.server.get_workflow(&workflow_id)?))
+}
+
+async fn list_workflow_runs(
+    State(state): State<ApiState>,
+    Path(workflow_id): Path<String>,
+) -> Result<Json<Vec<crate::store::WorkflowRunRecord>>, ApiError> {
+    debug!(workflow_id = %workflow_id, "listing workflow runs");
+    Ok(Json(state.server.list_workflow_runs(&workflow_id)?))
 }
 
 async fn execute_workflow(

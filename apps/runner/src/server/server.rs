@@ -21,7 +21,8 @@ use crate::error::RunnerError;
 use crate::services::WorkflowServices;
 use crate::store::{
     InMemoryCatalogStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
-    WorkflowDetailRecord, WorkflowRunStore, WorkflowRunner, WorkflowSummaryRecord, WorkspaceRecord,
+    WorkflowDetailRecord, WorkflowRunRecord, WorkflowRunStore, WorkflowRunner,
+    WorkflowSummaryRecord, WorkspaceRecord,
 };
 
 #[derive(Debug, Error)]
@@ -174,7 +175,15 @@ impl WorkflowServer {
             .catalog
             .load_all_workflows()?
             .into_iter()
-            .map(|workflow| self.to_workflow_summary(workflow))
+            .map(|workflow| {
+                let active_run_count = self
+                    .list_active_runs(
+                        &workflow.definition.meta.key,
+                        workflow.definition.meta.version,
+                    )?
+                    .len() as u32;
+                self.to_workflow_summary(workflow, active_run_count)
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         workflows.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
@@ -186,12 +195,33 @@ impl WorkflowServer {
             .catalog
             .load_workflow(workflow_id)?
             .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+        let active_run_count = self
+            .list_active_runs(
+                &stored_workflow.definition.meta.key,
+                stored_workflow.definition.meta.version,
+            )?
+            .len() as u32;
 
         Ok(WorkflowDetailRecord {
-            summary: self.to_workflow_summary(stored_workflow.clone())?,
+            summary: self.to_workflow_summary(stored_workflow.clone(), active_run_count)?,
             document: stored_workflow.editor_document,
             workflow: stored_workflow.definition,
         })
+    }
+
+    pub fn list_workflow_runs(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<WorkflowRunRecord>, ServerError> {
+        let stored_workflow = self
+            .catalog
+            .load_workflow(workflow_id)?
+            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+
+        self.list_active_runs(
+            &stored_workflow.definition.meta.key,
+            stored_workflow.definition.meta.version,
+        )
     }
 
     pub fn get_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, ServerError> {
@@ -387,6 +417,7 @@ impl WorkflowServer {
     fn to_workflow_summary(
         &self,
         workflow: StoredWorkflowDefinition,
+        running_run_count: u32,
     ) -> Result<WorkflowSummaryRecord, ServerError> {
         let workspace_name = self
             .catalog
@@ -417,6 +448,7 @@ impl WorkflowServer {
                 .unwrap_or_else(|| workflow.definition.meta.key.clone()),
             status: normalized_status.clone(),
             version: format!("v{}", workflow.definition.meta.version),
+            running_run_count,
             owner_name: workspace_name,
             created_at: workflow.created_at,
             updated_at: workflow.updated_at,
@@ -426,6 +458,19 @@ impl WorkflowServer {
                 None
             },
         })
+    }
+
+    fn list_active_runs(
+        &self,
+        workflow_key: &str,
+        workflow_version: u32,
+    ) -> Result<Vec<WorkflowRunRecord>, ServerError> {
+        Ok(self
+            .store
+            .list_runs(workflow_key, workflow_version)?
+            .into_iter()
+            .filter(|run| is_active_run_status(&run.status))
+            .collect())
     }
 }
 
@@ -515,6 +560,13 @@ fn is_terminal_status(status: &WorkflowRunStatus) -> bool {
     matches!(
         status,
         WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated
+    )
+}
+
+fn is_active_run_status(status: &WorkflowRunStatus) -> bool {
+    matches!(
+        status,
+        WorkflowRunStatus::Running | WorkflowRunStatus::Waiting
     )
 }
 

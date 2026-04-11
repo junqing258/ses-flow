@@ -167,6 +167,273 @@ curl -i \
 - `wait`
 - `task`
 
+## 主要节点使用说明
+
+### 通用约定
+
+- 节点执行时可在 `inputMapping` 中通过模板访问 `trigger / input / state / env`，例如 `{{trigger.body.orderNo}}`、`{{state.orderSnapshot.status}}`。
+- 如果节点未配置 `inputMapping`，默认会直接拿上一个节点的 `output` 作为当前节点输入。
+- 分支节点会返回 `branchKey`；引擎会优先匹配 transition 的 `label`，其次匹配 `condition`，最后回退到 `branchType: "default"` 或 `label: "default"`。
+- `set_state`、`code`、`sub_workflow` 可以生成 `statePatch` 并合并到全局 `state`；后续节点可通过 `{{state.xxx}}` 继续引用。
+
+### `start`
+
+入口节点。默认输出 `trigger.body`；如果没有 `body`，则输出整个 `trigger`。
+
+```json
+{ "id": "start_1", "type": "start", "name": "Start" }
+```
+
+### `webhook_trigger`
+
+用于从 webhook 触发数据中选择实际载荷。
+
+- `config.mode = "body"`：输出 `trigger.body`，默认值
+- `config.mode = "headers"`：输出 `trigger.headers`
+- `config.mode = "full"`：输出完整 `trigger`
+
+```json
+{
+  "id": "webhook_in",
+  "type": "webhook_trigger",
+  "name": "Webhook Trigger",
+  "config": { "mode": "full" }
+}
+```
+
+### `fetch`
+
+通过 `config.connector` 调用已注册的 connector，节点输出结构固定为 `{ connector, request, data }`。
+
+```json
+{
+  "id": "fetch_order",
+  "type": "fetch",
+  "name": "查询订单",
+  "config": { "connector": "oms.getOrder" },
+  "inputMapping": {
+    "orderNo": "{{trigger.body.orderNo}}",
+    "warehouseId": "{{env.warehouseId}}"
+  }
+}
+```
+
+### `set_state`
+
+把输入写入运行时状态。`config.path` 指定写入路径；如果 `inputMapping` 中包含 `value` 字段，则取 `value` 作为实际写入值，否则写入整个映射结果。
+
+```json
+{
+  "id": "persist_order_snapshot",
+  "type": "set_state",
+  "name": "写入订单快照",
+  "config": { "path": "orderSnapshot" },
+  "inputMapping": {
+    "value": "{{input}}"
+  }
+}
+```
+
+### `if_else`
+
+布尔分支节点。`config.expression` 解析后按 truthy/falsey 判断；如果配置了 `config.equals`，则改为做相等比较。节点返回的 `branchKey` 固定是 `then` 或 `else`，所以 transition 通常这样写：
+
+```json
+{
+  "id": "dispatch_gate",
+  "type": "if_else",
+  "name": "Need Dispatch",
+  "config": { "expression": "{{trigger.body.needsDispatch}}" }
+}
+```
+
+```json
+[
+  { "from": "dispatch_gate", "to": "dispatch_command", "label": "then" },
+  { "from": "dispatch_gate", "to": "mark_skipped", "label": "else" }
+]
+```
+
+### `switch`
+
+多路分支节点。`config.expression` 解析后的字符串值就是 `branchKey`；如果表达式结果是 `null`，则会落到 `default`。
+
+```json
+{
+  "id": "route_switch",
+  "type": "switch",
+  "name": "业务分流",
+  "config": { "expression": "{{trigger.body.bizType}}" }
+}
+```
+
+```json
+[
+  { "from": "route_switch", "to": "manual_review_task", "label": "manual_review" },
+  { "from": "route_switch", "to": "dispatch_rcs_action", "label": "auto_sort" },
+  { "from": "route_switch", "to": "wait_dispatch_callback", "branchType": "default" }
+]
+```
+
+### `action` / `command`
+
+`command` 是 `action` 的别名。节点会根据 `config.action` 调用已注册的 action handler，输出 `{ action, response }`。
+
+```json
+{
+  "id": "dispatch_rcs_action",
+  "type": "action",
+  "name": "下发 RCS 调度",
+  "config": { "action": "rcs.dispatch" },
+  "inputMapping": {
+    "orderNo": "{{trigger.body.orderNo}}",
+    "bizType": "{{trigger.body.bizType}}"
+  }
+}
+```
+
+### `code`
+
+运行 JavaScript 节点，要求宿主环境为 `Node.js 22+`。
+
+- `config.language` / `config.lang` 目前只支持 `js` 或 `javascript`
+- 可通过 `config.source` / `js` / `code` 写内联脚本
+- 也可通过 `config.sourcePath` / `filePath` 读取文件
+- 或通过 `config.modulePath` + `config.exportName` 调用模块导出函数
+- 脚本上下文固定为 `trigger / input / state / env / params`，其中 `params` 来自 `inputMapping`
+- 返回普通 JSON 时会直接作为节点输出；返回 `{ output, statePatch, branchKey }` 时可同时控制输出、状态更新和分支
+- `timeoutMs` 可限制最长执行时间
+
+```json
+{
+  "id": "run_code",
+  "type": "code",
+  "name": "Run Code",
+  "inputMapping": {
+    "orderNo": "{{input.orderNo}}",
+    "requestId": "{{trigger.headers.requestId}}"
+  },
+  "config": {
+    "language": "js",
+    "modulePath": "examples/code-flow-handler.mjs",
+    "exportName": "default"
+  },
+  "timeoutMs": 3000
+}
+```
+
+### `respond`
+
+生成一个 `webhook_response` signal，常用于 HTTP/SSE 场景下回包。
+
+- `config.statusCode`：响应状态码，默认 `200`
+- `config.terminal = true`：发送响应后直接结束流程
+
+```json
+{
+  "id": "respond_ok",
+  "type": "respond",
+  "name": "Respond",
+  "config": {
+    "statusCode": 202,
+    "terminal": false
+  },
+  "inputMapping": {
+    "orderNo": "{{trigger.body.orderNo}}",
+    "subWorkflowStatus": "{{state.subWorkflow.status}}"
+  }
+}
+```
+
+### `wait`
+
+把当前 run 挂起为 `waiting`，等待外部事件恢复。
+
+- `config.event` 指定期望事件名，默认 `external_callback`
+- `inputMapping` 的结果会作为 waiting signal 的 `payload`
+- 恢复时 `/runs/<run_id>/resume` 传入的事件必须匹配 `event/type`
+- 如果 waiting payload 中带了 `correlationKey`，恢复事件也必须带相同值
+
+```json
+{
+  "id": "wait_dispatch_callback",
+  "type": "wait",
+  "name": "等待回调",
+  "config": { "event": "rcs.callback" },
+  "inputMapping": {
+    "correlationKey": "{{trigger.headers.requestId}}",
+    "orderNo": "{{trigger.body.orderNo}}"
+  }
+}
+```
+
+### `task`
+
+通过 `config.taskType` 创建任务并进入 `waiting`。节点会调用已注册的 task handler，输出 `{ taskType, task }`，同时发出 `task_created` signal。
+
+- `config.taskType`：任务类型
+- `config.completeEvent`：恢复时期望的完成事件，默认 `task.completed`
+- 如果任务创建结果中包含 `taskId`，恢复时也必须带同一个 `taskId`
+
+```json
+{
+  "id": "manual_review_task",
+  "type": "task",
+  "name": "创建人工复核任务",
+  "config": {
+    "taskType": "manual_review",
+    "completeEvent": "task.completed"
+  },
+  "inputMapping": {
+    "orderNo": "{{trigger.body.orderNo}}",
+    "reason": "bizType requires manual review"
+  }
+}
+```
+
+恢复事件示例：
+
+```json
+{
+  "event": "task.completed",
+  "taskId": "task-run-demo",
+  "status": "approved",
+  "operatorId": "reviewer-1"
+}
+```
+
+### `sub_workflow`
+
+执行子流程，既支持内联定义，也支持按 key 引用已注册工作流。
+
+- `config.definition` / `config.workflow`：直接内联子流程定义
+- `config.ref` / `config.workflowKey`：引用 registry 中的工作流
+- `config.statePath`：把子流程摘要写入指定状态路径
+- 子流程完成时继续向下执行；子流程进入 `waiting` 时，父流程也会跟着等待，并在恢复时级联 resume
+
+```json
+{
+  "id": "nested_workflow",
+  "type": "sub_workflow",
+  "name": "Nested Workflow",
+  "config": {
+    "statePath": "nested",
+    "ref": "child-wait-flow"
+  },
+  "inputMapping": {
+    "orderNo": "{{trigger.body.orderNo}}"
+  }
+}
+```
+
+### `end`
+
+结束节点。它会把当前 `input` 作为最终输出并终止执行。
+
+```json
+{ "id": "end_1", "type": "end", "name": "End" }
+```
+
 当前的 `fetch`、`action`、`wait`、`task` 仍是受控 stub，用于先把定义层、状态模型和节点协议跑通。
 其中 `fetch / action / task` 已经改为通过 registry 分发，后续接真实外部系统时只需要替换对应 handler。
 当前 `code` 节点直接调用宿主 `Node.js 22+` 运行，脚本上下文暴露 `trigger / input / state / env / params` 五个 JSON 对象，其中 `params` 来自节点 `inputMapping`。节点既支持内联 `config.source/js/code`，也支持 `config.sourcePath/filePath` 读取脚本文件，以及 `config.modulePath` 调用外部模块导出的函数；模块模式还支持 `config.exportName` 选择命名导出。返回值可直接作为节点输出，或使用 `{ output, statePatch, branchKey }` 控制状态合并与分支。节点 `timeoutMs` 会限制脚本最长运行时间，`console.log/info/warn/error/debug` 会被捕获并写入 timeline。相对路径默认按 runner 进程当前工作目录解析，也可以通过 `config.baseDir` / `config.workingDirectory` 显式指定基准目录。

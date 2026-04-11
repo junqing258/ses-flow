@@ -1,0 +1,95 @@
+{
+  "meta": {
+    "key": "test-node-io",
+    "name": "Test Node I/O Logging",
+    "version": 1,
+    "scope": {
+      "tenant": "tenant-a",
+      "warehouse": "WH-1"
+    },
+    "status": "published"
+  },
+  "trigger": {
+    "type": "webhook",
+    "path": "/test/io",
+    "responseMode": "async_ack"
+  },
+  "inputSchema": {
+    "type": "object"
+  },
+  "nodes": [
+    {
+      "id": "start_1",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "id": "set_state_1",
+      "type": "set_state",
+      "name": "设置状态",
+      "config": {
+        "path": "userData"
+      },
+      "inputMapping": {
+        "value": {
+          "userId": "{{trigger.body.userId}}",
+          "userName": "{{trigger.body.userName}}",
+          "timestamp": "{{trigger.body.timestamp}}"
+        }
+      }
+    },
+    {
+      "id": "if_else_1",
+      "type": "if_else",
+      "name": "判断用户",
+      "config": {
+        "expression": "{{input.userId}}",
+        "equals": "user-001"
+      }
+    },
+    {
+      "id": "code_1",
+      "type": "code",
+      "name": "处理数据",
+      "config": {
+        "language": "js",
+        "source": "const result = { processed: true, userId: input.userId, userName: input.userName, processedAt: new Date().toISOString() }; console.log('Processing user data:', JSON.stringify(result)); return result;"
+      }
+    },
+    {
+      "id": "end_1",
+      "type": "end",
+      "name": "End"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start_1",
+      "to": "set_state_1"
+    },
+    {
+      "from": "set_state_1",
+      "to": "if_else_1"
+    },
+    {
+      "from": "if_else_1",
+      "to": "code_1",
+      "label": "then"
+    },
+    {
+      "from": "if_else_1",
+      "to": "end_1",
+      "label": "else"
+    },
+    {
+      "from": "code_1",
+      "to": "end_1"
+    }
+  ],
+  "policies": {
+    "idempotency": {
+      "key": "{{trigger.headers.requestId}}"
+    },
+    "allowManualRetry": true
+  }
+}

@@ -8,7 +8,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
-      path: "/workflow",
+      path: "/workflow-list",
       name: "workflow-list",
       component: WorkflowListPage,
     },
@@ -29,11 +29,11 @@ const router = createRouter({
     },
     {
       path: "/",
-      redirect: "/workflow",
+      redirect: "/workflow-list",
     },
     {
       path: "/:pathMatch(.*)*",
-      redirect: "/workflow",
+      redirect: "/workflow-list",
     },
   ],
 });
