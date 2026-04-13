@@ -174,6 +174,36 @@ curl -i \
 - 分支节点会返回 `branchKey`；引擎会优先匹配 transition 的 `label`，其次匹配 `condition`，最后回退到 `branchType: "default"` 或 `label: "default"`。
 - `set_state`、`code`、`sub_workflow` 可以生成 `statePatch` 并合并到全局 `state`；后续节点可通过 `{{state.xxx}}` 继续引用。
 
+### 下个节点如何拿上个节点输出
+
+默认规则很简单：上一个节点的 `output` 会成为下一个节点的 `input`。
+
+- 如果下一个节点不写 `inputMapping`，那它拿到的整个 `input` 就是上一个节点的完整输出。
+- 如果下一个节点写了 `inputMapping`，就通过 `{{input.xxx}}` 从上一个节点输出里挑字段。
+
+常见写法：
+
+- 上一个节点是 `fetch` 时，可在下个节点里取 `{{input.data}}`、`{{input.response.status}}`、`{{input.request.orderNo}}`
+- 上一个节点是 `shell` 时，可在下个节点里取 `{{input.data}}`、`{{input.stdout}}`、`{{input.exitCode}}`
+- 上一个节点是 `code` 时，可在下个节点里取 `{{input}}`，或者取 `{{input.xxx}}`；如果 code 返回了 `{ output, statePatch }`，这里的 `input` 指的是其中的 `output`
+
+示例：让 `set_state` 保存上一个节点结果的一部分
+
+```json
+{
+  "id": "persist_result",
+  "type": "set_state",
+  "name": "保存结果",
+  "config": { "path": "result" },
+  "inputMapping": {
+    "value": {
+      "status": "{{input.response.status}}",
+      "payload": "{{input.data}}"
+    }
+  }
+}
+```
+
 ### `start`
 
 入口节点。默认输出 `trigger.body`；如果没有 `body`，则输出整个 `trigger`。
@@ -207,6 +237,7 @@ curl -i \
 - `POST`：会把 `inputMapping` 解析结果作为 JSON body
 - 可选的 `config.headers` 会作为请求头发送
 - 节点输出结构固定为 `{ method, url, request, response, data }`
+- 下个节点通常通过 `{{input.data}}` 取响应体，通过 `{{input.response.status}}` 取状态码
 
 ```json
 {
@@ -272,6 +303,7 @@ curl -i \
 - 注入 `WORKFLOW_PARAMS` / `WORKFLOW_TRIGGER` / `WORKFLOW_INPUT` / `WORKFLOW_STATE` / `WORKFLOW_ENV` 等环境变量
 
 节点输出结构为 `{ shell, command, exitCode, stdout, stderr, data }`，其中 `data` 会优先按 JSON 解析 stdout。
+- 下个节点通常优先取 `{{input.data}}`；如果 shell 输出的不是 JSON，也可以直接取 `{{input.stdout}}`
 
 ```json
 {
@@ -300,6 +332,7 @@ curl -i \
 - 脚本上下文固定为 `trigger / input / state / env / params`，其中 `params` 来自 `inputMapping`
 - 返回普通 JSON 时会直接作为节点输出；返回 `{ output, statePatch, branchKey }` 时可同时控制输出、状态更新和分支
 - `timeoutMs` 可限制最长执行时间
+- 下个节点通过 `{{input}}` 或 `{{input.xxx}}` 读取 code 的返回值；如果用了 envelope 返回，则读取的是 `output`
 
 ```json
 {
