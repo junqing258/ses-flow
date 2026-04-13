@@ -20,6 +20,7 @@ use super::template::{EvaluationContext, env_to_value, is_truthy, nested_state_p
 use crate::error::RunnerError;
 use crate::services::WorkflowServices;
 
+// region 执行器抽象与注册表
 pub trait NodeExecutor: Send + Sync {
     fn node_type(&self) -> NodeType;
     fn execute(
@@ -42,7 +43,7 @@ impl ExecutorRegistry {
         registry.register(WebhookTriggerExecutor);
         registry.register(FetchExecutor);
         registry.register(SetStateExecutor);
-        registry.register(IfElseExecutor);
+        // registry.register(IfElseExecutor);
         registry.register(SwitchExecutor);
         registry.register(CodeExecutor);
         registry.register(ActionExecutor {
@@ -69,7 +70,9 @@ impl ExecutorRegistry {
         self.executors.get(&node_type).cloned()
     }
 }
+// endregion 执行器抽象与注册表
 
+// region 执行器类型声明
 struct StartExecutor;
 struct EndExecutor;
 struct WebhookTriggerExecutor;
@@ -89,7 +92,9 @@ struct TaskExecutor {
 struct SubWorkflowExecutor {
     services: Arc<WorkflowServices>,
 }
+// endregion 执行器类型声明
 
+// region 起止节点执行器
 impl NodeExecutor for StartExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::Start
@@ -122,7 +127,9 @@ impl NodeExecutor for EndExecutor {
         Ok(NodeExecutionResult::success(context.input.clone()).into_terminal())
     }
 }
+// endregion 起止节点执行器
 
+// region 触发与网络节点执行器
 impl NodeExecutor for WebhookTriggerExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::WebhookTrigger
@@ -187,7 +194,9 @@ impl NodeExecutor for FetchExecutor {
         })))
     }
 }
+// endregion 触发与网络节点执行器
 
+// region 状态与分支节点执行器
 impl NodeExecutor for SetStateExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::SetState
@@ -282,7 +291,9 @@ impl NodeExecutor for SwitchExecutor {
         )
     }
 }
+// endregion 状态与分支节点执行器
 
+// region 动作与代码节点执行器
 impl NodeExecutor for ActionExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::Action
@@ -343,7 +354,9 @@ impl NodeExecutor for CodeExecutor {
         Ok(build_code_result(process_output.result).with_logs(process_output.logs))
     }
 }
+// endregion 动作与代码节点执行器
 
+// region 响应与等待节点执行器
 impl NodeExecutor for RespondExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::Respond
@@ -412,7 +425,9 @@ impl NodeExecutor for WaitExecutor {
         ))
     }
 }
+// endregion 响应与等待节点执行器
 
+// region 任务与子流程节点执行器
 impl NodeExecutor for TaskExecutor {
     fn node_type(&self) -> NodeType {
         NodeType::Task
@@ -539,7 +554,9 @@ impl NodeExecutor for SubWorkflowExecutor {
         }
     }
 }
+// endregion 任务与子流程节点执行器
 
+// region 通用解析辅助函数
 fn resolve_mapping(node: &NodeDefinition, context: &NodeExecutionContext<'_>) -> Value {
     let template_context = evaluation_context(context, &Value::Null);
 
@@ -557,7 +574,9 @@ fn resolve_config(
 ) -> Value {
     evaluation_context(context, output).resolve_value(&node.config)
 }
+// endregion 通用解析辅助函数
 
+// region Fetch 节点辅助函数
 fn resolve_fetch_method(config: &Value) -> Result<Method, RunnerError> {
     let method = config
         .get("method")
@@ -750,7 +769,9 @@ fn parse_fetch_response_body(content_type: &str, body_text: &str) -> Value {
 
     Value::String(body_text.to_string())
 }
+// endregion Fetch 节点辅助函数
 
+// region Code 节点辅助函数
 fn resolve_code_execution_spec(node: &NodeDefinition) -> Result<CodeExecutionSpec, RunnerError> {
     if let Some(source) = node
         .config
@@ -980,7 +1001,9 @@ fn wait_for_code_process(
         }
     }
 }
+// endregion Code 节点辅助函数
 
+// region Code 节点 JavaScript 引导脚本
 const NODE_RUNNER_BOOTSTRAP: &str = r#"
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -1054,7 +1077,9 @@ try {
   process.exit(1);
 }
 "#;
+// endregion Code 节点 JavaScript 引导脚本
 
+// region Code 节点数据结构
 #[derive(serde::Deserialize)]
 struct CodeProcessOutput {
     result: Value,
@@ -1069,7 +1094,9 @@ enum CodeExecutionSpec {
         export_name: String,
     },
 }
+// endregion Code 节点数据结构
 
+// region 上下文与子流程辅助函数
 fn evaluation_context<'a>(
     context: &'a NodeExecutionContext<'a>,
     output: &'a Value,
@@ -1123,3 +1150,4 @@ fn clone_env(env: &RunEnvironment) -> RunEnvironment {
         operator_id: env.operator_id.clone(),
     }
 }
+// endregion 上下文与子流程辅助函数
