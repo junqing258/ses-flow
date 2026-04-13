@@ -173,7 +173,7 @@ const containerClass = computed(() =>
         :key="branch.id"
       >
         <div
-          class="pointer-events-none absolute right-5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1"
+          class="pointer-events-none absolute z-10 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap shadow-sm ring-1"
           :class="
             branch.isDefault
               ? 'bg-slate-900/90 text-white ring-slate-900/80'
@@ -181,6 +181,7 @@ const containerClass = computed(() =>
           "
           :style="{
             top: resolveBranchTop(index, branchHandles.length),
+            left: 'calc(100% + 14px)',
             transform: 'translateY(-50%)',
           }"
         >
