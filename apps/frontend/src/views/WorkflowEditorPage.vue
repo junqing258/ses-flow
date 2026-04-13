@@ -12,7 +12,6 @@
       <VueFlow
         :nodes="nodes"
         :edges="edges"
-        fit-view-on-init
         class="h-full w-full"
         @connect="handleConnect"
         @node-click="handleNodeClick"
@@ -165,7 +164,7 @@
               @dragend="handlePaletteDragEnd"
             >
               <div
-                class="flex h-[26px] w-[26px] items-center justify-center rounded-lg bg-slate-100"
+                class="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-slate-100"
                 :style="{
                   color: item.accent,
                   backgroundColor: `${item.accent}15`,
@@ -268,7 +267,7 @@
           >
           <textarea
             :value="runDraft.headers"
-            class="min-h-[112px] w-full rounded-[16px] border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            class="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
             @input="
               handleRunDraftUpdate(
                 'headers',
@@ -285,7 +284,7 @@
           >
           <textarea
             :value="runDraft.env"
-            class="min-h-[112px] w-full rounded-[16px] border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            class="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
             @input="
               handleRunDraftUpdate(
                 'env',
@@ -343,10 +342,10 @@
         class="flex h-[68px] shrink-0 items-center gap-3 px-4 border-b border-slate-50"
       >
         <div
-          class="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm"
           :style="{ backgroundColor: selectedNodeData.accent }"
         >
-          <component :is="selectedNodeIcon" class="h-[18px] w-[18px]" />
+          <component :is="selectedNodeIcon" class="h-4.5 w-4.5" />
         </div>
 
         <div class="min-w-0 flex-1 px-1">
@@ -393,7 +392,10 @@
             class="m-0 h-full"
           >
             <div
-              v-if="getFieldsForTab(tab).length || (isSelectedSwitchNode && tab === 'mapping')"
+              v-if="
+                getFieldsForTab(tab).length ||
+                (isSelectedSwitchNode && tab === 'mapping')
+              "
               class="space-y-4"
             >
               <div
@@ -402,7 +404,9 @@
               >
                 <div class="flex items-center justify-between gap-3">
                   <div>
-                    <p class="text-xs font-semibold tracking-wide text-slate-500">
+                    <p
+                      class="text-xs font-semibold tracking-wide text-slate-500"
+                    >
                       Switch 分支
                     </p>
                     <p class="mt-1 text-[11px] leading-5 text-slate-400">
@@ -441,9 +445,11 @@
                           )
                         "
                       />
-                      <p class="text-[11px] leading-5 text-slate-400 text-nowrap">
+                      <p
+                        class="text-[11px] leading-5 text-slate-400 text-nowrap"
+                      >
                         {{
-                          `${selectedPanel?.fieldsByTab.base?.find((field) => field.key === 'expression')?.value || 'value'} === '${branch.label || branch.id}'`
+                          `${selectedPanel?.fieldsByTab.base?.find((field) => field.key === "expression")?.value || "value"} === '${branch.label || branch.id}'`
                         }}
                       </p>
                     </div>
@@ -564,7 +570,7 @@
 
     <aside
       v-else-if="isRunMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
         class="flex h-[72px] shrink-0 items-center gap-3 border-b border-slate-50 px-4"
@@ -794,6 +800,7 @@
 <script setup lang="ts">
 import {
   computed,
+  nextTick,
   onBeforeUnmount,
   onMounted,
   reactive,
@@ -938,7 +945,9 @@ const expandedCategories = reactive<Record<string, boolean>>(
     ]),
   ),
 );
-const { screenToFlowCoordinate } = useVueFlow();
+const { fitView, onPaneReady, screenToFlowCoordinate } = useVueFlow();
+const isCanvasPaneReady = ref(false);
+const shouldResetCanvasViewport = ref(false);
 
 const canvasTools = [
   { id: "select", icon: "mousePointer" as WorkflowIconKey },
@@ -1108,7 +1117,8 @@ watch(
 
 const resolveIcon = (icon: WorkflowIconKey) => WORKFLOW_ICON_MAP[icon];
 
-const isSwitchBranchField = (fieldKey: string) => fieldKey.startsWith("branch:");
+const isSwitchBranchField = (fieldKey: string) =>
+  fieldKey.startsWith("branch:");
 
 const getFieldsForTab = (tab: WorkflowTabId) => {
   const fields = selectedPanel.value?.fieldsByTab[tab] ?? [];
@@ -1149,7 +1159,9 @@ const syncBranchHandleNodes = (nodeId?: string) => {
 };
 
 const getNextSwitchBranchHandleId = (panel: WorkflowNodePanel) => {
-  const existingHandleIds = new Set(getSwitchBranches(panel).map((branch) => branch.id));
+  const existingHandleIds = new Set(
+    getSwitchBranches(panel).map((branch) => branch.id),
+  );
   let index = existingHandleIds.size;
   let nextHandleId = createSwitchBranchHandleId(index);
 
@@ -1162,14 +1174,17 @@ const getNextSwitchBranchHandleId = (panel: WorkflowNodePanel) => {
 };
 
 const getNextSwitchBranchLabel = (panel: WorkflowNodePanel) => {
-  const existingLabels = new Set(getSwitchBranches(panel).map((branch) => branch.label));
+  const existingLabels = new Set(
+    getSwitchBranches(panel).map((branch) => branch.label),
+  );
   let index = existingLabels.size;
   let nextLabel =
     index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
 
   while (existingLabels.has(nextLabel)) {
     index += 1;
-    nextLabel = index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
+    nextLabel =
+      index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
   }
 
   return nextLabel;
@@ -1177,6 +1192,22 @@ const getNextSwitchBranchLabel = (panel: WorkflowNodePanel) => {
 
 const handleBackToList = () => {
   void router.push({ name: "workflow-list" });
+};
+
+const resetCanvasViewport = async () => {
+  await nextTick();
+  await fitView({
+    padding: 0.2,
+  });
+};
+
+const queueCanvasViewportReset = () => {
+  if (!isCanvasPaneReady.value) {
+    shouldResetCanvasViewport.value = true;
+    return;
+  }
+
+  void resetCanvasViewport();
 };
 
 const applyWorkflowEditorState = (state: WorkflowEditorState) => {
@@ -1193,6 +1224,8 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   if (activeRunSummary.value && activeRunWorkflowId.value === workflowMeta.id) {
     setNodeExecutionStatuses(activeRunSummary.value);
   }
+
+  queueCanvasViewportReset();
 };
 
 const updateNodeExecutionStatus = (
@@ -1806,7 +1839,11 @@ const handleFieldUpdate = (
 };
 
 const handleAddSwitchBranch = () => {
-  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+  if (
+    !isEditMode.value ||
+    !isSelectedSwitchNode.value ||
+    !selectedPanel.value
+  ) {
     return;
   }
 
@@ -1824,7 +1861,11 @@ const handleAddSwitchBranch = () => {
 };
 
 const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
-  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+  if (
+    !isEditMode.value ||
+    !isSelectedSwitchNode.value ||
+    !selectedPanel.value
+  ) {
     return;
   }
 
@@ -1843,7 +1884,11 @@ const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
 };
 
 const handleSwitchFallbackUpdate = (branchId: string) => {
-  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+  if (
+    !isEditMode.value ||
+    !isSelectedSwitchNode.value ||
+    !selectedPanel.value
+  ) {
     return;
   }
 
@@ -1852,7 +1897,11 @@ const handleSwitchFallbackUpdate = (branchId: string) => {
 };
 
 const handleRemoveSwitchBranch = (branchId: string) => {
-  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+  if (
+    !isEditMode.value ||
+    !isSelectedSwitchNode.value ||
+    !selectedPanel.value
+  ) {
     return;
   }
 
@@ -2264,6 +2313,17 @@ const handleWindowKeydown = (event: KeyboardEvent) => {
 
 onMounted(() => {
   window.addEventListener("keydown", handleWindowKeydown);
+});
+
+onPaneReady(() => {
+  isCanvasPaneReady.value = true;
+
+  if (!shouldResetCanvasViewport.value) {
+    return;
+  }
+
+  shouldResetCanvasViewport.value = false;
+  void resetCanvasViewport();
 });
 
 onBeforeUnmount(() => {
