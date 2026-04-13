@@ -7,7 +7,7 @@ const formatRequestTimestamp = (date: Date) => {
   const seconds = String(date.getSeconds()).padStart(2, "0");
   const milliseconds = String(date.getMilliseconds()).padStart(3, "0");
 
-  return `${year}${month}${day}_${hours}${minutes}${seconds}_${milliseconds}`;
+  return `${year}${month}${day}${hours}${minutes}${seconds}${milliseconds}`;
 };
 
 const generateRequestId = () => {
