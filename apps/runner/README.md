@@ -22,8 +22,6 @@
 ### 快速启动（使用 Docker Compose）
 
 ```bash
-# 启动 PostgreSQL
-docker-compose up -d
 
 # 运行 runner
 cargo run -- --host 127.0.0.1 --port 3002
@@ -42,6 +40,7 @@ pnpm exec moon run runner:build
 pnpm exec moon run runner:test
 
 # direct cargo commands still work
+# dev安装 cargo-watch cargo install cargo-watch --locked
 cargo watch -x 'run -- --host 127.0.0.1 --port 3002'
 cargo run -- --host 127.0.0.1 --port 3002
 
