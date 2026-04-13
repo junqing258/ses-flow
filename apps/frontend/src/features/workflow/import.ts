@@ -7,16 +7,18 @@ import {
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
 } from "./model";
-import { createNewWorkflowEditorState, type WorkflowEditorState } from "./persistence";
+import {
+  createNewWorkflowEditorState,
+  type WorkflowEditorState,
+} from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 
-const paletteItemById = WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).reduce<Record<string, WorkflowPaletteItem>>(
-  (accumulator, item) => {
-    accumulator[item.id] = item;
-    return accumulator;
-  },
-  {},
-);
+const paletteItemById = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+  (category) => category.items,
+).reduce<Record<string, WorkflowPaletteItem>>((accumulator, item) => {
+  accumulator[item.id] = item;
+  return accumulator;
+}, {});
 
 const getPaletteIdForRunnerNodeType = (nodeType: string) => {
   switch (nodeType) {
@@ -95,10 +97,15 @@ const getNodeKind = (nodeType: string): WorkflowFlowNode["data"]["kind"] => {
   }
 };
 
-const readEditorPosition = (node: RunnerWorkflowDefinition["nodes"][number], index: number) => {
+const readEditorPosition = (
+  node: RunnerWorkflowDefinition["nodes"][number],
+  index: number,
+) => {
   const editorPosition = node.annotations?.editorPosition;
   const maybePosition =
-    editorPosition && typeof editorPosition === "object" && !Array.isArray(editorPosition)
+    editorPosition &&
+    typeof editorPosition === "object" &&
+    !Array.isArray(editorPosition)
       ? (editorPosition as { x?: unknown; y?: unknown })
       : null;
 
@@ -119,7 +126,11 @@ const readEditorPosition = (node: RunnerWorkflowDefinition["nodes"][number], ind
   };
 };
 
-const setPanelFieldValue = (panel: WorkflowNodePanel, fieldKey: string, value: string) => {
+const setPanelFieldValue = (
+  panel: WorkflowNodePanel,
+  fieldKey: string,
+  value: string,
+) => {
   panel.tabs.forEach((tab) => {
     panel.fieldsByTab[tab]?.forEach((field) => {
       if (field.key === fieldKey) {
@@ -141,7 +152,8 @@ const serializeMappingValue = (value: unknown) => {
   return JSON.stringify(value, null, 2);
 };
 
-const clonePanel = (panel: WorkflowNodePanel): WorkflowNodePanel => structuredClone(panel);
+const clonePanel = (panel: WorkflowNodePanel): WorkflowNodePanel =>
+  structuredClone(panel);
 
 const createImportedNode = (
   definition: RunnerWorkflowDefinition,
@@ -150,7 +162,8 @@ const createImportedNode = (
   existingNodes: WorkflowFlowNode[],
 ) => {
   const paletteId = getPaletteIdForRunnerNodeType(node.type);
-  const paletteItem = paletteItemById[paletteId] ?? paletteItemById["palette-action"];
+  const paletteItem =
+    paletteItemById[paletteId] ?? paletteItemById["palette-action"];
   const { node: draftNode, panel } = createWorkflowNodeDraft(
     paletteItem,
     readEditorPosition(node, index),
@@ -177,35 +190,100 @@ const createImportedNode = (
 
   setPanelFieldValue(nextPanel, "nodeId", node.id);
   setPanelFieldValue(nextPanel, "nodeName", node.name);
-  setPanelFieldValue(nextPanel, "timeout", node.timeoutMs ? String(node.timeoutMs) : "");
-  setPanelFieldValue(nextPanel, "note", typeof node.annotations?.note === "string" ? node.annotations.note : "");
+  setPanelFieldValue(
+    nextPanel,
+    "timeout",
+    node.timeoutMs ? String(node.timeoutMs) : "",
+  );
+  setPanelFieldValue(
+    nextPanel,
+    "note",
+    typeof node.annotations?.note === "string" ? node.annotations.note : "",
+  );
 
   if (node.type === "fetch") {
-    setPanelFieldValue(nextPanel, "connector", String(node.config?.connector ?? ""));
-    setPanelFieldValue(nextPanel, "inputFrom", serializeMappingValue(node.inputMapping));
-    setPanelFieldValue(nextPanel, "outputTo", serializeMappingValue(node.outputMapping));
+    setPanelFieldValue(
+      nextPanel,
+      "method",
+      String(node.config?.method ?? "GET"),
+    );
+    setPanelFieldValue(nextPanel, "url", String(node.config?.url ?? ""));
+    setPanelFieldValue(
+      nextPanel,
+      "headers",
+      serializeMappingValue(node.config?.headers),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "inputFrom",
+      serializeMappingValue(node.inputMapping),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "outputTo",
+      serializeMappingValue(node.outputMapping),
+    );
   }
 
   if (node.type === "switch" || node.type === "if_else") {
-    setPanelFieldValue(nextPanel, "expression", String(node.config?.expression ?? ""));
+    setPanelFieldValue(
+      nextPanel,
+      "expression",
+      String(node.config?.expression ?? ""),
+    );
   }
 
-  if (node.type === "action" || node.type === "task" || node.type === "respond" || node.type === "sub_workflow" || node.type === "code") {
-    setPanelFieldValue(nextPanel, "command", String(node.config?.action ?? node.config?.taskType ?? node.config?.workflowKey ?? ""));
-    setPanelFieldValue(nextPanel, "payload", serializeMappingValue(node.inputMapping));
+  if (
+    node.type === "action" ||
+    node.type === "task" ||
+    node.type === "respond" ||
+    node.type === "sub_workflow" ||
+    node.type === "code"
+  ) {
+    setPanelFieldValue(
+      nextPanel,
+      "command",
+      String(
+        node.config?.action ??
+          node.config?.taskType ??
+          node.config?.workflowKey ??
+          "",
+      ),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "payload",
+      serializeMappingValue(node.inputMapping),
+    );
   }
 
   if (node.type === "wait") {
-    setPanelFieldValue(nextPanel, "waitEvent", String(node.config?.event ?? ""));
+    setPanelFieldValue(
+      nextPanel,
+      "waitEvent",
+      String(node.config?.event ?? ""),
+    );
   }
 
   if (node.type === "webhook_trigger") {
-    setPanelFieldValue(nextPanel, "path", String(definition.trigger.path ?? ""));
+    setPanelFieldValue(
+      nextPanel,
+      "path",
+      String(definition.trigger.path ?? ""),
+    );
   }
 
   if (node.retryPolicy?.max_attempts !== undefined) {
-    setPanelFieldValue(nextPanel, "maxAttempts", String(node.retryPolicy.max_attempts));
-    setPanelFieldValue(nextPanel, "retryCount", String(node.retryPolicy.max_attempts));
+    setPanelFieldValue(
+      nextPanel,
+      "maxAttempts",
+      String(node.retryPolicy.max_attempts),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "retryCount",
+      String(node.retryPolicy.max_attempts),
+    );
   }
 
   return {
@@ -214,9 +292,15 @@ const createImportedNode = (
   };
 };
 
-const branchLabelPosition = (sourceNode: WorkflowFlowNode, branch: "branch-a" | "branch-b") => ({
+const branchLabelPosition = (
+  sourceNode: WorkflowFlowNode,
+  branch: "branch-a" | "branch-b",
+) => ({
   x: sourceNode.position.x + 240,
-  y: branch === "branch-a" ? sourceNode.position.y - 42 : sourceNode.position.y + 132,
+  y:
+    branch === "branch-a"
+      ? sourceNode.position.y - 42
+      : sourceNode.position.y + 132,
 });
 
 const createBranchLabelNode = (
@@ -248,41 +332,67 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
   const branchLabelNodes: WorkflowFlowNode[] = [];
 
   definition.nodes.forEach((nodeDefinition, index) => {
-    const imported = createImportedNode(definition, nodeDefinition, index, nodes);
+    const imported = createImportedNode(
+      definition,
+      nodeDefinition,
+      index,
+      nodes,
+    );
 
     nodes.push(imported.node);
     panelByNodeId[imported.node.id] = imported.panel;
   });
 
-  const nodeById = Object.fromEntries(nodes.map((node) => [node.id, node] as const));
-  const transitionsBySource = definition.transitions.reduce<Record<string, RunnerWorkflowDefinition["transitions"]>>((accumulator, transition) => {
-    accumulator[transition.from] = [...(accumulator[transition.from] ?? []), transition];
+  const nodeById = Object.fromEntries(
+    nodes.map((node) => [node.id, node] as const),
+  );
+  const transitionsBySource = definition.transitions.reduce<
+    Record<string, RunnerWorkflowDefinition["transitions"]>
+  >((accumulator, transition) => {
+    accumulator[transition.from] = [
+      ...(accumulator[transition.from] ?? []),
+      transition,
+    ];
     return accumulator;
   }, {});
 
   Object.entries(transitionsBySource).forEach(([sourceId, transitions]) => {
     const sourceNode = nodeById[sourceId];
 
-    if (!sourceNode || (sourceNode.data.kind !== "switch" && sourceNode.data.kind !== "if-else")) {
+    if (
+      !sourceNode ||
+      (sourceNode.data.kind !== "switch" && sourceNode.data.kind !== "if-else")
+    ) {
       return;
     }
 
     const panel = panelByNodeId[sourceId];
-    const labelledTransitions = transitions.filter((transition) => transition.label);
-    const defaultTransition = transitions.find((transition) => transition.branchType === "default");
+    const labelledTransitions = transitions.filter(
+      (transition) => transition.label,
+    );
+    const defaultTransition = transitions.find(
+      (transition) => transition.branchType === "default",
+    );
 
     if (sourceNode.data.kind === "if-else") {
-      const thenLabel = labelledTransitions.find((transition) => transition.label === "then")?.label ?? "then";
-      const elseLabel = labelledTransitions.find((transition) => transition.label === "else")?.label ?? "else";
+      const thenLabel =
+        labelledTransitions.find((transition) => transition.label === "then")
+          ?.label ?? "then";
+      const elseLabel =
+        labelledTransitions.find((transition) => transition.label === "else")
+          ?.label ?? "else";
 
       setPanelFieldValue(panel, "caseA", thenLabel);
       setPanelFieldValue(panel, "caseB", elseLabel);
     }
 
     if (sourceNode.data.kind === "switch") {
-      const expression = panel.fieldsByTab.base?.find((field) => field.key === "expression")?.value || "value";
+      const expression =
+        panel.fieldsByTab.base?.find((field) => field.key === "expression")
+          ?.value || "value";
       const firstLabel = labelledTransitions[0]?.label ?? "A";
-      const secondLabel = labelledTransitions[1]?.label ?? defaultTransition?.label ?? "B";
+      const secondLabel =
+        labelledTransitions[1]?.label ?? defaultTransition?.label ?? "B";
 
       setPanelFieldValue(panel, "caseA", `${expression} === '${firstLabel}'`);
       setPanelFieldValue(panel, "caseB", `${expression} === '${secondLabel}'`);
@@ -297,13 +407,25 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
     if (sourceNode?.data.kind === "if-else") {
       sourceHandle = transition.label === "else" ? "branch-b" : "branch-a";
     } else if (sourceNode?.data.kind === "switch") {
-      sourceHandle = transition.branchType === "default" ? "branch-b" : edges.some((edge) => edge.source === transition.from && edge.sourceHandle === "branch-a") ? "branch-b" : "branch-a";
+      sourceHandle =
+        transition.branchType === "default"
+          ? "branch-b"
+          : edges.some(
+                (edge) =>
+                  edge.source === transition.from &&
+                  edge.sourceHandle === "branch-a",
+              )
+            ? "branch-b"
+            : "branch-a";
     } else if (sourceNode?.type !== "terminal") {
       sourceHandle = "out";
     }
 
     const targetNode = nodeById[transition.to];
-    const targetHandle = targetNode?.type === "terminal" && targetNode.data.kind === "start" ? undefined : "in";
+    const targetHandle =
+      targetNode?.type === "terminal" && targetNode.data.kind === "start"
+        ? undefined
+        : "in";
 
     edges.push({
       id: `edge:${transition.from}:${sourceHandle ?? "default"}->${transition.to}:${targetHandle ?? "default"}:${index}`,
@@ -318,19 +440,45 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
       },
     });
 
-    if (sourceNode?.data.kind === "switch" || sourceNode?.data.kind === "if-else") {
-      if (sourceHandle === "branch-a" && !branchLabelNodes.some((node) => node.id === `${sourceNode.id}_branch-a_label`)) {
-        branchLabelNodes.push(createBranchLabelNode(sourceNode, "branch-a", transition.label ?? "A"));
+    if (
+      sourceNode?.data.kind === "switch" ||
+      sourceNode?.data.kind === "if-else"
+    ) {
+      if (
+        sourceHandle === "branch-a" &&
+        !branchLabelNodes.some(
+          (node) => node.id === `${sourceNode.id}_branch-a_label`,
+        )
+      ) {
+        branchLabelNodes.push(
+          createBranchLabelNode(
+            sourceNode,
+            "branch-a",
+            transition.label ?? "A",
+          ),
+        );
       }
 
-      if (sourceHandle === "branch-b" && !branchLabelNodes.some((node) => node.id === `${sourceNode.id}_branch-b_label`)) {
-        branchLabelNodes.push(createBranchLabelNode(sourceNode, "branch-b", transition.label ?? transition.branchType ?? "B"));
+      if (
+        sourceHandle === "branch-b" &&
+        !branchLabelNodes.some(
+          (node) => node.id === `${sourceNode.id}_branch-b_label`,
+        )
+      ) {
+        branchLabelNodes.push(
+          createBranchLabelNode(
+            sourceNode,
+            "branch-b",
+            transition.label ?? transition.branchType ?? "B",
+          ),
+        );
       }
     }
   });
 
   const allNodes = [...nodes, ...branchLabelNodes];
-  const selectedNodeId = nodes.find((node) => node.data.kind !== "branch-label")?.id ?? "";
+  const selectedNodeId =
+    nodes.find((node) => node.data.kind !== "branch-label")?.id ?? "";
 
   return {
     activeTab: "base",

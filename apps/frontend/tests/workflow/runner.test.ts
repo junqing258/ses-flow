@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { Position } from "@vue-flow/core";
 
-import { createWorkflowEdges, createWorkflowPanels, type WorkflowFlowNode } from "@/features/workflow/model";
+import {
+  createWorkflowEdges,
+  createWorkflowPanels,
+  type WorkflowFlowNode,
+} from "@/features/workflow/model";
 import {
   buildRunnerWorkflowDefinition,
   shouldPollWorkflowRunSummary,
@@ -193,12 +197,23 @@ describe("buildRunnerWorkflowDefinition", () => {
       ["end_right", "end"],
     ]);
 
-    const fetchNode = definition.nodes.find((node) => node.id === "fetch_order");
+    const fetchNode = definition.nodes.find(
+      (node) => node.id === "fetch_order",
+    );
+    expect(fetchNode?.config).toEqual({
+      method: "GET",
+      url: "https://jsonplaceholder.typicode.com/todos",
+      headers: {
+        "x-source": "workflow-editor",
+      },
+    });
     expect(fetchNode?.inputMapping).toEqual({
-      orderId: "{{trigger.body.orderId}}",
+      userId: "{{trigger.body.userId}}",
     });
 
-    const switchNode = definition.nodes.find((node) => node.id === "switch_biz_type");
+    const switchNode = definition.nodes.find(
+      (node) => node.id === "switch_biz_type",
+    );
     expect(switchNode?.config).toEqual({
       expression: "{{input.bizType}}",
     });
@@ -208,7 +223,12 @@ describe("buildRunnerWorkflowDefinition", () => {
       { from: "webhook_trigger", to: "fetch_order" },
       { from: "fetch_order", to: "switch_biz_type" },
       { from: "switch_biz_type", to: "assign_task", label: "A", priority: 100 },
-      { from: "switch_biz_type", to: "wait_callback", branchType: "default", priority: 1 },
+      {
+        from: "switch_biz_type",
+        to: "wait_callback",
+        branchType: "default",
+        priority: 1,
+      },
       { from: "assign_task", to: "end_left" },
       { from: "wait_callback", to: "end_right" },
     ]);
@@ -242,7 +262,12 @@ describe("buildRunnerWorkflowDefinition", () => {
       { from: "webhook_trigger", to: "fetch_order" },
       { from: "fetch_order", to: "switch_biz_type" },
       { from: "switch_biz_type", to: "assign_task", label: "A", priority: 100 },
-      { from: "switch_biz_type", to: "wait_callback", label: "B", priority: 90 },
+      {
+        from: "switch_biz_type",
+        to: "wait_callback",
+        label: "B",
+        priority: 90,
+      },
       { from: "assign_task", to: "end_left" },
       { from: "wait_callback", to: "end_right" },
     ]);

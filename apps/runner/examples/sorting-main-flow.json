@@ -28,7 +28,8 @@
       "type": "fetch",
       "name": "查询订单",
       "config": {
-        "connector": "oms.getOrder"
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/todos"
       },
       "inputMapping": {
         "orderNo": "{{trigger.body.orderNo}}",

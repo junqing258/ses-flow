@@ -1,8 +1,6 @@
 pub mod server;
 
-pub use server::{
-    WorkflowServer, WorkflowRegistration, ServerError,
-};
+pub use server::{ServerError, WorkflowRegistration, WorkflowServer};
 
 #[cfg(test)]
 mod tests;

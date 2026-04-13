@@ -39,29 +39,35 @@ impl Default for InMemoryCatalogStore {
 
 impl WorkflowCatalogStore for InMemoryCatalogStore {
     fn save_workspace(&self, workspace: &WorkspaceRecord) -> Result<(), RunnerError> {
-        let mut state = self.state
+        let mut state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
-        state.workspaces.insert(workspace.id.clone(), workspace.clone());
+        state
+            .workspaces
+            .insert(workspace.id.clone(), workspace.clone());
         Ok(())
     }
 
     fn load_workspace(&self, workspace_id: &str) -> Result<Option<WorkspaceRecord>, RunnerError> {
-        let state = self.state
+        let state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
         Ok(state.workspaces.get(workspace_id).cloned())
     }
 
     fn load_all_workspaces(&self) -> Result<Vec<WorkspaceRecord>, RunnerError> {
-        let state = self.state
+        let state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
         Ok(state.workspaces.values().cloned().collect())
     }
 
     fn save_workflow(&self, workflow: &StoredWorkflowDefinition) -> Result<(), RunnerError> {
-        let mut state = self.state
+        let mut state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
         let mut workflow_record = workflow.clone();
@@ -75,32 +81,44 @@ impl WorkflowCatalogStore for InMemoryCatalogStore {
         Ok(())
     }
 
-    fn load_workflow(&self, workflow_id: &str) -> Result<Option<StoredWorkflowDefinition>, RunnerError> {
-        let state = self.state
+    fn load_workflow(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<StoredWorkflowDefinition>, RunnerError> {
+        let state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
         Ok(state.workflows.get(workflow_id).cloned())
     }
 
     fn load_all_workflows(&self) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
-        let state = self.state
+        let state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
         Ok(state.workflows.values().cloned().collect())
     }
 
-    fn load_workflows_by_workspace(&self, workspace_id: &str) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
-        let state = self.state
+    fn load_workflows_by_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
+        let state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
-        Ok(state.workflows.values()
+        Ok(state
+            .workflows
+            .values()
             .filter(|w| w.workspace_id == workspace_id)
             .cloned()
             .collect())
     }
 
     fn delete_workflow(&self, workflow_id: &str) -> Result<(), RunnerError> {
-        let mut state = self.state
+        let mut state = self
+            .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
         state.workflows.remove(workflow_id);

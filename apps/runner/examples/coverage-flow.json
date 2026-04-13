@@ -36,7 +36,8 @@
       "type": "fetch",
       "name": "Fetch Context",
       "config": {
-        "connector": "oms.getOrder"
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/todos"
       },
       "inputMapping": {
         "orderNo": "{{trigger.body.orderNo}}",

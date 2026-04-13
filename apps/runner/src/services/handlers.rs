@@ -4,17 +4,8 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::core::definition::WorkflowDefinition;
-use crate::error::RunnerError;
 use crate::core::runtime::NodeExecutionContext;
-
-pub trait FetchConnector: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn fetch(
-        &self,
-        request: &Value,
-        context: &NodeExecutionContext<'_>,
-    ) -> Result<Value, RunnerError>;
-}
+use crate::error::RunnerError;
 
 pub trait ActionHandler: Send + Sync {
     fn name(&self) -> &'static str;
@@ -36,7 +27,6 @@ pub trait TaskHandler: Send + Sync {
 
 #[derive(Default, Clone)]
 pub struct WorkflowServices {
-    pub fetch_connectors: FetchConnectorRegistry,
     pub action_handlers: ActionHandlerRegistry,
     pub task_handlers: TaskHandlerRegistry,
     pub workflow_definitions: WorkflowDefinitionRegistry,
@@ -45,29 +35,9 @@ pub struct WorkflowServices {
 impl WorkflowServices {
     pub fn with_defaults() -> Self {
         let mut services = Self::default();
-        services.fetch_connectors.register(MockOmsGetOrderConnector);
         services.action_handlers.register(MockRcsDispatchAction);
         services.task_handlers.register(MockManualReviewTaskHandler);
         services
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct FetchConnectorRegistry {
-    connectors: HashMap<String, Arc<dyn FetchConnector>>,
-}
-
-impl FetchConnectorRegistry {
-    pub fn register<C>(&mut self, connector: C)
-    where
-        C: FetchConnector + 'static,
-    {
-        self.connectors
-            .insert(connector.name().to_string(), Arc::new(connector));
-    }
-
-    pub fn resolve(&self, name: &str) -> Option<Arc<dyn FetchConnector>> {
-        self.connectors.get(name).cloned()
     }
 }
 
@@ -124,31 +94,8 @@ impl WorkflowDefinitionRegistry {
     }
 }
 
-struct MockOmsGetOrderConnector;
 struct MockRcsDispatchAction;
 struct MockManualReviewTaskHandler;
-
-impl FetchConnector for MockOmsGetOrderConnector {
-    fn name(&self) -> &'static str {
-        "oms.getOrder"
-    }
-
-    fn fetch(
-        &self,
-        request: &Value,
-        context: &NodeExecutionContext<'_>,
-    ) -> Result<Value, RunnerError> {
-        Ok(json!({
-            "orderNo": request.get("orderNo").cloned().unwrap_or(Value::Null),
-            "warehouseId": request.get("warehouseId").cloned().unwrap_or(Value::Null),
-            "fetchedAt": "mocked",
-            "status": "loaded",
-            "runId": context.run_id,
-            "workflowKey": context.workflow_key,
-            "workflowVersion": context.workflow_version
-        }))
-    }
-}
 
 impl ActionHandler for MockRcsDispatchAction {
     fn name(&self) -> &'static str {

@@ -1,4 +1,7 @@
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use axum::body::Body;
@@ -120,8 +123,18 @@ async fn uploads_workflow_and_executes_run_to_completion() {
 #[tokio::test]
 async fn streams_waiting_run_summary_over_sse() {
     let app = build_app();
-    let workflow: Value = serde_json::from_str(include_str!("../examples/sorting-main-flow.json"))
-        .expect("example workflow should deserialize");
+    let mut workflow: Value =
+        serde_json::from_str(include_str!("../../examples/sorting-main-flow.json"))
+            .expect("example workflow should deserialize");
+    let fetch_base_url = spawn_echo_http_server();
+    let fetch_node = workflow["nodes"]
+        .as_array_mut()
+        .and_then(|nodes| nodes.iter_mut().find(|node| node["id"] == "fetch_order"))
+        .expect("sorting flow should contain fetch node");
+    fetch_node["config"] = json!({
+        "method": "GET",
+        "url": format!("{fetch_base_url}/todos")
+    });
 
     let upload_response = app
         .clone()
@@ -220,6 +233,49 @@ async fn streams_waiting_run_summary_over_sse() {
     assert!(text.contains("event: summary"));
     assert!(text.contains(&format!("\"runId\":\"{run_id}\"")));
     assert!(text.contains("\"status\":\"waiting\""));
+}
+
+fn spawn_echo_http_server() -> String {
+    let listener =
+        TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");
+    let address = listener
+        .local_addr()
+        .expect("echo test server should expose local address");
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+            let mut buffer = Vec::new();
+            let mut chunk = [0u8; 1024];
+
+            loop {
+                let read = stream
+                    .read(&mut chunk)
+                    .expect("echo test server should read request");
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+                if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+
+            let response_body = json!({ "status": "loaded" }).to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("echo test server should write response");
+        }
+    });
+
+    format!("http://{address}")
 }
 
 #[tokio::test]
@@ -458,7 +514,10 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
     let detail_payload: Value =
         serde_json::from_slice(&detail_body).expect("response body should be valid json");
     assert_eq!(detail_payload["workflowId"], json!("wf-editor"));
-    assert_eq!(detail_payload["document"]["workflow"]["version"], json!("v3"));
+    assert_eq!(
+        detail_payload["document"]["workflow"]["version"],
+        json!("v3")
+    );
 }
 
 async fn wait_for_terminal_status(app: axum::Router, run_id: &str) -> Value {

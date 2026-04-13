@@ -2,7 +2,11 @@ import type { Edge } from "@vue-flow/core";
 
 import { request as sendRequest } from "@/lib/request";
 
-import type { WorkflowFlowNode, WorkflowNodePanel, WorkflowTabId } from "./model";
+import type {
+  WorkflowFlowNode,
+  WorkflowNodePanel,
+  WorkflowTabId,
+} from "./model";
 import type { PersistedWorkflowDocument } from "./persistence";
 
 type WorkflowStatus = "draft" | "published";
@@ -39,10 +43,15 @@ interface RunnerTransitionDefinition {
   priority?: number;
 }
 
-export type WorkflowRunStatus = "running" | "completed" | "waiting" | "failed" | "terminated";
+export type WorkflowRunStatus =
+  | "running"
+  | "completed"
+  | "waiting"
+  | "failed"
+  | "terminated";
 
 export const shouldPollWorkflowRunSummary = (status: WorkflowRunStatus) =>
-  status === "running" || status === "waiting" || status === "terminated";
+  status === "running" || status === "waiting";
 
 export interface WorkflowExecutionRequest {
   env?: Record<string, unknown>;
@@ -126,14 +135,21 @@ class RunnerRequestError extends Error {
   }
 }
 
-const RUNNER_BASE_URL = (import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api").replace(/\/$/, "");
+const RUNNER_BASE_URL = (
+  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api"
+).replace(/\/$/, "");
 const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
 const DEFAULT_WORKSPACE_NAME = "SES Workflow Editor";
 
-const parseRunnerResponse = async <T>(response: Response, fallbackMessage: string): Promise<T> => {
+const parseRunnerResponse = async <T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<T> => {
   const contentType = response.headers.get("content-type") ?? "";
   const hasJsonBody = contentType.includes("application/json");
-  const payload = hasJsonBody ? ((await response.json()) as Record<string, unknown>) : null;
+  const payload = hasJsonBody
+    ? ((await response.json()) as Record<string, unknown>)
+    : null;
 
   if (!response.ok) {
     const errorMessage =
@@ -147,8 +163,14 @@ const parseRunnerResponse = async <T>(response: Response, fallbackMessage: strin
   return payload as T;
 };
 
-const getFieldValue = (panel: WorkflowNodePanel | undefined, tab: WorkflowTabId, fieldKey: string) =>
-  panel?.fieldsByTab[tab]?.find((field) => field.key === fieldKey)?.value.trim() ?? "";
+const getFieldValue = (
+  panel: WorkflowNodePanel | undefined,
+  tab: WorkflowTabId,
+  fieldKey: string,
+) =>
+  panel?.fieldsByTab[tab]
+    ?.find((field) => field.key === fieldKey)
+    ?.value.trim() ?? "";
 
 const parsePositiveInteger = (value: string) => {
   const parsed = Number.parseInt(value.replace(/[^\d]/g, ""), 10);
@@ -167,7 +189,10 @@ const normalizeReferencePath = (rawValue: string) => {
     return value;
   }
 
-  if (/^['"].*['"]$/.test(value) || /^(true|false|null|-?\d+(\.\d+)?)$/i.test(value)) {
+  if (
+    /^['"].*['"]$/.test(value) ||
+    /^(true|false|null|-?\d+(\.\d+)?)$/i.test(value)
+  ) {
     return value;
   }
 
@@ -195,7 +220,10 @@ const parseScalarValue = (rawValue: string): unknown => {
     return "";
   }
 
-  if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith("\"") && value.endsWith("\""))) {
+  if (
+    (value.startsWith("'") && value.endsWith("'")) ||
+    (value.startsWith('"') && value.endsWith('"'))
+  ) {
     return value.slice(1, -1);
   }
 
@@ -218,7 +246,9 @@ const parseScalarValue = (rawValue: string): unknown => {
   return normalizeReferencePath(value);
 };
 
-const parseLooseObjectLiteral = (rawValue: string): Record<string, unknown> | null => {
+const parseLooseObjectLiteral = (
+  rawValue: string,
+): Record<string, unknown> | null => {
   const trimmed = rawValue.trim();
 
   if (!trimmed) {
@@ -243,7 +273,10 @@ const parseLooseObjectLiteral = (rawValue: string): Record<string, unknown> | nu
         return null;
       }
 
-      const key = line.slice(0, separatorIndex).trim().replace(/^['"]|['"]$/g, "");
+      const key = line
+        .slice(0, separatorIndex)
+        .trim()
+        .replace(/^['"]|['"]$/g, "");
       const value = line.slice(separatorIndex + 1).trim();
 
       if (!key) {
@@ -273,6 +306,42 @@ const parseMappingValue = (rawValue: string): RunnerMappingValue => {
   return JSON.stringify(scalarValue);
 };
 
+const parseObjectValue = (
+  rawValue: string,
+): Record<string, unknown> | undefined => {
+  const objectValue = parseLooseObjectLiteral(rawValue);
+
+  if (objectValue) {
+    return objectValue;
+  }
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+};
+
+const normalizeFetchMethod = (rawValue: string) => {
+  const value = rawValue.trim().toUpperCase();
+
+  if (value === "POST") {
+    return "POST";
+  }
+
+  return "GET";
+};
+
 const normalizeExpression = (rawValue: string, fallback = "default") => {
   const value = rawValue.trim();
 
@@ -283,7 +352,10 @@ const normalizeExpression = (rawValue: string, fallback = "default") => {
   return normalizeReferencePath(value);
 };
 
-const extractSwitchBranchLabel = (panel: WorkflowNodePanel | undefined, sourceHandle?: string | null) => {
+const extractSwitchBranchLabel = (
+  panel: WorkflowNodePanel | undefined,
+  sourceHandle?: string | null,
+) => {
   if (sourceHandle === "branch-a") {
     const caseA = getFieldValue(panel, "mapping", "caseA");
     const match = caseA.match(/===\s*['"](.+?)['"]/);
@@ -322,7 +394,9 @@ const normalizeSwitchFallbackKey = (rawValue: string) => {
 };
 
 const resolveSwitchDefaultHandle = (panel: WorkflowNodePanel | undefined) => {
-  const fallback = normalizeSwitchFallbackKey(getFieldValue(panel, "base", "fallback"));
+  const fallback = normalizeSwitchFallbackKey(
+    getFieldValue(panel, "base", "fallback"),
+  );
 
   if (!fallback) {
     return undefined;
@@ -395,14 +469,19 @@ const buildNodeDefinition = (
   panel: WorkflowNodePanel | undefined,
 ): RunnerNodeDefinition => {
   const type = extractNodeType(node);
-  const timeoutMs = parsePositiveInteger(getFieldValue(panel, "base", "timeout"));
+  const timeoutMs = parsePositiveInteger(
+    getFieldValue(panel, "base", "timeout"),
+  );
   const maxAttempts =
     parsePositiveInteger(getFieldValue(panel, "retry", "maxAttempts")) ??
     parsePositiveInteger(getFieldValue(panel, "retry", "retryCount"));
 
   const definition: RunnerNodeDefinition = {
     id: node.id,
-    name: getFieldValue(panel, "base", "nodeName") || node.data.subtitle || node.data.title,
+    name:
+      getFieldValue(panel, "base", "nodeName") ||
+      node.data.subtitle ||
+      node.data.title,
     type,
     annotations: {
       editorPosition: node.position,
@@ -422,14 +501,25 @@ const buildNodeDefinition = (
 
   if (type === "fetch") {
     definition.config = {
-      connector: getFieldValue(panel, "base", "connector") || "connector.unknown",
+      method: normalizeFetchMethod(getFieldValue(panel, "base", "method")),
+      url:
+        getFieldValue(panel, "base", "url") ||
+        "https://jsonplaceholder.typicode.com/todos",
     };
-    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "inputFrom"));
+    const headers = parseObjectValue(getFieldValue(panel, "base", "headers"));
+    if (headers && Object.keys(headers).length > 0) {
+      definition.config.headers = headers;
+    }
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "inputFrom"),
+    );
   }
 
   if (type === "switch" || type === "if_else") {
     definition.config = {
-      expression: normalizeExpression(getFieldValue(panel, "base", "expression")),
+      expression: normalizeExpression(
+        getFieldValue(panel, "base", "expression"),
+      ),
     };
   }
 
@@ -437,7 +527,9 @@ const buildNodeDefinition = (
     definition.config = {
       action: getFieldValue(panel, "base", "command") || "action.unknown",
     };
-    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "payload"),
+    );
   }
 
   if (type === "task") {
@@ -445,21 +537,27 @@ const buildNodeDefinition = (
       taskType: getFieldValue(panel, "base", "command") || "task.unknown",
       completeEvent: "task.completed",
     };
-    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "payload"),
+    );
   }
 
   if (type === "respond") {
     definition.config = {
       statusCode: 200,
     };
-    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "payload"),
+    );
   }
 
   if (type === "sub_workflow") {
     definition.config = {
       workflowKey: getFieldValue(panel, "base", "command") || undefined,
     };
-    definition.inputMapping = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "payload"),
+    );
   }
 
   if (type === "wait") {
@@ -487,7 +585,12 @@ const buildTransitions = (
     const sourcePanel = panelByNodeId[edge.source];
 
     if (sourceNode?.data.kind === "if-else") {
-      const label = edge.sourceHandle === "branch-a" ? "then" : edge.sourceHandle === "branch-b" ? "else" : undefined;
+      const label =
+        edge.sourceHandle === "branch-a"
+          ? "then"
+          : edge.sourceHandle === "branch-b"
+            ? "else"
+            : undefined;
       return {
         from: edge.source,
         to: edge.target,
@@ -531,8 +634,13 @@ const buildTransitions = (
     };
   });
 
-const buildWorkflowTrigger = (nodes: WorkflowFlowNode[], panelByNodeId: Record<string, WorkflowNodePanel>): RunnerTriggerDefinition => {
-  const webhookNode = nodes.find((node) => extractNodeType(node) === "webhook_trigger");
+const buildWorkflowTrigger = (
+  nodes: WorkflowFlowNode[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+): RunnerTriggerDefinition => {
+  const webhookNode = nodes.find(
+    (node) => extractNodeType(node) === "webhook_trigger",
+  );
 
   if (!webhookNode) {
     return {
@@ -541,7 +649,8 @@ const buildWorkflowTrigger = (nodes: WorkflowFlowNode[], panelByNodeId: Record<s
   }
 
   const panel = panelByNodeId[webhookNode.id];
-  const path = getFieldValue(panel, "base", "path") || `/workflows/${webhookNode.id}`;
+  const path =
+    getFieldValue(panel, "base", "path") || `/workflows/${webhookNode.id}`;
 
   return {
     type: "webhook",
@@ -602,12 +711,14 @@ export const syncWorkflowToRunner = async (
         workflow,
       }),
     });
-
   } catch {
     throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
 
-  return parseRunnerResponse<RunnerWorkflowRegistration>(response, "同步工作流到 Runner 失败");
+  return parseRunnerResponse<RunnerWorkflowRegistration>(
+    response,
+    "同步工作流到 Runner 失败",
+  );
 };
 
 export const publishWorkflowToRunner = async (
@@ -628,25 +739,35 @@ export const executeWorkflowRun = async (
   let response: Response;
 
   try {
-    response = await sendRequest(`${RUNNER_BASE_URL}/workflows/${encodeURIComponent(workflowId)}/runs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    response = await sendRequest(
+      `${RUNNER_BASE_URL}/workflows/${encodeURIComponent(workflowId)}/runs`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
       },
-      body: JSON.stringify(request),
-    });
+    );
   } catch {
     throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
 
-  return parseRunnerResponse<WorkflowExecutionAccepted>(response, "启动工作流运行失败");
+  return parseRunnerResponse<WorkflowExecutionAccepted>(
+    response,
+    "启动工作流运行失败",
+  );
 };
 
-export const fetchWorkflowRunSummary = async (runId: string): Promise<WorkflowRunSummary> => {
+export const fetchWorkflowRunSummary = async (
+  runId: string,
+): Promise<WorkflowRunSummary> => {
   let response: Response;
 
   try {
-    response = await sendRequest(`${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}`);
+    response = await sendRequest(
+      `${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}`,
+    );
   } catch {
     throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
@@ -654,16 +775,24 @@ export const fetchWorkflowRunSummary = async (runId: string): Promise<WorkflowRu
   return parseRunnerResponse<WorkflowRunSummary>(response, "获取运行状态失败");
 };
 
-export const terminateWorkflowRun = async (runId: string): Promise<WorkflowRunSummary> => {
+export const terminateWorkflowRun = async (
+  runId: string,
+): Promise<WorkflowRunSummary> => {
   let response: Response;
 
   try {
-    response = await sendRequest(`${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}/terminate`, {
-      method: "POST",
-    });
+    response = await sendRequest(
+      `${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}/terminate`,
+      {
+        method: "POST",
+      },
+    );
   } catch {
     throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
 
-  return parseRunnerResponse<WorkflowRunSummary>(response, "终止工作流运行失败");
+  return parseRunnerResponse<WorkflowRunSummary>(
+    response,
+    "终止工作流运行失败",
+  );
 };

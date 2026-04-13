@@ -51,7 +51,12 @@ export type WorkflowNodeKind =
 export type WorkflowNodeType = "terminal" | "workflow-card" | "branch-chip";
 export type WorkflowTabId = "base" | "mapping" | "retry" | "error";
 export type WorkflowFieldType = "input" | "readonly" | "select" | "textarea";
-export type WorkflowExecutionStatus = "running" | "success" | "waiting" | "failed" | "skipped";
+export type WorkflowExecutionStatus =
+  | "running"
+  | "success"
+  | "waiting"
+  | "failed"
+  | "skipped";
 
 export interface WorkflowNodeData {
   active?: boolean;
@@ -98,7 +103,11 @@ export interface WorkflowNodeDraft {
   panel: WorkflowNodePanel;
 }
 
-export type WorkflowFlowNode = Node<WorkflowNodeData, Record<string, never>, WorkflowNodeType> & {
+export type WorkflowFlowNode = Node<
+  WorkflowNodeData,
+  Record<string, never>,
+  WorkflowNodeType
+> & {
   data: WorkflowNodeData;
   type: WorkflowNodeType;
 };
@@ -124,8 +133,20 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     icon: "zap",
     defaultOpen: true,
     items: [
-      { id: "palette-webhook", kind: "trigger", label: "Webhook Trigger", icon: "webhook", accent: "#6366F1" },
-      { id: "palette-respond", kind: "action", label: "Respond", icon: "send", accent: "#8B5CF6" },
+      {
+        id: "palette-webhook",
+        kind: "trigger",
+        label: "Webhook Trigger",
+        icon: "webhook",
+        accent: "#6366F1",
+      },
+      {
+        id: "palette-respond",
+        kind: "action",
+        label: "Respond",
+        icon: "send",
+        accent: "#8B5CF6",
+      },
     ],
   },
   {
@@ -134,11 +155,35 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     icon: "gitBranch",
     defaultOpen: true,
     items: [
-      { id: "palette-start", kind: "start", label: "Start", icon: "play", accent: "#10B981" },
-      { id: "palette-end", kind: "end", label: "End", icon: "shield", accent: "#EF4444" },
+      {
+        id: "palette-start",
+        kind: "start",
+        label: "Start",
+        icon: "play",
+        accent: "#10B981",
+      },
+      {
+        id: "palette-end",
+        kind: "end",
+        label: "End",
+        icon: "shield",
+        accent: "#EF4444",
+      },
       // { id: "palette-if-else", kind: "if-else", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
-      { id: "palette-switch", kind: "switch", label: "Switch", icon: "gitBranch", accent: "#EC4899" },
-      { id: "palette-subflow", kind: "trigger", label: "Sub-Workflow", icon: "webhook", accent: "#6366F1" },
+      {
+        id: "palette-switch",
+        kind: "switch",
+        label: "Switch",
+        icon: "gitBranch",
+        accent: "#EC4899",
+      },
+      {
+        id: "palette-subflow",
+        kind: "trigger",
+        label: "Sub-Workflow",
+        icon: "webhook",
+        accent: "#6366F1",
+      },
     ],
   },
   {
@@ -146,28 +191,60 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     label: "数据处理",
     icon: "database",
     defaultOpen: false,
-    items: [{ id: "palette-fetch", kind: "fetch", label: "Fetch", icon: "database", accent: "#3B82F6" }],
+    items: [
+      {
+        id: "palette-fetch",
+        kind: "fetch",
+        label: "Fetch",
+        icon: "database",
+        accent: "#3B82F6",
+      },
+    ],
   },
   {
     id: "effect",
     label: "副作用",
     icon: "activity",
     defaultOpen: false,
-    items: [{ id: "palette-action", kind: "action", label: "Action / Command", icon: "zap", accent: "#F97316" }],
+    items: [
+      {
+        id: "palette-action",
+        kind: "action",
+        label: "Action / Command",
+        icon: "zap",
+        accent: "#F97316",
+      },
+    ],
   },
   {
     id: "wait",
     label: "等待 / 异步",
     icon: "clock",
     defaultOpen: false,
-    items: [{ id: "palette-wait", kind: "wait", label: "Wait", icon: "clock", accent: "#F59E0B" }],
+    items: [
+      {
+        id: "palette-wait",
+        kind: "wait",
+        label: "Wait",
+        icon: "clock",
+        accent: "#F59E0B",
+      },
+    ],
   },
   {
     id: "task",
     label: "任务",
     icon: "listTodo",
     defaultOpen: false,
-    items: [{ id: "palette-task", kind: "action", label: "任务编排", icon: "listTodo", accent: "#8B5CF6" }],
+    items: [
+      {
+        id: "palette-task",
+        kind: "action",
+        label: "任务编排",
+        icon: "listTodo",
+        accent: "#8B5CF6",
+      },
+    ],
   },
 ];
 
@@ -177,9 +254,30 @@ const EDGE_STYLE = {
 };
 
 const INITIAL_WORKFLOW_EDGES: Edge[] = [
-  { id: "start->webhook", source: "start", target: "webhook_trigger", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
-  { id: "webhook->fetch", source: "webhook_trigger", target: "fetch_order", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
-  { id: "fetch->switch", source: "fetch_order", target: "switch_biz_type", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+  {
+    id: "start->webhook",
+    source: "start",
+    target: "webhook_trigger",
+    sourceHandle: "out",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
+  {
+    id: "webhook->fetch",
+    source: "webhook_trigger",
+    target: "fetch_order",
+    sourceHandle: "out",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
+  {
+    id: "fetch->switch",
+    source: "fetch_order",
+    target: "switch_biz_type",
+    sourceHandle: "out",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
   {
     id: "switch->assign",
     source: "switch_biz_type",
@@ -196,8 +294,22 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     targetHandle: "in",
     style: EDGE_STYLE,
   },
-  { id: "assign->end-left", source: "assign_task", target: "end_left", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
-  { id: "wait->end-right", source: "wait_callback", target: "end_right", sourceHandle: "out", targetHandle: "in", style: EDGE_STYLE },
+  {
+    id: "assign->end-left",
+    source: "assign_task",
+    target: "end_left",
+    sourceHandle: "out",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
+  {
+    id: "wait->end-right",
+    source: "wait_callback",
+    target: "end_right",
+    sourceHandle: "out",
+    targetHandle: "in",
+    style: EDGE_STYLE,
+  },
 ];
 
 const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
@@ -205,18 +317,58 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base", "mapping", "retry"],
     fieldsByTab: {
       base: [
-        { key: "command", label: "命令名称", type: "input", value: "sorting.assignTask" },
-        { key: "nodeName", label: "节点名称", type: "input", value: "分配分拣任务" },
-        { key: "timeout", label: "超时时间 (ms)", type: "input", value: "5000" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "assign_task" },
-        { key: "note", label: "备注", type: "textarea", value: "下发分拣任务到设备控制系统，并记录指令回执。" },
+        {
+          key: "command",
+          label: "命令名称",
+          type: "input",
+          value: "sorting.assignTask",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "分配分拣任务",
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: "5000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "assign_task",
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value: "下发分拣任务到设备控制系统，并记录指令回执。",
+        },
       ],
       mapping: [
-        { key: "payload", label: "指令载荷", type: "textarea", value: "{\n  orderId: payload.orderId,\n  lane: payload.laneCode\n}" },
+        {
+          key: "payload",
+          label: "指令载荷",
+          type: "textarea",
+          value: "{\n  orderId: payload.orderId,\n  lane: payload.laneCode\n}",
+        },
       ],
       retry: [
-        { key: "retryPolicy", label: "失败重试", type: "select", value: "exponential_backoff" },
-        { key: "maxAttempts", label: "最大重试次数", type: "input", value: "3" },
+        {
+          key: "retryPolicy",
+          label: "失败重试",
+          type: "select",
+          value: "exponential_backoff",
+        },
+        {
+          key: "maxAttempts",
+          label: "最大重试次数",
+          type: "input",
+          value: "3",
+        },
       ],
     },
   },
@@ -224,8 +376,18 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base"],
     fieldsByTab: {
       base: [
-        { key: "result", label: "结束状态", type: "readonly", value: "success" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "end_left" },
+        {
+          key: "result",
+          label: "结束状态",
+          type: "readonly",
+          value: "success",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "end_left",
+        },
       ],
     },
   },
@@ -233,8 +395,18 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base"],
     fieldsByTab: {
       base: [
-        { key: "result", label: "结束状态", type: "readonly", value: "waiting_callback" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "end_right" },
+        {
+          key: "result",
+          label: "结束状态",
+          type: "readonly",
+          value: "waiting_callback",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "end_right",
+        },
       ],
     },
   },
@@ -242,28 +414,81 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base", "mapping", "retry", "error"],
     fieldsByTab: {
       base: [
-        { key: "connector", label: "连接器 (Connector)", type: "input", value: "oms.getOrder" },
-        { key: "nodeName", label: "节点名称", type: "input", value: "查询订单" },
-        { key: "timeout", label: "超时时间 (ms)", type: "input", value: "3000" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "fetch_order" },
-        { key: "onError", label: "错误处理策略", type: "select", value: "retry" },
+        { key: "method", label: "请求方式", type: "select", value: "GET" },
+        {
+          key: "url",
+          label: "请求 URL",
+          type: "input",
+          value: "https://jsonplaceholder.typicode.com/todos",
+        },
+        {
+          key: "headers",
+          label: "请求头",
+          type: "textarea",
+          value: "{\n  x-source: workflow-editor\n}",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "查询订单",
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: "3000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "fetch_order",
+        },
+        {
+          key: "onError",
+          label: "错误处理策略",
+          type: "select",
+          value: "retry",
+        },
         {
           key: "note",
           label: "备注",
           type: "textarea",
-          value: "从 OMS 查询订单详情，获取 bizType 用于后续业务分流。",
+          value:
+            "使用 HTTP GET / POST 请求外部接口，返回值会暴露在 input.data 中供后续节点使用。",
         },
       ],
       mapping: [
-        { key: "inputFrom", label: "入参映射", type: "textarea", value: "{\n  orderId: trigger.payload.orderId\n}" },
-        { key: "outputTo", label: "出参保存", type: "textarea", value: "{\n  order: response.data,\n  bizType: response.data.bizType\n}" },
+        {
+          key: "inputFrom",
+          label: "请求参数 / 请求体",
+          type: "textarea",
+          value: "{\n  userId: trigger.body.userId\n}",
+        },
+        {
+          key: "outputTo",
+          label: "出参保存",
+          type: "textarea",
+          value: "{\n  todos: response.data\n}",
+        },
       ],
       retry: [
-        { key: "retryPolicy", label: "重试策略", type: "select", value: "linear" },
+        {
+          key: "retryPolicy",
+          label: "重试策略",
+          type: "select",
+          value: "linear",
+        },
         { key: "retryCount", label: "重试次数", type: "input", value: "2" },
       ],
       error: [
-        { key: "fallback", label: "失败转向", type: "readonly", value: "notify_failure" },
+        {
+          key: "fallback",
+          label: "失败转向",
+          type: "readonly",
+          value: "notify_failure",
+        },
         { key: "alarm", label: "告警级别", type: "select", value: "warning" },
       ],
     },
@@ -272,7 +497,12 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base"],
     fieldsByTab: {
       base: [
-        { key: "nodeName", label: "节点名称", type: "readonly", value: "Start" },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "readonly",
+          value: "Start",
+        },
         { key: "entry", label: "入口模式", type: "readonly", value: "单入口" },
       ],
     },
@@ -281,17 +511,52 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base", "mapping", "error"],
     fieldsByTab: {
       base: [
-        { key: "expression", label: "分流表达式", type: "input", value: "payload.bizType" },
-        { key: "nodeName", label: "节点名称", type: "input", value: "业务分流" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "switch_biz_type" },
-        { key: "fallback", label: "默认分支", type: "select", value: "bizType=B" },
+        {
+          key: "expression",
+          label: "分流表达式",
+          type: "input",
+          value: "payload.bizType",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "业务分流",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "switch_biz_type",
+        },
+        {
+          key: "fallback",
+          label: "默认分支",
+          type: "select",
+          value: "bizType=B",
+        },
       ],
       mapping: [
-        { key: "caseA", label: "分支 A 条件", type: "readonly", value: "bizType === 'A'" },
-        { key: "caseB", label: "分支 B 条件", type: "readonly", value: "bizType === 'B'" },
+        {
+          key: "caseA",
+          label: "分支 A 条件",
+          type: "readonly",
+          value: "bizType === 'A'",
+        },
+        {
+          key: "caseB",
+          label: "分支 B 条件",
+          type: "readonly",
+          value: "bizType === 'B'",
+        },
       ],
       error: [
-        { key: "unknown", label: "未知分支策略", type: "select", value: "route_to_manual_review" },
+        {
+          key: "unknown",
+          label: "未知分支策略",
+          type: "select",
+          value: "route_to_manual_review",
+        },
       ],
     },
   },
@@ -299,17 +564,47 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base", "retry", "error"],
     fieldsByTab: {
       base: [
-        { key: "waitEvent", label: "等待事件", type: "input", value: "device.sorting.callback" },
-        { key: "nodeName", label: "节点名称", type: "input", value: "等待设备回调" },
-        { key: "timeout", label: "最长等待 (ms)", type: "input", value: "15000" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "wait_callback" },
+        {
+          key: "waitEvent",
+          label: "等待事件",
+          type: "input",
+          value: "device.sorting.callback",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "等待设备回调",
+        },
+        {
+          key: "timeout",
+          label: "最长等待 (ms)",
+          type: "input",
+          value: "15000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "wait_callback",
+        },
       ],
       retry: [
         { key: "polling", label: "轮询补偿", type: "select", value: "enabled" },
-        { key: "interval", label: "补偿间隔 (ms)", type: "input", value: "2000" },
+        {
+          key: "interval",
+          label: "补偿间隔 (ms)",
+          type: "input",
+          value: "2000",
+        },
       ],
       error: [
-        { key: "timeoutAction", label: "超时处理", type: "select", value: "mark_pending" },
+        {
+          key: "timeoutAction",
+          label: "超时处理",
+          type: "select",
+          value: "mark_pending",
+        },
       ],
     },
   },
@@ -317,16 +612,41 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     tabs: ["base", "mapping", "error"],
     fieldsByTab: {
       base: [
-        { key: "path", label: "Webhook Path", type: "input", value: "/api/workflow/inbound-order" },
-        { key: "nodeName", label: "节点名称", type: "input", value: "接收入库订单" },
+        {
+          key: "path",
+          label: "Webhook Path",
+          type: "input",
+          value: "/api/workflow/inbound-order",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "接收入库订单",
+        },
         { key: "method", label: "请求方式", type: "select", value: "POST" },
-        { key: "nodeId", label: "节点 ID", type: "readonly", value: "webhook_trigger" },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "webhook_trigger",
+        },
       ],
       mapping: [
-        { key: "payload", label: "原始载荷", type: "textarea", value: "{\n  orderId: body.orderId,\n  laneCode: body.laneCode\n}" },
+        {
+          key: "payload",
+          label: "原始载荷",
+          type: "textarea",
+          value: "{\n  orderId: body.orderId,\n  laneCode: body.laneCode\n}",
+        },
       ],
       error: [
-        { key: "onInvalid", label: "签名失败处理", type: "select", value: "reject_401" },
+        {
+          key: "onInvalid",
+          label: "签名失败处理",
+          type: "select",
+          value: "reject_401",
+        },
       ],
     },
   },
@@ -360,7 +680,11 @@ const getPaletteBaseNodeId = (item: WorkflowPaletteItem) => {
 const clonePanel = (nodeId: keyof typeof INITIAL_WORKFLOW_PANELS) =>
   structuredClone(INITIAL_WORKFLOW_PANELS[nodeId]) as WorkflowNodePanel;
 
-const setFieldValue = (panel: WorkflowNodePanel, fieldKey: string, value: string) => {
+const setFieldValue = (
+  panel: WorkflowNodePanel,
+  fieldKey: string,
+  value: string,
+) => {
   panel.tabs.forEach((tab) => {
     panel.fieldsByTab[tab]?.forEach((field) => {
       if (field.key === fieldKey) {
@@ -617,5 +941,7 @@ export const createWorkflowNodeDraft = (
   }
 };
 
-export const createWorkflowEdges = () => structuredClone(INITIAL_WORKFLOW_EDGES) as Edge[];
-export const createWorkflowPanels = () => structuredClone(INITIAL_WORKFLOW_PANELS) as Record<string, WorkflowNodePanel>;
+export const createWorkflowEdges = () =>
+  structuredClone(INITIAL_WORKFLOW_EDGES) as Edge[];
+export const createWorkflowPanels = () =>
+  structuredClone(INITIAL_WORKFLOW_PANELS) as Record<string, WorkflowNodePanel>;

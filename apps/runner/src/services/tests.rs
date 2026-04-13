@@ -4,7 +4,7 @@ use crate::core::runtime::{NodeExecutionContext, RunEnvironment};
 use crate::services::WorkflowServices;
 
 #[test]
-fn default_services_register_mock_handlers() {
+fn default_services_register_mock_action_and_task_handlers() {
     let services = WorkflowServices::with_defaults();
     let context = NodeExecutionContext {
         run_id: "run-1",
@@ -16,12 +16,6 @@ fn default_services_register_mock_handlers() {
         env: &RunEnvironment::default(),
     };
 
-    let fetch = services
-        .fetch_connectors
-        .resolve("oms.getOrder")
-        .expect("default fetch connector should exist")
-        .fetch(&json!({"orderNo": "SO-1"}), &context)
-        .expect("fetch should succeed");
     let action = services
         .action_handlers
         .resolve("rcs.dispatch")
@@ -35,7 +29,6 @@ fn default_services_register_mock_handlers() {
         .create(&json!({"orderNo": "SO-1"}), &context)
         .expect("task should succeed");
 
-    assert_eq!(fetch["orderNo"], json!("SO-1"));
     assert_eq!(action["accepted"], json!(true));
     assert_eq!(task["status"], json!("created"));
 }

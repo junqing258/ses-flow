@@ -1,4 +1,7 @@
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::sync::Arc;
+use std::thread;
 
 use serde_json::json;
 
@@ -9,9 +12,7 @@ use crate::store::{InMemoryRunStore, WorkflowRunStore, WorkflowRunner};
 
 #[test]
 fn stores_waiting_snapshot_and_resumes_by_run_id() {
-    let definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../examples/sorting-main-flow.json"))
-            .expect("example workflow should deserialize");
+    let definition = load_sorting_flow_definition(&spawn_echo_http_server());
     let store = Arc::new(InMemoryRunStore::new());
     let runner = WorkflowRunner::new(WorkflowEngine::new(), store.clone());
 
@@ -64,7 +65,7 @@ fn stores_waiting_snapshot_and_resumes_by_run_id() {
 #[test]
 fn resumes_parent_run_id_for_waiting_sub_workflow() {
     let definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../examples/subflow-wait-flow.json"))
+        serde_json::from_str(include_str!("../../examples/subflow-wait-flow.json"))
             .expect("subflow wait workflow should deserialize");
     let store = Arc::new(InMemoryRunStore::new());
     let runner = WorkflowRunner::new(WorkflowEngine::new(), store.clone());
@@ -101,4 +102,63 @@ fn resumes_parent_run_id_for_waiting_sub_workflow() {
 
     assert!(matches!(completed.status, WorkflowRunStatus::Completed));
     assert_eq!(completed.state["nested"]["status"], json!("completed"));
+}
+
+fn spawn_echo_http_server() -> String {
+    let listener =
+        TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");
+    let address = listener
+        .local_addr()
+        .expect("echo test server should expose local address");
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+            let mut buffer = Vec::new();
+            let mut chunk = [0u8; 1024];
+
+            loop {
+                let read = stream
+                    .read(&mut chunk)
+                    .expect("echo test server should read request");
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+                if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+
+            let response_body = json!({ "status": "loaded" }).to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("echo test server should write response");
+        }
+    });
+
+    format!("http://{address}")
+}
+
+fn load_sorting_flow_definition(fetch_base_url: &str) -> WorkflowDefinition {
+    let mut definition: WorkflowDefinition =
+        serde_json::from_str(include_str!("../../examples/sorting-main-flow.json"))
+            .expect("example workflow should deserialize");
+    let fetch_node = definition
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "fetch_order")
+        .expect("sorting flow should contain fetch node");
+    fetch_node.config = json!({
+        "method": "GET",
+        "url": format!("{fetch_base_url}/todos")
+    });
+    definition
 }
