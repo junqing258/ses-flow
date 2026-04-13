@@ -16,7 +16,7 @@
         class="h-full w-full"
         @connect="handleConnect"
         @node-click="handleNodeClick"
-        @pane-click="selectFallbackNode"
+        @pane-click="handlePaneClick"
       >
         <template #node-workflow-card="nodeProps">
           <WorkflowCanvasNode v-bind="nodeProps" />
@@ -156,7 +156,7 @@
               draggable="true"
               class="flex w-full cursor-grab items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition-colors active:cursor-grabbing"
               :class="
-                selectedNodeData?.kind === item.kind
+                selectedNodeId && selectedNodeData?.kind === item.kind
                   ? 'bg-slate-50'
                   : 'hover:bg-slate-50'
               "
@@ -361,7 +361,7 @@
         <button
           type="button"
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-          @click="selectFallbackNode"
+          @click="clearSelectedNode"
         >
           <MoreHorizontal class="h-4 w-4" />
         </button>
@@ -564,7 +564,7 @@
 
     <aside
       v-else-if="isRunMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
         class="flex h-[72px] shrink-0 items-center gap-3 border-b border-slate-50 px-4"
@@ -1529,6 +1529,19 @@ const undoLastChange = () => {
   toast.success("已撤销上一步操作");
 };
 
+const clearSelectedNode = () => {
+  selectedNodeId.value = "";
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: false,
+    data: {
+      ...node.data,
+      active: false,
+    },
+  })) as WorkflowFlowNode[];
+  syncSelectedNodeData();
+};
+
 const selectFallbackNode = () => {
   const fallbackNode = nodes.value.find((node) => node.type !== "branch-chip");
 
@@ -1537,8 +1550,7 @@ const selectFallbackNode = () => {
     return;
   }
 
-  selectedNodeId.value = "";
-  syncSelectedNodeData();
+  clearSelectedNode();
 };
 
 const setSelectedNode = (nodeId: string) => {
@@ -1556,6 +1568,14 @@ const setSelectedNode = (nodeId: string) => {
 
 const handleNodeClick = (payload: any) => {
   setSelectedNode(payload.node.id);
+};
+
+const handlePaneClick = () => {
+  if (!isEditMode.value) {
+    return;
+  }
+
+  clearSelectedNode();
 };
 
 const deleteSelectedNode = () => {
