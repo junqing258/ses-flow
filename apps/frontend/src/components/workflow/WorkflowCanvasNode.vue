@@ -140,7 +140,7 @@ const containerClass = computed(() =>
           </p>
           <span
             v-if="executionStatus"
-            class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1"
+            class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 z-2"
             :class="statusClass"
           >
             <span

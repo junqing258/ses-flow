@@ -59,6 +59,11 @@ export type WorkflowExecutionStatus =
   | "failed"
   | "skipped";
 
+export interface WorkflowFieldOption {
+  label: string;
+  value: string;
+}
+
 export interface WorkflowNodeData {
   active?: boolean;
   accent: string;
@@ -75,6 +80,7 @@ export interface WorkflowNodeData {
 export interface WorkflowField {
   key: string;
   label: string;
+  options?: WorkflowFieldOption[];
   type: WorkflowFieldType;
   value: string;
 }
@@ -142,6 +148,46 @@ export const WORKFLOW_EDGE_STYLE = {
 
 const SWITCH_BRANCH_FIELD_KEY_PATTERN = /^branch:([^:]+):label$/;
 const DEFAULT_SWITCH_BRANCH_LABELS = ["A", "B"];
+const DEFAULT_SELECT_FIELD_OPTIONS: Partial<
+  Record<string, WorkflowFieldOption[]>
+> = {
+  alarm: [
+    { label: "warning", value: "warning" },
+    { label: "critical", value: "critical" },
+  ],
+  method: [
+    { label: "GET", value: "GET" },
+    { label: "POST", value: "POST" },
+  ],
+  onError: [
+    { label: "retry", value: "retry" },
+    { label: "fail_fast", value: "fail_fast" },
+  ],
+  onInvalid: [
+    { label: "reject_401", value: "reject_401" },
+    { label: "ignore", value: "ignore" },
+  ],
+  polling: [
+    { label: "enabled", value: "enabled" },
+    { label: "disabled", value: "disabled" },
+  ],
+  retryPolicy: [
+    { label: "linear", value: "linear" },
+    { label: "exponential_backoff", value: "exponential_backoff" },
+    { label: "none", value: "none" },
+  ],
+  timeoutAction: [
+    { label: "mark_pending", value: "mark_pending" },
+    { label: "fail_workflow", value: "fail_workflow" },
+  ],
+  unknown: [
+    {
+      label: "route_to_manual_review",
+      value: "route_to_manual_review",
+    },
+    { label: "use_default_branch", value: "use_default_branch" },
+  ],
+};
 
 export const createSwitchBranchHandleId = (index: number) => {
   if (index < 26) {
@@ -229,6 +275,47 @@ export const getSwitchFallbackHandle = (
   }
 
   return undefined;
+};
+
+const withCurrentFieldValue = (
+  options: WorkflowFieldOption[],
+  currentValue: string,
+) => {
+  const trimmed = currentValue.trim();
+
+  if (!trimmed || options.some((option) => option.value === trimmed)) {
+    return options;
+  }
+
+  return [...options, { label: trimmed, value: trimmed }];
+};
+
+export const getWorkflowFieldSelectOptions = (
+  panel: WorkflowNodePanel | undefined,
+  field: WorkflowField,
+): WorkflowFieldOption[] => {
+  if (field.type !== "select") {
+    return [];
+  }
+
+  if (field.options && field.options.length > 0) {
+    return withCurrentFieldValue(field.options, field.value);
+  }
+
+  if (field.key === "fallback") {
+    return withCurrentFieldValue(
+      getSwitchBranches(panel).map((branch) => ({
+        label: branch.label || branch.id,
+        value: branch.id,
+      })),
+      field.value,
+    );
+  }
+
+  return withCurrentFieldValue(
+    DEFAULT_SELECT_FIELD_OPTIONS[field.key] ?? [],
+    field.value,
+  );
 };
 
 export const setSwitchFallbackHandle = (

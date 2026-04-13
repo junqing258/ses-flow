@@ -499,6 +499,31 @@
                   "
                 />
 
+                <div v-else-if="field.type === 'select'" class="relative">
+                  <select
+                    :value="field.value"
+                    class="h-9 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm text-slate-800 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                    @change="
+                      handleFieldUpdate(
+                        tab,
+                        field.key,
+                        ($event.target as HTMLSelectElement).value,
+                      )
+                    "
+                  >
+                    <option
+                      v-for="option in getFieldSelectOptions(field)"
+                      :key="`${field.key}-${option.value}`"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                  <ChevronDown
+                    class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  />
+                </div>
+
                 <textarea
                   v-else-if="field.type === 'textarea'"
                   :value="field.value"
@@ -522,10 +547,6 @@
                   "
                 >
                   <span>{{ field.value }}</span>
-                  <ChevronDown
-                    v-if="field.type === 'select'"
-                    class="h-4 w-4 text-slate-400"
-                  />
                 </div>
               </div>
             </div>
@@ -850,12 +871,14 @@ import {
   WORKFLOW_TAB_LABELS,
   createSwitchBranchHandleId,
   createWorkflowNodeDraft,
+  getWorkflowFieldSelectOptions,
   getSwitchBranches,
   getSwitchFallbackHandle,
   setSwitchBranches,
   setSwitchFallbackHandle,
   syncBranchHandlesForNode,
   type WorkflowExecutionStatus,
+  type WorkflowField,
   type WorkflowFlowNode,
   type WorkflowIconKey,
   type WorkflowNodeData,
@@ -1106,6 +1129,9 @@ const getFieldsForTab = (tab: WorkflowTabId) => {
     return true;
   });
 };
+
+const getFieldSelectOptions = (field: WorkflowField) =>
+  getWorkflowFieldSelectOptions(selectedPanel.value, field);
 
 const syncBranchHandleNodes = (nodeId?: string) => {
   nodes.value = nodes.value.map((node) => {
