@@ -11,7 +11,9 @@ use reqwest::Method;
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use serde_json::{Value, json};
 
-use super::definition::{NodeDefinition, NodeType, WorkflowDefinition};
+use super::definition::{
+    NodeDefinition, NodeType, WorkflowDefinition, deserialize_workflow_definition,
+};
 use super::runtime::{
     NextSignal, NodeExecutionContext, NodeExecutionResult, NodeLogRecord, RunEnvironment,
     WorkflowRunStatus,
@@ -43,12 +45,10 @@ impl ExecutorRegistry {
         registry.register(WebhookTriggerExecutor);
         registry.register(FetchExecutor);
         registry.register(SetStateExecutor);
-        // registry.register(IfElseExecutor);
+        registry.register(IfElseExecutor);
         registry.register(SwitchExecutor);
         registry.register(CodeExecutor);
-        registry.register(ActionExecutor {
-            services: services.clone(),
-        });
+        registry.register(ShellExecutor);
         registry.register(RespondExecutor);
         registry.register(WaitExecutor);
         registry.register(TaskExecutor {
@@ -81,9 +81,7 @@ struct SetStateExecutor;
 struct IfElseExecutor;
 struct SwitchExecutor;
 struct CodeExecutor;
-struct ActionExecutor {
-    services: Arc<WorkflowServices>,
-}
+struct ShellExecutor;
 struct RespondExecutor;
 struct WaitExecutor;
 struct TaskExecutor {
@@ -236,20 +234,16 @@ impl NodeExecutor for IfElseExecutor {
             .get("expression")
             .cloned()
             .unwrap_or_else(|| Value::Bool(false));
-        let resolved = template_context.resolve_value(&expression);
-        let expected = node
-            .config
-            .get("equals")
-            .map(|value| template_context.resolve_value(value));
-        let condition = match expected {
-            Some(expected) => resolved == expected,
-            None => is_truthy(&resolved),
+        let evaluated = template_context.resolve_value(&expression);
+        let branch_key = if is_truthy(&evaluated) {
+            "then"
+        } else {
+            "else"
         };
-        let branch_key = if condition { "then" } else { "else" };
 
         Ok(NodeExecutionResult::success(json!({
-            "condition": condition,
-            "value": resolved
+            "branch": branch_key,
+            "matched": branch_key == "then"
         }))
         .with_branch_key(branch_key))
     }
@@ -294,9 +288,9 @@ impl NodeExecutor for SwitchExecutor {
 // endregion 状态与分支节点执行器
 
 // region 动作与代码节点执行器
-impl NodeExecutor for ActionExecutor {
+impl NodeExecutor for ShellExecutor {
     fn node_type(&self) -> NodeType {
-        NodeType::Action
+        NodeType::Shell
     }
 
     fn execute(
@@ -305,22 +299,22 @@ impl NodeExecutor for ActionExecutor {
         context: &NodeExecutionContext<'_>,
     ) -> Result<NodeExecutionResult, RunnerError> {
         let payload = resolve_mapping(node, context);
-        let action = node
-            .config
-            .get("action")
+        let resolved_config = resolve_config(node, context, &payload);
+        let command = resolved_config
+            .get("command")
             .and_then(Value::as_str)
-            .unwrap_or("action.unknown");
-        let handler = self
-            .services
-            .action_handlers
-            .resolve(action)
-            .ok_or_else(|| RunnerError::MissingActionHandler(action.to_string()))?;
-        let response = handler.execute(&payload, context)?;
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RunnerError::InvalidShellConfig(format!(
+                    "node {} is missing config.command",
+                    node.id
+                ))
+            })?;
+        let spec = resolve_shell_execution_spec(&resolved_config, command)?;
+        let output = execute_shell_command(&spec, context, &payload, node.timeout_ms)?;
 
-        Ok(NodeExecutionResult::success(json!({
-            "action": action,
-            "response": response
-        })))
+        Ok(NodeExecutionResult::success(output.result).with_logs(output.logs))
     }
 }
 
@@ -771,6 +765,189 @@ fn parse_fetch_response_body(content_type: &str, body_text: &str) -> Value {
 }
 // endregion Fetch 节点辅助函数
 
+// region Shell 节点辅助函数
+fn resolve_shell_execution_spec(
+    config: &Value,
+    command: &str,
+) -> Result<ShellExecutionSpec, RunnerError> {
+    let shell = config
+        .get("shell")
+        .or_else(|| config.get("program"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("sh")
+        .to_string();
+    let working_directory = config
+        .get("workingDirectory")
+        .or_else(|| config.get("cwd"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(resolve_shell_working_directory)
+        .transpose()?;
+    let env = match config.get("env") {
+        Some(Value::Object(map)) => map
+            .iter()
+            .map(|(key, value)| {
+                if key.trim().is_empty() {
+                    return Err(RunnerError::InvalidShellConfig(
+                        "shell env cannot contain empty keys".to_string(),
+                    ));
+                }
+
+                Ok((key.clone(), value_to_env_string(value)?))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        Some(_) => {
+            return Err(RunnerError::InvalidShellConfig(
+                "shell node config.env must be an object".to_string(),
+            ));
+        }
+        None => Vec::new(),
+    };
+
+    Ok(ShellExecutionSpec {
+        shell,
+        command: command.to_string(),
+        working_directory,
+        env,
+    })
+}
+
+fn value_to_env_string(value: &Value) -> Result<String, RunnerError> {
+    match value {
+        Value::Null => Ok(String::new()),
+        Value::String(text) => Ok(text.clone()),
+        Value::Bool(boolean) => Ok(boolean.to_string()),
+        Value::Number(number) => Ok(number.to_string()),
+        Value::Array(_) | Value::Object(_) => serde_json::to_string(value)
+            .map_err(|error| RunnerError::InvalidShellConfig(error.to_string())),
+    }
+}
+
+fn resolve_shell_working_directory(path: &str) -> Result<PathBuf, RunnerError> {
+    let file_path = Path::new(path);
+    let absolute = if file_path.is_absolute() {
+        file_path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| RunnerError::InvalidShellConfig(error.to_string()))?
+            .join(file_path)
+    };
+
+    absolute.canonicalize().map_err(|error| {
+        RunnerError::InvalidShellConfig(format!(
+            "failed to resolve shell working directory {}: {error}",
+            absolute.display()
+        ))
+    })
+}
+
+fn execute_shell_command(
+    spec: &ShellExecutionSpec,
+    context: &NodeExecutionContext<'_>,
+    params: &Value,
+    timeout_ms: Option<u64>,
+) -> Result<ShellProcessOutput, RunnerError> {
+    let params_json = serde_json::to_string(params)
+        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let trigger_json = serde_json::to_string(context.trigger)
+        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let input_json = serde_json::to_string(context.input)
+        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let state_json = serde_json::to_string(context.state)
+        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let env_json = serde_json::to_string(&env_to_value(context.env))
+        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+
+    let mut command = Command::new(&spec.shell);
+    command
+        .args(["-lc", &spec.command])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("WORKFLOW_RUN_ID", context.run_id)
+        .env("WORKFLOW_KEY", context.workflow_key)
+        .env("WORKFLOW_VERSION", context.workflow_version.to_string())
+        .env("WORKFLOW_TRIGGER", trigger_json)
+        .env("WORKFLOW_INPUT", input_json)
+        .env("WORKFLOW_STATE", state_json)
+        .env("WORKFLOW_PARAMS", &params_json)
+        .env("WORKFLOW_ENV", env_json);
+    if let Some(working_directory) = &spec.working_directory {
+        command.current_dir(working_directory);
+    }
+    for (key, value) in &spec.env {
+        command.env(key, value);
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+
+    {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| RunnerError::ShellExecution("failed to open shell stdin".to_string()))?;
+        stdin
+            .write_all(params_json.as_bytes())
+            .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    }
+
+    let output = wait_for_process_output(child, timeout_ms, "shell")?;
+    let exit_code = output.status.code().unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    if !output.status.success() {
+        return Err(RunnerError::ShellExecution(if stderr.is_empty() {
+            format!("shell command exited with status {}", output.status)
+        } else {
+            stderr
+        }));
+    }
+
+    Ok(ShellProcessOutput {
+        result: json!({
+            "shell": spec.shell,
+            "command": spec.command,
+            "workingDirectory": spec.working_directory.as_ref().map(|path| path.display().to_string()),
+            "exitCode": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+            "data": parse_shell_stdout(&stdout)
+        }),
+        logs: shell_logs_from_stderr(&stderr),
+    })
+}
+
+fn parse_shell_stdout(stdout: &str) -> Value {
+    if stdout.is_empty() {
+        return Value::Null;
+    }
+
+    serde_json::from_str(stdout).unwrap_or_else(|_| Value::String(stdout.to_string()))
+}
+
+fn shell_logs_from_stderr(stderr: &str) -> Vec<NodeLogRecord> {
+    stderr
+        .lines()
+        .filter_map(|line| {
+            let message = line.trim();
+            if message.is_empty() {
+                return None;
+            }
+
+            Some(NodeLogRecord {
+                level: "warn".to_string(),
+                message: message.to_string(),
+            })
+        })
+        .collect()
+}
+// endregion Shell 节点辅助函数
+
 // region Code 节点辅助函数
 fn resolve_code_execution_spec(node: &NodeDefinition) -> Result<CodeExecutionSpec, RunnerError> {
     if let Some(source) = node
@@ -901,7 +1078,7 @@ fn execute_js_code(
             .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
     }
 
-    let output = wait_for_code_process(child, timeout_ms)?;
+    let output = wait_for_process_output(child, timeout_ms, "code")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -966,36 +1143,46 @@ fn value_to_branch_key(value: Value) -> Option<String> {
     }
 }
 
-fn wait_for_code_process(
+fn wait_for_process_output(
     mut child: std::process::Child,
     timeout_ms: Option<u64>,
+    process_name: &str,
 ) -> Result<std::process::Output, RunnerError> {
     let Some(timeout_ms) = timeout_ms else {
         return child
             .wait_with_output()
-            .map_err(|error| RunnerError::CodeExecution(error.to_string()));
+            .map_err(|error| match process_name {
+                "shell" => RunnerError::ShellExecution(error.to_string()),
+                _ => RunnerError::CodeExecution(error.to_string()),
+            });
     };
 
     let started_at = Instant::now();
     let timeout = Duration::from_millis(timeout_ms);
     loop {
-        match child
-            .try_wait()
-            .map_err(|error| RunnerError::CodeExecution(error.to_string()))?
-        {
+        match child.try_wait().map_err(|error| match process_name {
+            "shell" => RunnerError::ShellExecution(error.to_string()),
+            _ => RunnerError::CodeExecution(error.to_string()),
+        })? {
             Some(_) => {
                 return child
                     .wait_with_output()
-                    .map_err(|error| RunnerError::CodeExecution(error.to_string()));
+                    .map_err(|error| match process_name {
+                        "shell" => RunnerError::ShellExecution(error.to_string()),
+                        _ => RunnerError::CodeExecution(error.to_string()),
+                    });
             }
             None if started_at.elapsed() >= timeout => {
-                child
-                    .kill()
-                    .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
+                child.kill().map_err(|error| match process_name {
+                    "shell" => RunnerError::ShellExecution(error.to_string()),
+                    _ => RunnerError::CodeExecution(error.to_string()),
+                })?;
                 let _ = child.wait();
-                return Err(RunnerError::CodeExecution(format!(
-                    "code node exceeded timeout of {timeout_ms}ms"
-                )));
+                let message = format!("{process_name} node exceeded timeout of {timeout_ms}ms");
+                return Err(match process_name {
+                    "shell" => RunnerError::ShellExecution(message),
+                    _ => RunnerError::CodeExecution(message),
+                });
             }
             None => thread::sleep(Duration::from_millis(10)),
         }
@@ -1079,7 +1266,19 @@ try {
 "#;
 // endregion Code 节点 JavaScript 引导脚本
 
-// region Code 节点数据结构
+// region Shell / Code 节点数据结构
+struct ShellProcessOutput {
+    result: Value,
+    logs: Vec<NodeLogRecord>,
+}
+
+struct ShellExecutionSpec {
+    shell: String,
+    command: String,
+    working_directory: Option<PathBuf>,
+    env: Vec<(String, String)>,
+}
+
 #[derive(serde::Deserialize)]
 struct CodeProcessOutput {
     result: Value,
@@ -1094,7 +1293,7 @@ enum CodeExecutionSpec {
         export_name: String,
     },
 }
-// endregion Code 节点数据结构
+// endregion Shell / Code 节点数据结构
 
 // region 上下文与子流程辅助函数
 fn evaluation_context<'a>(
@@ -1121,7 +1320,7 @@ fn resolve_sub_workflow_definition(
         .cloned()
         .or_else(|| node.config.get("workflow").cloned())
     {
-        return serde_json::from_value(definition)
+        return deserialize_workflow_definition(definition)
             .map_err(|error| RunnerError::SubWorkflow(error.to_string()));
     }
 

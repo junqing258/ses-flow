@@ -461,7 +461,7 @@ const extractNodeType = (node: WorkflowFlowNode) => {
     return "sub_workflow";
   }
 
-  return "action";
+  return "shell";
 };
 
 const buildNodeDefinition = (
@@ -523,10 +523,20 @@ const buildNodeDefinition = (
     };
   }
 
-  if (type === "action") {
+  if (type === "shell") {
     definition.config = {
-      action: getFieldValue(panel, "base", "command") || "action.unknown",
+      command:
+        getFieldValue(panel, "base", "command") ||
+        "printf '%s' \"$WORKFLOW_PARAMS\"",
     };
+    const shell = getFieldValue(panel, "base", "shell");
+    const workingDirectory = getFieldValue(panel, "base", "workingDirectory");
+    if (shell) {
+      definition.config.shell = shell;
+    }
+    if (workingDirectory) {
+      definition.config.workingDirectory = workingDirectory;
+    }
     definition.inputMapping = parseMappingValue(
       getFieldValue(panel, "mapping", "payload"),
     );

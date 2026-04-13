@@ -5,7 +5,7 @@ use sqlx::{Row, postgres::PgPool};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::core::definition::WorkflowDefinition;
+use crate::core::definition::{WorkflowDefinition, deserialize_workflow_definition};
 use crate::error::RunnerError;
 
 #[derive(Debug, Clone, Serialize)]
@@ -246,13 +246,9 @@ impl PostgresCatalogStore {
                 let updated_at: DateTime<Utc> = row
                     .try_get("updated_at")
                     .map_err(|e| RunnerError::Store(format!("Failed to get updated_at: {}", e)))?;
-                let definition: WorkflowDefinition = serde_json::from_value(definition_json)
-                    .map_err(|e| {
-                        RunnerError::Store(format!(
-                            "Failed to deserialize workflow definition: {}",
-                            e
-                        ))
-                    })?;
+                let definition = deserialize_workflow_definition(definition_json).map_err(|e| {
+                    RunnerError::Store(format!("Failed to deserialize workflow definition: {}", e))
+                })?;
 
                 Ok(StoredWorkflowDefinition {
                     id,

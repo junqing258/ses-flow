@@ -40,10 +40,12 @@ const getPaletteIdForRunnerNodeType = (nodeType: string) => {
       return "palette-respond";
     case "sub_workflow":
       return "palette-subflow";
+    case "shell":
+      return "palette-shell";
     case "webhook_trigger":
       return "palette-webhook";
     default:
-      return "palette-action";
+      return "palette-shell";
   }
 };
 
@@ -61,6 +63,8 @@ const getNodeTitle = (nodeType: string) => {
       return "If / Else";
     case "wait":
       return "Wait";
+    case "shell":
+      return "Shell";
     case "task":
       return "Task";
     case "respond":
@@ -72,7 +76,7 @@ const getNodeTitle = (nodeType: string) => {
     case "code":
       return "Code";
     default:
-      return "Action / Command";
+      return "Shell";
   }
 };
 
@@ -92,8 +96,10 @@ const getNodeKind = (nodeType: string): WorkflowFlowNode["data"]["kind"] => {
       return "wait";
     case "webhook_trigger":
       return "trigger";
+    case "shell":
+      return "shell";
     default:
-      return "action";
+      return "effect";
   }
 };
 
@@ -163,7 +169,7 @@ const createImportedNode = (
 ) => {
   const paletteId = getPaletteIdForRunnerNodeType(node.type);
   const paletteItem =
-    paletteItemById[paletteId] ?? paletteItemById["palette-action"];
+    paletteItemById[paletteId] ?? paletteItemById["palette-shell"];
   const { node: draftNode, panel } = createWorkflowNodeDraft(
     paletteItem,
     readEditorPosition(node, index),
@@ -234,7 +240,7 @@ const createImportedNode = (
   }
 
   if (
-    node.type === "action" ||
+    node.type === "shell" ||
     node.type === "task" ||
     node.type === "respond" ||
     node.type === "sub_workflow" ||
@@ -244,11 +250,17 @@ const createImportedNode = (
       nextPanel,
       "command",
       String(
-        node.config?.action ??
+        node.config?.command ??
           node.config?.taskType ??
           node.config?.workflowKey ??
           "",
       ),
+    );
+    setPanelFieldValue(nextPanel, "shell", String(node.config?.shell ?? "sh"));
+    setPanelFieldValue(
+      nextPanel,
+      "workingDirectory",
+      String(node.config?.workingDirectory ?? node.config?.cwd ?? ""),
     );
     setPanelFieldValue(
       nextPanel,

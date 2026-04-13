@@ -7,7 +7,7 @@
 - 稳定的 `Workflow Definition JSON` 定义模型
 - 最小可运行的执行内核
 - 内置基础节点执行器
-- `action / task` handler registry
+- `shell / task` 节点执行能力
 - workspace + workflow 注册能力
 - `run / snapshot` store 抽象与 PostgreSQL 持久化实现
 - `waiting -> resume` 恢复执行能力
@@ -161,7 +161,7 @@ curl -i \
 - `switch`
 - `code` (`js/javascript`, host Node.js 22+ runtime)
 - `sub_workflow`
-- `command` (`action` alias)
+- `shell`
 - `wait`
 - `task`
 
@@ -264,16 +264,24 @@ curl -i \
 ]
 ```
 
-### `action` / `command`
+### `shell`
 
-`command` 是 `action` 的别名。节点会根据 `config.action` 调用已注册的 action handler，输出 `{ action, response }`。
+`shell` 节点会通过本机 shell 执行 `config.command`，并把 `inputMapping` 结果：
+
+- 写入 stdin（JSON）
+- 注入 `WORKFLOW_PARAMS` / `WORKFLOW_TRIGGER` / `WORKFLOW_INPUT` / `WORKFLOW_STATE` / `WORKFLOW_ENV` 等环境变量
+
+节点输出结构为 `{ shell, command, exitCode, stdout, stderr, data }`，其中 `data` 会优先按 JSON 解析 stdout。
 
 ```json
 {
   "id": "dispatch_rcs_action",
-  "type": "action",
+  "type": "shell",
   "name": "下发 RCS 调度",
-  "config": { "action": "rcs.dispatch" },
+  "config": {
+    "command": "printf '%s' \"$WORKFLOW_PARAMS\"",
+    "shell": "sh"
+  },
   "inputMapping": {
     "orderNo": "{{trigger.body.orderNo}}",
     "bizType": "{{trigger.body.bizType}}"
@@ -423,8 +431,8 @@ curl -i \
 { "id": "end_1", "type": "end", "name": "End" }
 ```
 
-当前的 `action`、`wait`、`task` 仍是受控 stub，用于先把定义层、状态模型和节点协议跑通。
-其中 `fetch` 已支持直接发起真实 HTTP 请求；`action / task` 继续通过 registry 分发，后续接真实外部系统时只需要替换对应 handler。
+当前的 `wait`、`task` 仍是受控 stub，用于先把定义层、状态模型和节点协议跑通。
+其中 `fetch` 已支持直接发起真实 HTTP 请求；`shell` 已支持直接执行本机命令。
 当前 `code` 节点直接调用宿主 `Node.js 22+` 运行，脚本上下文暴露 `trigger / input / state / env / params` 五个 JSON 对象，其中 `params` 来自节点 `inputMapping`。节点既支持内联 `config.source/js/code`，也支持 `config.sourcePath/filePath` 读取脚本文件，以及 `config.modulePath` 调用外部模块导出的函数；模块模式还支持 `config.exportName` 选择命名导出。返回值可直接作为节点输出，或使用 `{ output, statePatch, branchKey }` 控制状态合并与分支。节点 `timeoutMs` 会限制脚本最长运行时间，`console.log/info/warn/error/debug` 会被捕获并写入 timeline。相对路径默认按 runner 进程当前工作目录解析，也可以通过 `config.baseDir` / `config.workingDirectory` 显式指定基准目录。
 当前 `run store` 使用 PostgreSQL 持久化存储，支持工作流运行摘要和快照的持久化。引擎与持久化边界已拆开，可通过实现 `WorkflowRunStore` trait 替换为其他存储实现（如 MySQL / Redis / KV 存储）。
 当前 `sub_workflow` 支持同步执行，也支持子流程进入 `waiting` 后由父流程代理等待并级联恢复。

@@ -6,7 +6,7 @@ use std::thread;
 
 use serde_json::json;
 
-use super::definition::WorkflowDefinition;
+use super::definition::{NodeType, WorkflowDefinition, deserialize_workflow_definition};
 use super::engine::WorkflowEngine;
 use super::runtime::{RunEnvironment, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary};
 
@@ -194,6 +194,122 @@ fn load_coverage_flow_definition(fetch_base_url: &str) -> WorkflowDefinition {
         "url": format!("{fetch_base_url}/todos")
     });
     definition
+}
+
+#[test]
+fn upgrades_legacy_action_node_type_during_definition_deserialization() {
+    let definition = deserialize_workflow_definition(json!({
+        "meta": {
+            "key": "legacy-action-upgrade",
+            "name": "Legacy Action Upgrade",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "legacy_node",
+                "type": "action",
+                "name": "Legacy Node",
+                "config": {
+                    "command": "printf '{}'"
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "legacy_node" },
+            { "from": "legacy_node", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("legacy action definition should deserialize");
+
+    assert_eq!(
+        definition.node("legacy_node").map(|node| node.node_type),
+        Some(NodeType::Shell)
+    );
+}
+
+#[test]
+fn upgrades_legacy_action_nodes_in_nested_sub_workflow_definitions() {
+    let definition = deserialize_workflow_definition(json!({
+        "meta": {
+            "key": "legacy-subflow-upgrade",
+            "name": "Legacy Subflow Upgrade",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "subflow_1",
+                "type": "sub_workflow",
+                "name": "Subflow",
+                "config": {
+                    "definition": {
+                        "meta": {
+                            "key": "legacy-child",
+                            "name": "Legacy Child",
+                            "version": 1
+                        },
+                        "trigger": {
+                            "type": "manual"
+                        },
+                        "inputSchema": { "type": "object" },
+                        "nodes": [
+                            { "id": "child_start", "type": "start", "name": "Start" },
+                            {
+                                "id": "child_action",
+                                "type": "action",
+                                "name": "Legacy Child Action",
+                                "config": {
+                                    "command": "printf '{}'"
+                                }
+                            },
+                            { "id": "child_end", "type": "end", "name": "End" }
+                        ],
+                        "transitions": [
+                            { "from": "child_start", "to": "child_action" },
+                            { "from": "child_action", "to": "child_end" }
+                        ],
+                        "policies": {}
+                    }
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "subflow_1" },
+            { "from": "subflow_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("legacy nested definition should deserialize");
+
+    let subflow_node = definition
+        .node("subflow_1")
+        .expect("subflow node should exist");
+    let nested = subflow_node
+        .config
+        .get("definition")
+        .cloned()
+        .expect("nested definition should exist");
+    let nested_definition = deserialize_workflow_definition(nested)
+        .expect("nested definition should deserialize after normalization");
+
+    assert_eq!(
+        nested_definition
+            .node("child_action")
+            .map(|node| node.node_type),
+        Some(NodeType::Shell)
+    );
 }
 
 #[test]
@@ -428,6 +544,65 @@ fn fetch_node_supports_http_post_json_requests() {
     assert_eq!(output["response"]["ok"], json!(true));
     assert_eq!(output["data"]["body"]["orderNo"], json!("SO-HTTP-POST-1"));
     assert_eq!(output["data"]["body"]["title"], json!("new todo"));
+}
+
+#[test]
+fn shell_node_executes_command_and_parses_json_stdout() {
+    let definition: WorkflowDefinition = serde_json::from_value(json!({
+        "meta": {
+            "key": "shell-node-demo",
+            "name": "Shell Node Demo",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "shell_1",
+                "type": "shell",
+                "name": "Run Shell",
+                "config": {
+                    "command": "printf '%s' \"$WORKFLOW_PARAMS\"",
+                    "shell": "sh"
+                },
+                "inputMapping": {
+                    "orderNo": "{{trigger.body.orderNo}}",
+                    "tenantId": "{{env.tenantId}}"
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "shell_1" },
+            { "from": "shell_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("shell workflow should deserialize");
+    let engine = WorkflowEngine::new();
+
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "body": { "orderNo": "SO-SHELL-1" }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("shell node should succeed");
+
+    let output = &summary
+        .timeline
+        .iter()
+        .find(|record| record.node_id == "shell_1")
+        .expect("shell timeline item should exist")
+        .output;
+    assert_eq!(output["shell"], json!("sh"));
+    assert_eq!(output["data"]["orderNo"], json!("SO-SHELL-1"));
+    assert_eq!(output["data"]["tenantId"], json!("tenant-a"));
 }
 
 #[test]

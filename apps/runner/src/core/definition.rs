@@ -89,6 +89,44 @@ impl WorkflowDefinition {
     }
 }
 
+pub fn deserialize_workflow_definition(value: Value) -> Result<WorkflowDefinition, RunnerError> {
+    serde_json::from_value(normalize_workflow_definition_value(value)).map_err(RunnerError::Json)
+}
+
+fn normalize_workflow_definition_value(mut value: Value) -> Value {
+    let Some(nodes) = value.get_mut("nodes").and_then(Value::as_array_mut) else {
+        return value;
+    };
+
+    for node in nodes {
+        normalize_node_definition_value(node);
+    }
+
+    value
+}
+
+fn normalize_node_definition_value(node: &mut Value) {
+    let Some(node_object) = node.as_object_mut() else {
+        return;
+    };
+
+    if let Some(node_type) = node_object.get_mut("type") {
+        if matches!(node_type.as_str(), Some("action" | "command")) {
+            *node_type = Value::String("shell".to_string());
+        }
+    }
+
+    if let Some(config) = node_object.get_mut("config").and_then(Value::as_object_mut) {
+        if let Some(definition) = config.get_mut("definition") {
+            *definition = normalize_workflow_definition_value(definition.clone());
+        }
+
+        if let Some(workflow) = config.get_mut("workflow") {
+            *workflow = normalize_workflow_definition_value(workflow.clone());
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowMeta {
     pub key: String,
@@ -168,8 +206,7 @@ pub enum NodeType {
     Fetch,
     SetState,
     Switch,
-    #[serde(alias = "command")]
-    Action,
+    Shell,
     Wait,
     Task,
     Respond,
@@ -190,7 +227,7 @@ impl NodeType {
             Self::Fetch => "fetch",
             Self::SetState => "set_state",
             Self::Switch => "switch",
-            Self::Action => "action",
+            Self::Shell => "shell",
             Self::Wait => "wait",
             Self::Task => "task",
             Self::Respond => "respond",

@@ -65,10 +65,11 @@
     },
     {
       "id": "dispatch_command",
-      "type": "command",
+      "type": "shell",
       "name": "Dispatch Command",
       "config": {
-        "action": "rcs.dispatch"
+        "command": "printf '%s' \"$WORKFLOW_PARAMS\"",
+        "shell": "sh"
       },
       "inputMapping": {
         "orderNo": "{{trigger.body.orderNo}}",

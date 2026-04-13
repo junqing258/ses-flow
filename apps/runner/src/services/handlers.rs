@@ -7,15 +7,6 @@ use crate::core::definition::WorkflowDefinition;
 use crate::core::runtime::NodeExecutionContext;
 use crate::error::RunnerError;
 
-pub trait ActionHandler: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn execute(
-        &self,
-        payload: &Value,
-        context: &NodeExecutionContext<'_>,
-    ) -> Result<Value, RunnerError>;
-}
-
 pub trait TaskHandler: Send + Sync {
     fn name(&self) -> &'static str;
     fn create(
@@ -27,7 +18,6 @@ pub trait TaskHandler: Send + Sync {
 
 #[derive(Default, Clone)]
 pub struct WorkflowServices {
-    pub action_handlers: ActionHandlerRegistry,
     pub task_handlers: TaskHandlerRegistry,
     pub workflow_definitions: WorkflowDefinitionRegistry,
 }
@@ -35,28 +25,8 @@ pub struct WorkflowServices {
 impl WorkflowServices {
     pub fn with_defaults() -> Self {
         let mut services = Self::default();
-        services.action_handlers.register(MockRcsDispatchAction);
         services.task_handlers.register(MockManualReviewTaskHandler);
         services
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct ActionHandlerRegistry {
-    handlers: HashMap<String, Arc<dyn ActionHandler>>,
-}
-
-impl ActionHandlerRegistry {
-    pub fn register<H>(&mut self, handler: H)
-    where
-        H: ActionHandler + 'static,
-    {
-        self.handlers
-            .insert(handler.name().to_string(), Arc::new(handler));
-    }
-
-    pub fn resolve(&self, name: &str) -> Option<Arc<dyn ActionHandler>> {
-        self.handlers.get(name).cloned()
     }
 }
 
@@ -94,26 +64,7 @@ impl WorkflowDefinitionRegistry {
     }
 }
 
-struct MockRcsDispatchAction;
 struct MockManualReviewTaskHandler;
-
-impl ActionHandler for MockRcsDispatchAction {
-    fn name(&self) -> &'static str {
-        "rcs.dispatch"
-    }
-
-    fn execute(
-        &self,
-        payload: &Value,
-        context: &NodeExecutionContext<'_>,
-    ) -> Result<Value, RunnerError> {
-        Ok(json!({
-            "accepted": true,
-            "dispatchId": format!("dispatch-{}", context.run_id),
-            "payload": payload
-        }))
-    }
-}
 
 impl TaskHandler for MockManualReviewTaskHandler {
     fn name(&self) -> &'static str {

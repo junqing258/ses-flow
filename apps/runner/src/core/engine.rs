@@ -5,7 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
-use super::definition::{NodeType, TransitionDefinition, WorkflowDefinition};
+use super::definition::{
+    NodeType, TransitionDefinition, WorkflowDefinition, deserialize_workflow_definition,
+};
 use super::executors::ExecutorRegistry;
 use super::runtime::{
     ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunController,
@@ -731,7 +733,7 @@ fn resolve_sub_workflow_definition_from_services(
         .cloned()
         .or_else(|| node.config.get("workflow").cloned())
     {
-        return serde_json::from_value(definition)
+        return deserialize_workflow_definition(definition)
             .map_err(|error| RunnerError::SubWorkflow(error.to_string()));
     }
 

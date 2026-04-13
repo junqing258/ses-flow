@@ -16,8 +16,10 @@ pub enum RunnerError {
     MissingExecutor(String),
     #[error("fetch request failed: {0}")]
     FetchRequest(String),
-    #[error("action handler not found: {0}")]
-    MissingActionHandler(String),
+    #[error("shell configuration invalid: {0}")]
+    InvalidShellConfig(String),
+    #[error("shell node execution failed: {0}")]
+    ShellExecution(String),
     #[error("task handler not found: {0}")]
     MissingTaskHandler(String),
     #[error("code node execution failed: {0}")]

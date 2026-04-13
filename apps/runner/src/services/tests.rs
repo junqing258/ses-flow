@@ -4,7 +4,7 @@ use crate::core::runtime::{NodeExecutionContext, RunEnvironment};
 use crate::services::WorkflowServices;
 
 #[test]
-fn default_services_register_mock_action_and_task_handlers() {
+fn default_services_register_mock_task_handler() {
     let services = WorkflowServices::with_defaults();
     let context = NodeExecutionContext {
         run_id: "run-1",
@@ -16,12 +16,6 @@ fn default_services_register_mock_action_and_task_handlers() {
         env: &RunEnvironment::default(),
     };
 
-    let action = services
-        .action_handlers
-        .resolve("rcs.dispatch")
-        .expect("default action handler should exist")
-        .execute(&json!({"orderNo": "SO-1"}), &context)
-        .expect("action should succeed");
     let task = services
         .task_handlers
         .resolve("manual_review")
@@ -29,6 +23,5 @@ fn default_services_register_mock_action_and_task_handlers() {
         .create(&json!({"orderNo": "SO-1"}), &context)
         .expect("task should succeed");
 
-    assert_eq!(action["accepted"], json!(true));
     assert_eq!(task["status"], json!("created"));
 }

@@ -1,8 +1,7 @@
 pub mod handlers;
 
 pub use handlers::{
-    ActionHandler, ActionHandlerRegistry, TaskHandler, TaskHandlerRegistry,
-    WorkflowDefinitionRegistry, WorkflowServices,
+    TaskHandler, TaskHandlerRegistry, WorkflowDefinitionRegistry, WorkflowServices,
 };
 
 #[cfg(test)]

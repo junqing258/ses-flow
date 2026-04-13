@@ -44,7 +44,8 @@ export type WorkflowNodeKind =
   | "fetch"
   | "if-else"
   | "switch"
-  | "action"
+  | "shell"
+  | "effect"
   | "wait"
   | "end"
   | "branch-label";
@@ -142,7 +143,7 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
       },
       {
         id: "palette-respond",
-        kind: "action",
+        kind: "effect",
         label: "Respond",
         icon: "send",
         accent: "#8B5CF6",
@@ -208,9 +209,9 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     defaultOpen: false,
     items: [
       {
-        id: "palette-action",
-        kind: "action",
-        label: "Action / Command",
+        id: "palette-shell",
+        kind: "shell",
+        label: "Shell",
         icon: "zap",
         accent: "#F97316",
       },
@@ -239,7 +240,7 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
     items: [
       {
         id: "palette-task",
-        kind: "action",
+        kind: "effect",
         label: "任务编排",
         icon: "listTodo",
         accent: "#8B5CF6",
@@ -319,15 +320,27 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
       base: [
         {
           key: "command",
-          label: "命令名称",
+          label: "Shell 命令",
           type: "input",
-          value: "sorting.assignTask",
+          value: "printf '%s' \"$WORKFLOW_PARAMS\"",
+        },
+        {
+          key: "shell",
+          label: "解释器",
+          type: "input",
+          value: "sh",
+        },
+        {
+          key: "workingDirectory",
+          label: "工作目录",
+          type: "input",
+          value: "",
         },
         {
           key: "nodeName",
           label: "节点名称",
           type: "input",
-          value: "分配分拣任务",
+          value: "执行 Shell 脚本",
         },
         {
           key: "timeout",
@@ -345,15 +358,75 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           key: "note",
           label: "备注",
           type: "textarea",
-          value: "下发分拣任务到设备控制系统，并记录指令回执。",
+          value:
+            "通过本机 shell 执行命令；inputMapping 会序列化为 JSON 写入 stdin，同时注入 WORKFLOW_PARAMS 环境变量。",
         },
       ],
       mapping: [
         {
           key: "payload",
-          label: "指令载荷",
+          label: "标准输入 / 参数",
           type: "textarea",
           value: "{\n  orderId: payload.orderId,\n  lane: payload.laneCode\n}",
+        },
+      ],
+      retry: [
+        {
+          key: "retryPolicy",
+          label: "失败重试",
+          type: "select",
+          value: "exponential_backoff",
+        },
+        {
+          key: "maxAttempts",
+          label: "最大重试次数",
+          type: "input",
+          value: "3",
+        },
+      ],
+    },
+  },
+  effect_node: {
+    tabs: ["base", "mapping", "retry"],
+    fieldsByTab: {
+      base: [
+        {
+          key: "command",
+          label: "命令名称",
+          type: "input",
+          value: "",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "新建副作用节点",
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: "5000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "effect_node",
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value: "",
+        },
+      ],
+      mapping: [
+        {
+          key: "payload",
+          label: "载荷",
+          type: "textarea",
+          value: "{\n  orderId: payload.orderId\n}",
         },
       ],
       retry: [
@@ -909,12 +982,37 @@ export const createWorkflowNodeDraft = (
       const panel = clonePanel("assign_task");
       const subtitle = `新建${item.label}`;
       const titleMap: Partial<Record<WorkflowPaletteItem["id"], string>> = {
-        "palette-action": "Action / Command",
+        "palette-shell": "Shell",
         "palette-respond": "Respond",
         "palette-subflow": "Sub-Workflow",
         "palette-task": "Task",
       };
       const title = titleMap[item.id] ?? item.label;
+
+      if (item.id !== "palette-shell") {
+        const genericPanel = clonePanel("effect_node");
+        setFieldValue(genericPanel, "nodeId", nodeId);
+        setFieldValue(genericPanel, "nodeName", subtitle);
+
+        return {
+          node: {
+            id: nodeId,
+            type: "workflow-card",
+            position,
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+            data: {
+              accent: item.accent,
+              icon: item.icon,
+              kind: item.kind,
+              nodeKey: nodeId,
+              subtitle,
+              title,
+            },
+          },
+          panel: genericPanel,
+        };
+      }
 
       setFieldValue(panel, "nodeId", nodeId);
       setFieldValue(panel, "nodeName", subtitle);

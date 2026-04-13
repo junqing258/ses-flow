@@ -109,10 +109,10 @@ const createExampleWorkflowNodes = (): WorkflowFlowNode[] => [
     data: {
       accent: "#F97316",
       icon: "zap",
-      kind: "action",
+      kind: "shell",
       nodeKey: "assign_task",
       subtitle: "分配分拣任务",
-      title: "Action / Command",
+      title: "Shell",
     },
   },
   {
@@ -191,7 +191,7 @@ describe("buildRunnerWorkflowDefinition", () => {
       ["webhook_trigger", "webhook_trigger"],
       ["fetch_order", "fetch"],
       ["switch_biz_type", "switch"],
-      ["assign_task", "action"],
+      ["assign_task", "shell"],
       ["wait_callback", "wait"],
       ["end_left", "end"],
       ["end_right", "end"],

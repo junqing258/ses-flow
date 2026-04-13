@@ -71,10 +71,11 @@
     },
     {
       "id": "dispatch_rcs_action",
-      "type": "action",
+      "type": "shell",
       "name": "下发 RCS 调度",
       "config": {
-        "action": "rcs.dispatch"
+        "command": "printf '%s' \"$WORKFLOW_PARAMS\"",
+        "shell": "sh"
       },
       "inputMapping": {
         "orderNo": "{{trigger.body.orderNo}}",

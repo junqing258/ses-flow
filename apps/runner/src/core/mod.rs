@@ -4,7 +4,10 @@ pub mod executors;
 pub mod runtime;
 pub mod template;
 
-pub use definition::{NodeDefinition, NodeType, TransitionDefinition, WorkflowDefinition};
+pub use definition::{
+    NodeDefinition, NodeType, TransitionDefinition, WorkflowDefinition,
+    deserialize_workflow_definition,
+};
 pub use engine::{WorkflowEngine, new_run_id};
 pub use executors::{ExecutorRegistry, NodeExecutor};
 pub use runtime::{
