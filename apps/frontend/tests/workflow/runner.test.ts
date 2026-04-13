@@ -5,6 +5,8 @@ import { Position } from "@vue-flow/core";
 import {
   createWorkflowEdges,
   createWorkflowPanels,
+  setSwitchBranches,
+  setSwitchFallbackHandle,
   type WorkflowFlowNode,
 } from "@/features/workflow/model";
 import {
@@ -271,6 +273,63 @@ describe("buildRunnerWorkflowDefinition", () => {
       { from: "assign_task", to: "end_left" },
       { from: "wait_callback", to: "end_right" },
     ]);
+  });
+
+  it("supports additional switch branches configured in edit mode", () => {
+    const panels = createWorkflowPanels();
+    const edges = [
+      ...createWorkflowEdges(),
+      {
+        id: "switch->end-right-default",
+        source: "switch_biz_type",
+        sourceHandle: "branch-c",
+        target: "end_right",
+        targetHandle: "in",
+        type: "smoothstep",
+        style: {
+          stroke: "#CBD5E1",
+          strokeWidth: 2,
+        },
+      },
+    ];
+
+    setSwitchBranches(panels.switch_biz_type, [
+      { id: "branch-a", label: "A" },
+      { id: "branch-b", label: "B" },
+      { id: "branch-c", label: "MANUAL" },
+    ]);
+    setSwitchFallbackHandle(panels.switch_biz_type, "branch-c");
+
+    const definition = buildRunnerWorkflowDefinition(
+      createExampleWorkflowNodes(),
+      edges,
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
+
+    expect(definition.transitions).toHaveLength(8);
+    expect(definition.transitions).toContainEqual({
+      from: "switch_biz_type",
+      to: "assign_task",
+      label: "A",
+      priority: 100,
+    });
+    expect(definition.transitions).toContainEqual({
+      from: "switch_biz_type",
+      to: "wait_callback",
+      label: "B",
+      priority: 90,
+    });
+    expect(definition.transitions).toContainEqual({
+      from: "switch_biz_type",
+      to: "end_right",
+      branchType: "default",
+      priority: 1,
+    });
   });
 });
 

@@ -392,7 +392,93 @@
             :value="tab"
             class="m-0 h-full"
           >
-            <div v-if="getFieldsForTab(tab).length" class="space-y-4">
+            <div
+              v-if="getFieldsForTab(tab).length || (isSelectedSwitchNode && tab === 'mapping')"
+              class="space-y-4"
+            >
+              <div
+                v-if="isSelectedSwitchNode && tab === 'mapping'"
+                class="space-y-3 rounded-[16px] border border-slate-200 bg-slate-50/70 p-3"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs font-semibold tracking-wide text-slate-500">
+                      Switch 分支
+                    </p>
+                    <p class="mt-1 text-[11px] leading-5 text-slate-400">
+                      每个分支对应一个独立出口，默认分支会在没有匹配时生效。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="truncate inline-flex h-8 items-center justify-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    @click="handleAddSwitchBranch"
+                  >
+                    <Plus class="h-3.5 w-3.5" />
+                    添加分支
+                  </button>
+                </div>
+
+                <div
+                  v-for="branch in selectedSwitchBranches"
+                  :key="branch.id"
+                  class="rounded-[14px] border border-slate-200 bg-white p-3"
+                >
+                  <div class="flex items-start gap-2">
+                    <div class="min-w-0 flex-1 space-y-1.5">
+                      <label
+                        class="block text-[11px] font-semibold tracking-wide text-slate-500"
+                      >
+                        分支标签
+                      </label>
+                      <Input
+                        :model-value="branch.label"
+                        class="h-9 rounded-lg border-slate-200 bg-white px-3 text-sm shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
+                        @update:model-value="
+                          handleSwitchBranchLabelUpdate(
+                            branch.id,
+                            String($event),
+                          )
+                        "
+                      />
+                      <p class="text-[11px] leading-5 text-slate-400 text-nowrap">
+                        {{
+                          `${selectedPanel?.fieldsByTab.base?.find((field) => field.key === 'expression')?.value || 'value'} === '${branch.label || branch.id}'`
+                        }}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      :class="
+                        selectedSwitchFallbackHandle === branch.id
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800'
+                      "
+                      :title="
+                        selectedSwitchFallbackHandle === branch.id
+                          ? '当前默认分支'
+                          : '设为默认分支'
+                      "
+                      @click="handleSwitchFallbackUpdate(branch.id)"
+                    >
+                      <Check class="h-4 w-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-colors hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="selectedSwitchBranches.length <= 2"
+                      title="删除分支"
+                      @click="handleRemoveSwitchBranch(branch.id)"
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div
                 v-for="field in getFieldsForTab(tab)"
                 :key="`${tab}-${field.key}`"
@@ -700,6 +786,7 @@ import {
   useVueFlow,
 } from "@vue-flow/core";
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   Compass,
@@ -710,9 +797,11 @@ import {
   MousePointer2,
   Pencil,
   Play,
+  Plus,
   Redo2,
   Settings,
   Square,
+  Trash2,
   Undo2,
   Webhook,
 } from "lucide-vue-next";
@@ -754,10 +843,18 @@ import {
 } from "@/features/workflow/runner";
 import {
   WORKFLOW_EMPTY_TAB_TEXT,
+  WORKFLOW_EDGE_STYLE,
+  WORKFLOW_EDGE_TYPE,
   WORKFLOW_ICON_MAP,
   WORKFLOW_PALETTE_CATEGORIES,
   WORKFLOW_TAB_LABELS,
+  createSwitchBranchHandleId,
   createWorkflowNodeDraft,
+  getSwitchBranches,
+  getSwitchFallbackHandle,
+  setSwitchBranches,
+  setSwitchFallbackHandle,
+  syncBranchHandlesForNode,
   type WorkflowExecutionStatus,
   type WorkflowFlowNode,
   type WorkflowIconKey,
@@ -769,10 +866,6 @@ import {
 } from "@/features/workflow/model";
 
 const DRAG_DATA_TYPE = "application/x-ses-workflow-node";
-const WORKFLOW_EDGE_STYLE = {
-  stroke: "#CBD5E1",
-  strokeWidth: 2,
-};
 const HISTORY_LIMIT = 50;
 const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
 
@@ -857,6 +950,15 @@ const selectedNodeIcon = computed(
 );
 const isEditMode = computed(() => pageMode.value === "edit");
 const isRunMode = computed(() => pageMode.value === "run");
+const isSelectedSwitchNode = computed(
+  () => selectedNodeData.value.kind === "switch",
+);
+const selectedSwitchBranches = computed(() =>
+  getSwitchBranches(selectedPanel.value),
+);
+const selectedSwitchFallbackHandle = computed(
+  () => getSwitchFallbackHandle(selectedPanel.value) ?? "",
+);
 const workflowStatusLabel = computed(() =>
   workflowMeta.status === "published" ? "Published" : "Draft",
 );
@@ -983,8 +1085,69 @@ watch(
 
 const resolveIcon = (icon: WorkflowIconKey) => WORKFLOW_ICON_MAP[icon];
 
-const getFieldsForTab = (tab: WorkflowTabId) =>
-  selectedPanel.value?.fieldsByTab[tab] ?? [];
+const isSwitchBranchField = (fieldKey: string) => fieldKey.startsWith("branch:");
+
+const getFieldsForTab = (tab: WorkflowTabId) => {
+  const fields = selectedPanel.value?.fieldsByTab[tab] ?? [];
+
+  if (!isSelectedSwitchNode.value) {
+    return fields;
+  }
+
+  return fields.filter((field) => {
+    if (tab === "base" && field.key === "fallback") {
+      return false;
+    }
+
+    if (tab === "mapping" && isSwitchBranchField(field.key)) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
+const syncBranchHandleNodes = (nodeId?: string) => {
+  nodes.value = nodes.value.map((node) => {
+    if (node.data.kind !== "switch" && node.data.kind !== "if-else") {
+      return node;
+    }
+
+    if (nodeId && node.id !== nodeId) {
+      return node;
+    }
+
+    return syncBranchHandlesForNode(node, panelByNodeId.value[node.id]);
+  }) as WorkflowFlowNode[];
+  syncSelectedNodeData();
+};
+
+const getNextSwitchBranchHandleId = (panel: WorkflowNodePanel) => {
+  const existingHandleIds = new Set(getSwitchBranches(panel).map((branch) => branch.id));
+  let index = existingHandleIds.size;
+  let nextHandleId = createSwitchBranchHandleId(index);
+
+  while (existingHandleIds.has(nextHandleId)) {
+    index += 1;
+    nextHandleId = createSwitchBranchHandleId(index);
+  }
+
+  return nextHandleId;
+};
+
+const getNextSwitchBranchLabel = (panel: WorkflowNodePanel) => {
+  const existingLabels = new Set(getSwitchBranches(panel).map((branch) => branch.label));
+  let index = existingLabels.size;
+  let nextLabel =
+    index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
+
+  while (existingLabels.has(nextLabel)) {
+    index += 1;
+    nextLabel = index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
+  }
+
+  return nextLabel;
+};
 
 const handleBackToList = () => {
   void router.push({ name: "workflow-list" });
@@ -998,6 +1161,7 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   pageMode.value = state.pageMode;
   runDraft.value = { ...state.runDraft };
   historyStack.value = [];
+  syncBranchHandleNodes();
   setSelectedNode(state.selectedNodeId);
 
   if (activeRunSummary.value && activeRunWorkflowId.value === workflowMeta.id) {
@@ -1216,6 +1380,11 @@ watch(
 const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
   active: data.active,
   accent: data.accent,
+  branchHandles: data.branchHandles?.map((branch) => ({
+    id: branch.id,
+    isDefault: branch.isDefault,
+    label: branch.label,
+  })),
   executionStatus: data.executionStatus,
   icon: data.icon,
   kind: data.kind,
@@ -1317,6 +1486,7 @@ const restoreSnapshot = (snapshot: WorkflowEditorSnapshot) => {
   panelByNodeId.value = cloneWorkflowPanels(snapshot.panelByNodeId);
   selectedNodeId.value = snapshot.selectedNodeId;
   activeTab.value = snapshot.activeTab;
+  syncBranchHandleNodes();
   syncSelectedNodeData();
 };
 
@@ -1426,7 +1596,7 @@ const handleConnect = (connection: Connection) => {
       sourceHandle: connection.sourceHandle,
       target: connection.target,
       targetHandle: connection.targetHandle,
-      type: "smoothstep",
+      type: WORKFLOW_EDGE_TYPE,
       style: WORKFLOW_EDGE_STYLE,
     },
   ];
@@ -1587,6 +1757,86 @@ const handleFieldUpdate = (
     ) as WorkflowFlowNode[];
     syncSelectedNodeData();
   }
+};
+
+const handleAddSwitchBranch = () => {
+  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+    return;
+  }
+
+  pushHistorySnapshot();
+
+  const branches = getSwitchBranches(selectedPanel.value);
+  const nextBranch = {
+    id: getNextSwitchBranchHandleId(selectedPanel.value),
+    label: getNextSwitchBranchLabel(selectedPanel.value),
+  };
+
+  setSwitchBranches(selectedPanel.value, [...branches, nextBranch]);
+  syncBranchHandleNodes(selectedNodeId.value);
+  toast.success(`已新增分支：${nextBranch.label}`);
+};
+
+const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
+  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+    return;
+  }
+
+  setSwitchBranches(
+    selectedPanel.value,
+    getSwitchBranches(selectedPanel.value).map((branch) =>
+      branch.id === branchId
+        ? {
+            ...branch,
+            label: value,
+          }
+        : branch,
+    ),
+  );
+  syncBranchHandleNodes(selectedNodeId.value);
+};
+
+const handleSwitchFallbackUpdate = (branchId: string) => {
+  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+    return;
+  }
+
+  setSwitchFallbackHandle(selectedPanel.value, branchId);
+  syncBranchHandleNodes(selectedNodeId.value);
+};
+
+const handleRemoveSwitchBranch = (branchId: string) => {
+  if (!isEditMode.value || !isSelectedSwitchNode.value || !selectedPanel.value) {
+    return;
+  }
+
+  const branches = getSwitchBranches(selectedPanel.value);
+
+  if (branches.length <= 2) {
+    toast.info("Switch 节点至少需要保留两个分支");
+    return;
+  }
+
+  pushHistorySnapshot();
+
+  const nextBranches = branches.filter((branch) => branch.id !== branchId);
+  const previousFallbackHandle = getSwitchFallbackHandle(selectedPanel.value);
+
+  setSwitchBranches(selectedPanel.value, nextBranches);
+
+  if (previousFallbackHandle === branchId) {
+    setSwitchFallbackHandle(
+      selectedPanel.value,
+      nextBranches[nextBranches.length - 1]?.id ?? "",
+    );
+  }
+
+  edges.value = edges.value.filter(
+    (edge) =>
+      edge.source !== selectedNodeId.value || edge.sourceHandle !== branchId,
+  );
+  syncBranchHandleNodes(selectedNodeId.value);
+  toast.success("已移除分支并清理对应连线");
 };
 
 const handleRunDraftUpdate = <K extends keyof WorkflowRunDraft>(

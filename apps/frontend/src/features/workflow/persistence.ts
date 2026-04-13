@@ -1,10 +1,13 @@
 import type { Edge } from "@vue-flow/core";
 
 import {
+  WORKFLOW_EDGE_STYLE,
+  WORKFLOW_EDGE_TYPE,
   WORKFLOW_PALETTE_CATEGORIES,
   createWorkflowEdges,
   createWorkflowNodeDraft,
   createWorkflowPanels,
+  normalizeWorkflowEdges,
   type WorkflowFlowNode,
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
@@ -90,6 +93,11 @@ const cloneNodeData = (
 ): WorkflowFlowNode["data"] => ({
   active: data.active,
   accent: data.accent,
+  branchHandles: data.branchHandles?.map((branch) => ({
+    id: branch.id,
+    isDefault: branch.isDefault,
+    label: branch.label,
+  })),
   executionStatus: options.includeExecutionStatus ? data.executionStatus : undefined,
   icon: data.icon,
   kind: data.kind,
@@ -103,7 +111,9 @@ const cloneNodes = (
   nodes: WorkflowFlowNode[],
   options: CloneNodeOptions = {},
 ): WorkflowFlowNode[] =>
-  nodes.map((node) => ({
+  nodes
+    .filter((node) => node.data.kind !== "branch-label")
+    .map((node) => ({
     data: cloneNodeData(node.data, options),
     deletable: node.deletable,
     draggable: node.draggable,
@@ -117,7 +127,7 @@ const cloneNodes = (
     sourcePosition: node.sourcePosition,
     targetPosition: node.targetPosition,
     type: node.type,
-  })) as WorkflowFlowNode[];
+    })) as WorkflowFlowNode[];
 
 const cloneEdgeStyle = (style: Edge["style"]) => {
   if (!style || typeof style !== "object" || Array.isArray(style)) {
@@ -208,11 +218,8 @@ export const createNewWorkflowEditorState = (): WorkflowEditorState => {
         sourceHandle: "out",
         target: endNode.id,
         targetHandle: "in",
-        type: "smoothstep",
-        style: {
-          stroke: "#CBD5E1",
-          strokeWidth: 2,
-        },
+        type: WORKFLOW_EDGE_TYPE,
+        style: WORKFLOW_EDGE_STYLE,
       },
     ],
     nodes: [startNode, endNode],
@@ -261,7 +268,7 @@ export const createWorkflowEditorStateFromDocument = (
 
   return {
     activeTab: document.editor.activeTab ?? fallbackState.activeTab,
-    edges: cloneEdges(document.graph.edges),
+    edges: normalizeWorkflowEdges(cloneEdges(document.graph.edges)),
     nodes: cloneNodes(document.graph.nodes),
     panelByNodeId: clonePanels(document.graph.panels),
     pageMode: document.editor.pageMode ?? fallbackState.pageMode,

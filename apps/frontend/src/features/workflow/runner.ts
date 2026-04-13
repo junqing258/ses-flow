@@ -2,7 +2,10 @@ import type { Edge } from "@vue-flow/core";
 
 import { request as sendRequest } from "@/lib/request";
 
-import type {
+import {
+  getSwitchBranches,
+  getSwitchFallbackHandle,
+  type WorkflowBranchHandle,
   WorkflowFlowNode,
   WorkflowNodePanel,
   WorkflowTabId,
@@ -352,72 +355,23 @@ const normalizeExpression = (rawValue: string, fallback = "default") => {
   return normalizeReferencePath(value);
 };
 
-const extractSwitchBranchLabel = (
+const resolveSwitchBranch = (
   panel: WorkflowNodePanel | undefined,
   sourceHandle?: string | null,
+) =>
+  getSwitchBranches(panel).find((branch) => branch.id === sourceHandle);
+
+const getSwitchBranchPriority = (
+  branches: WorkflowBranchHandle[],
+  branchId?: string | null,
 ) => {
-  if (sourceHandle === "branch-a") {
-    const caseA = getFieldValue(panel, "mapping", "caseA");
-    const match = caseA.match(/===\s*['"](.+?)['"]/);
-    return match?.[1] ?? "branch-a";
+  const branchIndex = branches.findIndex((branch) => branch.id === branchId);
+
+  if (branchIndex < 0) {
+    return 1;
   }
 
-  if (sourceHandle === "branch-b") {
-    const caseB = getFieldValue(panel, "mapping", "caseB");
-    const match = caseB.match(/===\s*['"](.+?)['"]/);
-    return match?.[1] ?? "branch-b";
-  }
-
-  return undefined;
-};
-
-const normalizeSwitchFallbackKey = (rawValue: string) => {
-  const trimmed = rawValue.trim();
-
-  if (!trimmed) {
-    return "";
-  }
-
-  const strictMatch = trimmed.match(/===\s*['"](.+?)['"]/);
-
-  if (strictMatch) {
-    return strictMatch[1] ?? "";
-  }
-
-  const looseMatch = trimmed.match(/=\s*['"]?([^'"]+?)['"]?$/);
-
-  if (looseMatch) {
-    return looseMatch[1] ?? "";
-  }
-
-  return trimmed.replace(/^['"]|['"]$/g, "");
-};
-
-const resolveSwitchDefaultHandle = (panel: WorkflowNodePanel | undefined) => {
-  const fallback = normalizeSwitchFallbackKey(
-    getFieldValue(panel, "base", "fallback"),
-  );
-
-  if (!fallback) {
-    return undefined;
-  }
-
-  const branchALabel = extractSwitchBranchLabel(panel, "branch-a");
-  const branchBLabel = extractSwitchBranchLabel(panel, "branch-b");
-
-  if (fallback === "default" || fallback === "else") {
-    return "branch-b";
-  }
-
-  if (fallback === branchALabel) {
-    return "branch-a";
-  }
-
-  if (fallback === branchBLabel) {
-    return "branch-b";
-  }
-
-  return undefined;
+  return Math.max(100 - branchIndex * 10, 10);
 };
 
 const extractNodeType = (node: WorkflowFlowNode) => {
@@ -523,6 +477,20 @@ const buildNodeDefinition = (
     };
   }
 
+  if (type === "switch") {
+    const switchBranches = getSwitchBranches(panel);
+    const defaultBranchHandle = getSwitchFallbackHandle(panel);
+
+    definition.annotations = {
+      ...definition.annotations,
+      defaultBranchHandle,
+      switchBranches: switchBranches.map((branch) => ({
+        id: branch.id,
+        label: branch.label,
+      })),
+    };
+  }
+
   if (type === "shell") {
     definition.config = {
       command:
@@ -610,8 +578,9 @@ const buildTransitions = (
     }
 
     if (sourceNode?.data.kind === "switch") {
-      const label = extractSwitchBranchLabel(sourcePanel, edge.sourceHandle);
-      const defaultHandle = resolveSwitchDefaultHandle(sourcePanel);
+      const branches = getSwitchBranches(sourcePanel);
+      const branch = resolveSwitchBranch(sourcePanel, edge.sourceHandle);
+      const defaultHandle = getSwitchFallbackHandle(sourcePanel);
 
       if (edge.sourceHandle && defaultHandle === edge.sourceHandle) {
         return {
@@ -622,12 +591,12 @@ const buildTransitions = (
         };
       }
 
-      if (label) {
+      if (branch) {
         return {
           from: edge.source,
           to: edge.target,
-          label,
-          priority: label === "A" ? 100 : label === "B" ? 90 : 80 - index,
+          label: branch.label,
+          priority: getSwitchBranchPriority(branches, branch.id),
         };
       }
 

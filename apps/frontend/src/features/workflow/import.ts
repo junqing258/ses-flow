@@ -1,8 +1,17 @@
 import { Position, type Edge } from "@vue-flow/core";
 
 import {
+  WORKFLOW_EDGE_STYLE,
+  WORKFLOW_EDGE_TYPE,
   WORKFLOW_PALETTE_CATEGORIES,
+  createDefaultSwitchBranches,
+  createSwitchBranchHandleId,
   createWorkflowNodeDraft,
+  getSwitchBranches,
+  getSwitchFallbackHandle,
+  setSwitchBranches,
+  setSwitchFallbackHandle,
+  syncBranchHandlesForNode,
   type WorkflowFlowNode,
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
@@ -161,6 +170,45 @@ const serializeMappingValue = (value: unknown) => {
 const clonePanel = (panel: WorkflowNodePanel): WorkflowNodePanel =>
   structuredClone(panel);
 
+const readAnnotatedSwitchBranches = (
+  node: RunnerWorkflowDefinition["nodes"][number] | undefined,
+) => {
+  const rawBranches = node?.annotations?.switchBranches;
+
+  if (!Array.isArray(rawBranches)) {
+    return [];
+  }
+
+  return rawBranches.flatMap((branch) => {
+    if (!branch || typeof branch !== "object") {
+      return [];
+    }
+
+    const branchRecord = branch as { id?: unknown; label?: unknown };
+
+    if (
+      typeof branchRecord.id !== "string" ||
+      typeof branchRecord.label !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id: branchRecord.id,
+        label: branchRecord.label,
+      },
+    ];
+  });
+};
+
+const readAnnotatedSwitchFallbackHandle = (
+  node: RunnerWorkflowDefinition["nodes"][number] | undefined,
+) =>
+  typeof node?.annotations?.defaultBranchHandle === "string"
+    ? node.annotations.defaultBranchHandle
+    : "";
+
 const createImportedNode = (
   definition: RunnerWorkflowDefinition,
   node: RunnerWorkflowDefinition["nodes"][number],
@@ -304,36 +352,6 @@ const createImportedNode = (
   };
 };
 
-const branchLabelPosition = (
-  sourceNode: WorkflowFlowNode,
-  branch: "branch-a" | "branch-b",
-) => ({
-  x: sourceNode.position.x + 240,
-  y:
-    branch === "branch-a"
-      ? sourceNode.position.y - 42
-      : sourceNode.position.y + 132,
-});
-
-const createBranchLabelNode = (
-  sourceNode: WorkflowFlowNode,
-  branch: "branch-a" | "branch-b",
-  label: string,
-): WorkflowFlowNode => ({
-  id: `${sourceNode.id}_${branch}_label`,
-  type: "branch-chip",
-  position: branchLabelPosition(sourceNode, branch),
-  draggable: false,
-  selectable: false,
-  data: {
-    accent: "#E5E7EB",
-    icon: "gitBranch",
-    kind: "branch-label",
-    nodeKey: `${sourceNode.id}_${branch}_label`,
-    title: label,
-  },
-});
-
 export const createWorkflowEditorStateFromRunnerDefinition = (
   definition: RunnerWorkflowDefinition,
 ): WorkflowEditorState => {
@@ -341,7 +359,6 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
   const nodes: WorkflowFlowNode[] = [];
   const panelByNodeId: Record<string, WorkflowNodePanel> = {};
   const edges: Edge[] = [];
-  const branchLabelNodes: WorkflowFlowNode[] = [];
 
   definition.nodes.forEach((nodeDefinition, index) => {
     const imported = createImportedNode(
@@ -357,6 +374,9 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
 
   const nodeById = Object.fromEntries(
     nodes.map((node) => [node.id, node] as const),
+  );
+  const runnerNodeById = Object.fromEntries(
+    definition.nodes.map((node) => [node.id, node] as const),
   );
   const transitionsBySource = definition.transitions.reduce<
     Record<string, RunnerWorkflowDefinition["transitions"]>
@@ -387,30 +407,49 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
     );
 
     if (sourceNode.data.kind === "if-else") {
-      const thenLabel =
-        labelledTransitions.find((transition) => transition.label === "then")
-          ?.label ?? "then";
-      const elseLabel =
-        labelledTransitions.find((transition) => transition.label === "else")
-          ?.label ?? "else";
-
-      setPanelFieldValue(panel, "caseA", thenLabel);
-      setPanelFieldValue(panel, "caseB", elseLabel);
+      setPanelFieldValue(panel, "fallback", "else");
     }
 
     if (sourceNode.data.kind === "switch") {
-      const expression =
-        panel.fieldsByTab.base?.find((field) => field.key === "expression")
-          ?.value || "value";
-      const firstLabel = labelledTransitions[0]?.label ?? "A";
-      const secondLabel =
-        labelledTransitions[1]?.label ?? defaultTransition?.label ?? "B";
+      const annotatedBranches = readAnnotatedSwitchBranches(
+        runnerNodeById[sourceId],
+      );
+      const annotatedFallbackHandle = readAnnotatedSwitchFallbackHandle(
+        runnerNodeById[sourceId],
+      );
 
-      setPanelFieldValue(panel, "caseA", `${expression} === '${firstLabel}'`);
-      setPanelFieldValue(panel, "caseB", `${expression} === '${secondLabel}'`);
-      setPanelFieldValue(panel, "fallback", defaultTransition?.label ?? "");
+      if (annotatedBranches.length > 0) {
+        setSwitchBranches(panel, annotatedBranches);
+        setSwitchFallbackHandle(
+          panel,
+          annotatedFallbackHandle || annotatedBranches[annotatedBranches.length - 1]?.id || "",
+        );
+        return;
+      }
+
+      const labels = labelledTransitions
+        .map((transition) => transition.label?.trim() ?? "")
+        .filter((label, index, source) => label && source.indexOf(label) === index);
+      const branches =
+        labels.length > 0
+          ? labels.map((label, index) => ({
+              id: createSwitchBranchHandleId(index),
+              label,
+            }))
+          : createDefaultSwitchBranches();
+      const fallbackHandle = defaultTransition
+        ? defaultTransition.label
+          ? branches.find((branch) => branch.label === defaultTransition.label)
+              ?.id ?? branches[branches.length - 1]?.id
+          : branches[branches.length - 1]?.id
+        : "";
+
+      setSwitchBranches(panel, branches);
+      setSwitchFallbackHandle(panel, fallbackHandle ?? "");
     }
   });
+
+  const usedSwitchHandlesBySource = new Map<string, Set<string>>();
 
   definition.transitions.forEach((transition, index) => {
     const sourceNode = nodeById[transition.from];
@@ -419,16 +458,31 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
     if (sourceNode?.data.kind === "if-else") {
       sourceHandle = transition.label === "else" ? "branch-b" : "branch-a";
     } else if (sourceNode?.data.kind === "switch") {
-      sourceHandle =
-        transition.branchType === "default"
-          ? "branch-b"
-          : edges.some(
-                (edge) =>
-                  edge.source === transition.from &&
-                  edge.sourceHandle === "branch-a",
-              )
-            ? "branch-b"
-            : "branch-a";
+      const switchBranches = getSwitchBranches(panelByNodeId[transition.from]);
+      const fallbackHandle = getSwitchFallbackHandle(panelByNodeId[transition.from]);
+      const usedHandles = usedSwitchHandlesBySource.get(transition.from) ?? new Set<string>();
+
+      if (transition.branchType === "default") {
+        sourceHandle = fallbackHandle ?? switchBranches[switchBranches.length - 1]?.id;
+      } else if (transition.label) {
+        sourceHandle = switchBranches.find(
+          (branch) => branch.label === transition.label,
+        )?.id;
+      }
+
+      if (!sourceHandle) {
+        sourceHandle =
+          switchBranches.find(
+            (branch) =>
+              branch.id !== fallbackHandle && !usedHandles.has(branch.id),
+          )?.id ??
+          switchBranches.find((branch) => !usedHandles.has(branch.id))?.id;
+      }
+
+      if (sourceHandle) {
+        usedHandles.add(sourceHandle);
+        usedSwitchHandlesBySource.set(transition.from, usedHandles);
+      }
     } else if (sourceNode?.type !== "terminal") {
       sourceHandle = "out";
     }
@@ -445,50 +499,14 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
       sourceHandle,
       target: transition.to,
       targetHandle,
-      type: "smoothstep",
-      style: {
-        stroke: "#CBD5E1",
-        strokeWidth: 2,
-      },
+      type: WORKFLOW_EDGE_TYPE,
+      style: WORKFLOW_EDGE_STYLE,
     });
-
-    if (
-      sourceNode?.data.kind === "switch" ||
-      sourceNode?.data.kind === "if-else"
-    ) {
-      if (
-        sourceHandle === "branch-a" &&
-        !branchLabelNodes.some(
-          (node) => node.id === `${sourceNode.id}_branch-a_label`,
-        )
-      ) {
-        branchLabelNodes.push(
-          createBranchLabelNode(
-            sourceNode,
-            "branch-a",
-            transition.label ?? "A",
-          ),
-        );
-      }
-
-      if (
-        sourceHandle === "branch-b" &&
-        !branchLabelNodes.some(
-          (node) => node.id === `${sourceNode.id}_branch-b_label`,
-        )
-      ) {
-        branchLabelNodes.push(
-          createBranchLabelNode(
-            sourceNode,
-            "branch-b",
-            transition.label ?? transition.branchType ?? "B",
-          ),
-        );
-      }
-    }
   });
 
-  const allNodes = [...nodes, ...branchLabelNodes];
+  const allNodes = nodes.map((node) =>
+    syncBranchHandlesForNode(node, panelByNodeId[node.id]),
+  );
   const selectedNodeId =
     nodes.find((node) => node.data.kind !== "branch-label")?.id ?? "";
 

@@ -62,6 +62,7 @@ export type WorkflowExecutionStatus =
 export interface WorkflowNodeData {
   active?: boolean;
   accent: string;
+  branchHandles?: WorkflowBranchHandle[];
   executionStatus?: WorkflowExecutionStatus;
   icon: WorkflowIconKey;
   kind: WorkflowNodeKind;
@@ -76,6 +77,12 @@ export interface WorkflowField {
   label: string;
   type: WorkflowFieldType;
   value: string;
+}
+
+export interface WorkflowBranchHandle {
+  id: string;
+  isDefault?: boolean;
+  label: string;
 }
 
 export interface WorkflowNodePanel {
@@ -125,6 +132,156 @@ export const WORKFLOW_EMPTY_TAB_TEXT: Record<WorkflowTabId, string> = {
   error: "错误处理策略会在接入运行时后继续补充。",
   mapping: "输入映射区域预留给变量绑定和表达式配置。",
   retry: "重试策略会在接入执行引擎后和运行时规则联动。",
+};
+
+export const WORKFLOW_EDGE_TYPE = "default";
+export const WORKFLOW_EDGE_STYLE = {
+  stroke: "#CBD5E1",
+  strokeWidth: 2,
+};
+
+const SWITCH_BRANCH_FIELD_KEY_PATTERN = /^branch:([^:]+):label$/;
+const DEFAULT_SWITCH_BRANCH_LABELS = ["A", "B"];
+
+export const createSwitchBranchHandleId = (index: number) => {
+  if (index < 26) {
+    return `branch-${String.fromCharCode(97 + index)}`;
+  }
+
+  return `branch-${index + 1}`;
+};
+
+const createSwitchBranchField = (
+  branchId: string,
+  label: string,
+): WorkflowField => ({
+  key: `branch:${branchId}:label`,
+  label: `分支 ${label || branchId}`,
+  type: "input",
+  value: label,
+});
+
+export const createDefaultSwitchBranches = (): WorkflowBranchHandle[] =>
+  DEFAULT_SWITCH_BRANCH_LABELS.map((label, index) => ({
+    id: createSwitchBranchHandleId(index),
+    label,
+  }));
+
+const isSwitchBranchFieldKey = (fieldKey: string) =>
+  SWITCH_BRANCH_FIELD_KEY_PATTERN.test(fieldKey);
+
+export const getSwitchBranches = (
+  panel: WorkflowNodePanel | undefined,
+): WorkflowBranchHandle[] => {
+  const mappingFields = panel?.fieldsByTab.mapping ?? [];
+  const dynamicBranches = mappingFields.flatMap<WorkflowBranchHandle>((field) => {
+    const match = field.key.match(SWITCH_BRANCH_FIELD_KEY_PATTERN);
+
+    if (!match?.[1]) {
+      return [];
+    }
+
+    return [
+      {
+        id: match[1],
+        label: field.value.trim() || field.label || match[1],
+      },
+    ];
+  });
+
+  if (dynamicBranches.length > 0) {
+    return dynamicBranches;
+  }
+
+  return createDefaultSwitchBranches();
+};
+
+export const setSwitchBranches = (
+  panel: WorkflowNodePanel,
+  branches: WorkflowBranchHandle[],
+) => {
+  const mappingFields = panel.fieldsByTab.mapping ?? [];
+  const preservedFields = mappingFields.filter(
+    (field) => !isSwitchBranchFieldKey(field.key),
+  );
+
+  panel.fieldsByTab.mapping = [
+    ...preservedFields,
+    ...branches.map((branch) => createSwitchBranchField(branch.id, branch.label)),
+  ];
+};
+
+export const getSwitchFallbackHandle = (
+  panel: WorkflowNodePanel | undefined,
+): string | undefined => {
+  const fallbackValue =
+    panel?.fieldsByTab.base?.find((field) => field.key === "fallback")?.value ??
+    "";
+  const trimmed = fallbackValue.trim();
+  const branches = getSwitchBranches(panel);
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (branches.some((branch) => branch.id === trimmed)) {
+    return trimmed;
+  }
+
+  return undefined;
+};
+
+export const setSwitchFallbackHandle = (
+  panel: WorkflowNodePanel,
+  branchId: string,
+) => {
+  panel.fieldsByTab.base?.forEach((field) => {
+    if (field.key === "fallback") {
+      field.value = branchId;
+    }
+  });
+};
+
+export const getBranchHandlesForNode = (
+  kind: WorkflowNodeKind,
+  panel: WorkflowNodePanel | undefined,
+): WorkflowBranchHandle[] | undefined => {
+  if (kind === "switch") {
+    const fallbackHandle = getSwitchFallbackHandle(panel);
+
+    return getSwitchBranches(panel).map((branch) => ({
+      ...branch,
+      isDefault: branch.id === fallbackHandle,
+    }));
+  }
+
+  if (kind === "if-else") {
+    return [
+      { id: "branch-a", label: "then" },
+      { id: "branch-b", isDefault: true, label: "else" },
+    ];
+  }
+
+  return undefined;
+};
+
+export const syncBranchHandlesForNode = (
+  node: WorkflowFlowNode,
+  panel: WorkflowNodePanel | undefined,
+): WorkflowFlowNode => {
+  const branchHandles = getBranchHandlesForNode(node.data.kind, panel);
+
+  if (!branchHandles) {
+    return node;
+  }
+
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      branchHandles,
+    },
+  };
 };
 
 export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
@@ -249,11 +406,6 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
   },
 ];
 
-const EDGE_STYLE = {
-  stroke: "#CBD5E1",
-  strokeWidth: 2,
-};
-
 const INITIAL_WORKFLOW_EDGES: Edge[] = [
   {
     id: "start->webhook",
@@ -261,7 +413,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "webhook_trigger",
     sourceHandle: "out",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
   {
     id: "webhook->fetch",
@@ -269,7 +422,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "fetch_order",
     sourceHandle: "out",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
   {
     id: "fetch->switch",
@@ -277,7 +431,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "switch_biz_type",
     sourceHandle: "out",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
   {
     id: "switch->assign",
@@ -285,7 +440,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "assign_task",
     sourceHandle: "branch-a",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
   {
     id: "switch->wait",
@@ -293,7 +449,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "wait_callback",
     sourceHandle: "branch-b",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
   {
     id: "assign->end-left",
@@ -301,7 +458,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "end_left",
     sourceHandle: "out",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
   {
     id: "wait->end-right",
@@ -309,7 +467,8 @@ const INITIAL_WORKFLOW_EDGES: Edge[] = [
     target: "end_right",
     sourceHandle: "out",
     targetHandle: "in",
-    style: EDGE_STYLE,
+    type: WORKFLOW_EDGE_TYPE,
+    style: WORKFLOW_EDGE_STYLE,
   },
 ];
 
@@ -606,22 +765,12 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           key: "fallback",
           label: "默认分支",
           type: "select",
-          value: "bizType=B",
+          value: "branch-b",
         },
       ],
       mapping: [
-        {
-          key: "caseA",
-          label: "分支 A 条件",
-          type: "readonly",
-          value: "bizType === 'A'",
-        },
-        {
-          key: "caseB",
-          label: "分支 B 条件",
-          type: "readonly",
-          value: "bizType === 'B'",
-        },
+        createSwitchBranchField("branch-a", "A"),
+        createSwitchBranchField("branch-b", "B"),
       ],
       error: [
         {
@@ -903,6 +1052,10 @@ export const createWorkflowNodeDraft = (
       setFieldValue(panel, "nodeName", subtitle);
       setFieldValue(panel, "expression", "payload.condition === true");
       setFieldValue(panel, "fallback", "else");
+      setSwitchBranches(panel, [
+        { id: "branch-a", label: "then" },
+        { id: "branch-b", label: "else" },
+      ]);
 
       return {
         node: {
@@ -918,6 +1071,7 @@ export const createWorkflowNodeDraft = (
             nodeKey: nodeId,
             subtitle,
             title: "If / Else",
+            branchHandles: getBranchHandlesForNode("if-else", panel),
           },
         },
         panel,
@@ -945,6 +1099,7 @@ export const createWorkflowNodeDraft = (
             nodeKey: nodeId,
             subtitle,
             title: "Switch",
+            branchHandles: getBranchHandlesForNode("switch", panel),
           },
         },
         panel,
@@ -1043,3 +1198,17 @@ export const createWorkflowEdges = () =>
   structuredClone(INITIAL_WORKFLOW_EDGES) as Edge[];
 export const createWorkflowPanels = () =>
   structuredClone(INITIAL_WORKFLOW_PANELS) as Record<string, WorkflowNodePanel>;
+
+export const normalizeWorkflowEdge = (edge: Edge): Edge => ({
+  ...edge,
+  type: WORKFLOW_EDGE_TYPE,
+  style: {
+    ...WORKFLOW_EDGE_STYLE,
+    ...(edge.style && typeof edge.style === "object" && !Array.isArray(edge.style)
+      ? edge.style
+      : {}),
+  },
+});
+
+export const normalizeWorkflowEdges = (edges: Edge[]): Edge[] =>
+  edges.map((edge) => normalizeWorkflowEdge(edge));

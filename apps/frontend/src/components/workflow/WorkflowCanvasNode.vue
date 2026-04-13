@@ -3,12 +3,12 @@ import { computed } from "vue";
 import {
   Handle,
   Position,
-  type HandleConnectableFunc,
   type NodeProps,
 } from "@vue-flow/core";
 
 import {
   WORKFLOW_ICON_MAP,
+  type WorkflowBranchHandle,
   type WorkflowNodeData,
 } from "@/features/workflow/model";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,41 @@ const executionStatus = computed(() => props.data.executionStatus);
 const isBranchNode = computed(
   () => props.data.kind === "switch" || props.data.kind === "if-else",
 );
-const singleConnectionHandle: HandleConnectableFunc = (_node, connectedEdges) =>
-  connectedEdges.length < 1;
+const branchHandles = computed<WorkflowBranchHandle[]>(() => {
+  if (props.data.branchHandles?.length) {
+    return props.data.branchHandles;
+  }
+
+  if (props.data.kind === "if-else") {
+    return [
+      { id: "branch-a", label: "then" },
+      { id: "branch-b", isDefault: true, label: "else" },
+    ];
+  }
+
+  if (props.data.kind === "switch") {
+    return [
+      { id: "branch-a", label: "A" },
+      { id: "branch-b", isDefault: true, label: "B" },
+    ];
+  }
+
+  return [];
+});
+const branchNodeHeight = computed(() =>
+  isBranchNode.value ? Math.max(78, 48 + branchHandles.value.length * 26) : 78,
+);
+const resolveBranchTop = (index: number, total: number) => {
+  if (total <= 1) {
+    return "50%";
+  }
+
+  const start = 28;
+  const end = 72;
+  const step = (end - start) / (total - 1);
+
+  return `${start + index * step}%`;
+};
 const statusLabel = computed(() => {
   switch (executionStatus.value) {
     case "running":
@@ -76,7 +109,7 @@ const containerClass = computed(() =>
 <template>
   <div
     :class="containerClass"
-    :style="{ '--node-accent': data.accent }"
+    :style="{ '--node-accent': data.accent, minHeight: `${branchNodeHeight}px` }"
   >
     <div
       v-if="executionStatus === 'running'"
@@ -90,7 +123,10 @@ const containerClass = computed(() =>
       class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-(--node-accent)! !bg-white"
     />
 
-    <div class="flex h-[78px] overflow-hidden rounded-[14px]">
+    <div
+      class="flex overflow-hidden rounded-[14px]"
+      :style="{ height: `${branchNodeHeight}px` }"
+    >
       <div
         class="flex w-[56px] items-center justify-center bg-[var(--node-accent)] text-white"
       >
@@ -132,20 +168,36 @@ const containerClass = computed(() =>
     />
 
     <template v-else>
-      <Handle
-        id="branch-a"
-        type="source"
-        :position="Position.Right"
-        :connectable="singleConnectionHandle"
-        class="!right-0 !top-[32%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-(--node-accent)! !bg-white"
-      />
-      <Handle
-        id="branch-b"
-        type="source"
-        :position="Position.Right"
-        :connectable="singleConnectionHandle"
-        class="!right-0 !top-[68%] !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-(--node-accent)! !bg-white"
-      />
+      <template
+        v-for="(branch, index) in branchHandles"
+        :key="branch.id"
+      >
+        <div
+          class="pointer-events-none absolute right-5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1"
+          :class="
+            branch.isDefault
+              ? 'bg-slate-900/90 text-white ring-slate-900/80'
+              : 'bg-white text-slate-500 ring-slate-200'
+          "
+          :style="{
+            top: resolveBranchTop(index, branchHandles.length),
+            transform: 'translateY(-50%)',
+          }"
+        >
+          {{ branch.label }}
+        </div>
+
+        <Handle
+          :id="branch.id"
+          type="source"
+          :position="Position.Right"
+          connectable="single"
+          class="!right-0 !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-(--node-accent)! !bg-white"
+          :style="{
+            top: resolveBranchTop(index, branchHandles.length),
+          }"
+        />
+      </template>
     </template>
   </div>
 </template>

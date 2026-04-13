@@ -1,6 +1,11 @@
 import type { Edge } from "@vue-flow/core";
 
-import type { WorkflowFlowNode, WorkflowNodePanel, WorkflowTabId } from "./model";
+import {
+  getBranchHandlesForNode,
+  type WorkflowFlowNode,
+  type WorkflowNodePanel,
+  type WorkflowTabId,
+} from "./model";
 
 export interface WorkflowExportOptions {
   selectedNodeId?: string;
@@ -77,19 +82,23 @@ const serializePanelConfig = (panel?: WorkflowNodePanel): Partial<Record<Workflo
   }, {});
 };
 
-const createBranchLabelMap = (nodes: WorkflowFlowNode[]) => {
+const createBranchLabelMap = (
+  nodes: WorkflowFlowNode[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+) => {
   const labels = new Map<string, string>();
 
   nodes
-    .filter((node) => node.data.kind === "branch-label")
+    .filter((node) => node.data.kind !== "branch-label")
     .forEach((node) => {
-      if (node.id.endsWith("_a")) {
-        labels.set("branch-a", node.data.title);
-      }
+      const branchHandles = getBranchHandlesForNode(
+        node.data.kind,
+        panelByNodeId[node.id],
+      );
 
-      if (node.id.endsWith("_b")) {
-        labels.set("branch-b", node.data.title);
-      }
+      branchHandles?.forEach((branch) => {
+        labels.set(`${node.id}:${branch.id}`, branch.label);
+      });
     });
 
   return labels;
@@ -101,7 +110,7 @@ export const createWorkflowExportDocument = (
   panelByNodeId: Record<string, WorkflowNodePanel>,
   options: WorkflowExportOptions,
 ): WorkflowExportDocument => {
-  const branchLabelMap = createBranchLabelMap(nodes);
+  const branchLabelMap = createBranchLabelMap(nodes, panelByNodeId);
   const annotations = nodes
     .filter((node) => node.data.kind === "branch-label")
     .map<WorkflowExportAnnotation>((node) => ({
@@ -126,7 +135,10 @@ export const createWorkflowExportDocument = (
 
   const exportedEdges = edges.map<WorkflowExportEdge>((edge) => ({
     id: edge.id,
-    label: edge.sourceHandle ? branchLabelMap.get(edge.sourceHandle) : undefined,
+    label:
+      edge.sourceHandle && edge.source
+        ? branchLabelMap.get(`${edge.source}:${edge.sourceHandle}`)
+        : undefined,
     source: edge.source,
     sourceHandle: edge.sourceHandle,
     target: edge.target,
