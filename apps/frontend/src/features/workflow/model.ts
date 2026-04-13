@@ -167,6 +167,10 @@ const DEFAULT_SELECT_FIELD_OPTIONS: Partial<
     { label: "reject_401", value: "reject_401" },
     { label: "ignore", value: "ignore" },
   ],
+  responseMode: [
+    { label: "async_ack", value: "async_ack" },
+    { label: "sync", value: "sync" },
+  ],
   polling: [
     { label: "enabled", value: "enabled" },
     { label: "disabled", value: "disabled" },
@@ -934,6 +938,12 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           value: "接收入库订单",
         },
         { key: "method", label: "请求方式", type: "select", value: "POST" },
+        {
+          key: "responseMode",
+          label: "响应模式",
+          type: "select",
+          value: "async_ack",
+        },
         {
           key: "nodeId",
           label: "节点 ID",

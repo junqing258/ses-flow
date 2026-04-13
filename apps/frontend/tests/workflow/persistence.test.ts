@@ -93,4 +93,94 @@ describe("workflow persistence", () => {
 
     expect(restored.nodes[0]?.data.executionStatus).toBeUndefined();
   });
+
+  it("hydrates missing webhook response mode for older editor documents", () => {
+    const state = createNewWorkflowEditorState();
+    const webhookNode = {
+      id: "webhook_trigger",
+      type: "workflow-card" as const,
+      position: { x: 192, y: 176 },
+      sourcePosition: "right" as const,
+      targetPosition: "left" as const,
+      data: {
+        accent: "#6366F1",
+        icon: "webhook" as const,
+        kind: "trigger" as const,
+        nodeKey: "webhook_trigger",
+        subtitle: "接收入库订单",
+        title: "Webhook Trigger",
+      },
+    };
+
+    const document = createPersistedWorkflowDocument(
+      [state.nodes[0]!, webhookNode, state.nodes[1]!],
+      state.edges,
+      {
+        ...state.panelByNodeId,
+        webhook_trigger: {
+          tabs: ["base", "mapping", "error"],
+          fieldsByTab: {
+            base: [
+              {
+                key: "path",
+                label: "Webhook Path",
+                type: "input",
+                value: "/api/workflow/inbound-order",
+              },
+              {
+                key: "nodeName",
+                label: "节点名称",
+                type: "input",
+                value: "接收入库订单",
+              },
+              {
+                key: "method",
+                label: "请求方式",
+                type: "select",
+                value: "POST",
+              },
+              {
+                key: "nodeId",
+                label: "节点 ID",
+                type: "readonly",
+                value: "webhook_trigger",
+              },
+            ],
+            mapping: [
+              {
+                key: "payload",
+                label: "原始载荷",
+                type: "textarea",
+                value: "{\n  orderId: body.orderId\n}",
+              },
+            ],
+            error: [
+              {
+                key: "onInvalid",
+                label: "签名失败处理",
+                type: "select",
+                value: "reject_401",
+              },
+            ],
+          },
+        },
+      },
+      {
+        activeTab: state.activeTab,
+        selectedNodeId: "webhook_trigger",
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
+
+    const restored = createWorkflowEditorStateFromDocument(document);
+    const responseModeField = restored.panelByNodeId.webhook_trigger.fieldsByTab.base?.find(
+      (field) => field.key === "responseMode",
+    );
+
+    expect(responseModeField).toBeDefined();
+    expect(responseModeField?.value).toBe("async_ack");
+  });
 });

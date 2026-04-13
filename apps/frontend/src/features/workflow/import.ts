@@ -331,6 +331,11 @@ const createImportedNode = (
       "path",
       String(definition.trigger.path ?? ""),
     );
+    setPanelFieldValue(
+      nextPanel,
+      "responseMode",
+      String(definition.trigger.responseMode ?? "async_ack"),
+    );
   }
 
   if (node.retryPolicy?.max_attempts !== undefined) {

@@ -1034,7 +1034,9 @@ const runnerWorkflowPreview = computed<RunnerWorkflowDefinition>(
 );
 const runnerTriggerSummaryLabel = computed(() => {
   if (runnerWorkflowPreview.value.trigger.type === "webhook") {
-    return "Webhook Trigger";
+    return runnerWorkflowPreview.value.trigger.responseMode === "sync"
+      ? "Webhook Trigger · Sync"
+      : "Webhook Trigger · Async Ack";
   }
 
   return "Manual Trigger";

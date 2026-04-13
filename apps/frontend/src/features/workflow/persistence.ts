@@ -181,6 +181,61 @@ const clonePanels = (panelByNodeId: Record<string, WorkflowNodePanel>): Record<s
     ]),
   ) as Record<string, WorkflowNodePanel>;
 
+const ensureWebhookResponseModeField = (
+  nodes: WorkflowFlowNode[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+): Record<string, WorkflowNodePanel> => {
+  const defaults = createWorkflowPanels();
+  const defaultField = defaults.webhook_trigger.fieldsByTab.base?.find(
+    (field) => field.key === "responseMode",
+  );
+
+  if (!defaultField) {
+    return panelByNodeId;
+  }
+
+  return Object.fromEntries(
+    Object.entries(panelByNodeId).map(([nodeId, panel]) => {
+      const node = nodes.find((item) => item.id === nodeId);
+
+      if (node?.data.kind !== "trigger") {
+        return [nodeId, panel] as const;
+      }
+
+      const baseFields = panel.fieldsByTab.base ?? [];
+      const hasResponseMode = baseFields.some(
+        (field) => field.key === "responseMode",
+      );
+
+      if (hasResponseMode) {
+        return [nodeId, panel] as const;
+      }
+
+      const methodIndex = baseFields.findIndex((field) => field.key === "method");
+      const nextBaseFields = [...baseFields];
+      const insertAt = methodIndex >= 0 ? methodIndex + 1 : nextBaseFields.length;
+
+      nextBaseFields.splice(insertAt, 0, {
+        key: defaultField.key,
+        label: defaultField.label,
+        type: defaultField.type,
+        value: defaultField.value,
+      });
+
+      return [
+        nodeId,
+        {
+          ...panel,
+          fieldsByTab: {
+            ...panel.fieldsByTab,
+            base: nextBaseFields,
+          },
+        },
+      ] as const;
+    }),
+  ) as Record<string, WorkflowNodePanel>;
+};
+
 const findPaletteItem = (paletteItemId: string): WorkflowPaletteItem => {
   const paletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).find((item) => item.id === paletteItemId);
 
@@ -265,12 +320,17 @@ export const createWorkflowEditorStateFromDocument = (
   document: PersistedWorkflowDocument,
 ): WorkflowEditorState => {
   const fallbackState = createInitialWorkflowEditorState();
+  const nodes = cloneNodes(document.graph.nodes);
+  const panelByNodeId = ensureWebhookResponseModeField(
+    nodes,
+    clonePanels(document.graph.panels),
+  );
 
   return {
     activeTab: document.editor.activeTab ?? fallbackState.activeTab,
     edges: normalizeWorkflowEdges(cloneEdges(document.graph.edges)),
-    nodes: cloneNodes(document.graph.nodes),
-    panelByNodeId: clonePanels(document.graph.panels),
+    nodes,
+    panelByNodeId,
     pageMode: document.editor.pageMode ?? fallbackState.pageMode,
     runDraft: cloneRunDraft(document.editor.runDraft),
     selectedNodeId: document.editor.selectedNodeId ?? fallbackState.selectedNodeId,

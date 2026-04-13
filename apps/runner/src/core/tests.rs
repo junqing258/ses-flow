@@ -768,6 +768,92 @@ fn supports_extended_node_coverage_flow_with_subworkflow_and_respond() {
 }
 
 #[test]
+fn emits_webhook_response_when_sync_webhook_flow_reaches_end() {
+    let definition: WorkflowDefinition = serde_json::from_value(json!({
+        "meta": { "key": "sync-webhook-end-flow", "name": "Sync Webhook End Flow", "version": 1 },
+        "trigger": { "type": "webhook", "responseMode": "sync" },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("sync webhook workflow should deserialize");
+    let engine = WorkflowEngine::new();
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "headers": { "requestId": "req-sync-end-1" },
+                "body": { "orderNo": "SO-SYNC-END-1", "bizType": "auto_sort" }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("workflow run should succeed");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+    assert_eq!(summary.current_node_id.as_deref(), Some("end_1"));
+    assert_eq!(
+        summary
+            .last_signal
+            .as_ref()
+            .expect("sync webhook end should emit a response signal")
+            .signal_type,
+        "webhook_response"
+    );
+    assert_eq!(
+        summary
+            .last_signal
+            .as_ref()
+            .expect("sync webhook end should emit a response signal")
+            .payload,
+        json!({
+            "statusCode": 200,
+            "body": {
+                "orderNo": "SO-SYNC-END-1",
+                "bizType": "auto_sort"
+            }
+        })
+    );
+}
+
+#[test]
+fn does_not_emit_webhook_response_for_async_ack_end_only_flow() {
+    let definition: WorkflowDefinition = serde_json::from_value(json!({
+        "meta": { "key": "async-webhook-end-flow", "name": "Async Webhook End Flow", "version": 1 },
+        "trigger": { "type": "webhook", "responseMode": "async_ack" },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("async webhook workflow should deserialize");
+    let engine = WorkflowEngine::new();
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "headers": { "requestId": "req-async-end-1" },
+                "body": { "orderNo": "SO-ASYNC-END-1" }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("workflow run should succeed");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+    assert!(summary.last_signal.is_none());
+}
+
+#[test]
 fn supports_if_else_false_branch_and_default_switch_branch() {
     let definition = load_coverage_flow_definition(&spawn_echo_http_server());
     let engine = WorkflowEngine::new();

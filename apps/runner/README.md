@@ -229,6 +229,7 @@ curl -i \
 - 实际触发方式仍然是调用 `POST /workflows/<workflow_id>/runs`，并在请求体中传入 `trigger`。
 - `trigger.type = "webhook"`、`trigger.path`、`trigger.responseMode` 当前主要用于表达 workflow 的触发意图与元数据。
 - `respond` 节点会产出 `webhook_response` signal，但当前 API 层还不会把它自动回写成某个真实 webhook 请求的同步 HTTP 响应。
+- 当 `trigger.type = "webhook"` 且 `trigger.responseMode = "sync"` 时，如果流程没有显式 `respond` 节点、而是直接运行到 `end`，runner 会在完成时自动补一个默认的 `webhook_response` signal，等价于返回 `200 + 最终输出 body`。
 
 - `config.mode = "body"`：输出 `trigger.body`，默认值
 - `config.mode = "headers"`：输出 `trigger.headers`

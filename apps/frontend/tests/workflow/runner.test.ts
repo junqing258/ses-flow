@@ -331,6 +331,36 @@ describe("buildRunnerWorkflowDefinition", () => {
       priority: 1,
     });
   });
+
+  it("uses the configured webhook response mode in edit mode", () => {
+    const panels = createWorkflowPanels();
+    const responseModeField = panels.webhook_trigger.fieldsByTab.base?.find(
+      (field) => field.key === "responseMode",
+    );
+
+    if (!responseModeField) {
+      throw new Error("webhook response mode field should exist");
+    }
+
+    responseModeField.value = "sync";
+
+    const definition = buildRunnerWorkflowDefinition(
+      createExampleWorkflowNodes(),
+      createWorkflowEdges(),
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
+
+    expect(definition.trigger).toEqual({
+      type: "webhook",
+      path: "/api/workflow/inbound-order",
+      responseMode: "sync",
+    });
+  });
 });
 
 describe("shouldPollWorkflowRunSummary", () => {

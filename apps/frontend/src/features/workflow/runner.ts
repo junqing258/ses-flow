@@ -630,11 +630,16 @@ const buildWorkflowTrigger = (
   const panel = panelByNodeId[webhookNode.id];
   const path =
     getFieldValue(panel, "base", "path") || `/workflows/${webhookNode.id}`;
+  const responseMode =
+    getFieldValue(panel, "base", "responseMode") || "async_ack";
 
   return {
     type: "webhook",
     path,
-    responseMode: "async_ack",
+    responseMode:
+      responseMode === "sync" || responseMode === "async_ack"
+        ? responseMode
+        : "async_ack",
   };
 };
 

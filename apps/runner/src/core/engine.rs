@@ -6,7 +6,8 @@ use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
 use super::definition::{
-    NodeType, TransitionDefinition, WorkflowDefinition, deserialize_workflow_definition,
+    NodeType, ResponseMode, TransitionDefinition, TriggerType, WorkflowDefinition,
+    deserialize_workflow_definition,
 };
 use super::executors::ExecutorRegistry;
 use super::runtime::{
@@ -633,6 +634,12 @@ impl WorkflowEngine {
                     node_id = %node.id,
                     "workflow execution completed",
                 );
+                let completion_signal = self.resolve_completion_signal(
+                    definition,
+                    node.node_type,
+                    &result.output,
+                    last_signal,
+                );
                 let summary = WorkflowRunSummary {
                     run_id,
                     workflow_key,
@@ -641,7 +648,7 @@ impl WorkflowEngine {
                     current_node_id: Some(node.id.clone()),
                     state,
                     timeline,
-                    last_signal,
+                    last_signal: completion_signal,
                     resume_state: None,
                 };
                 self.emit_summary(&summary);
@@ -697,6 +704,41 @@ impl WorkflowEngine {
 
     fn emit_summary(&self, summary: &WorkflowRunSummary) {
         self.observer.on_summary(summary);
+    }
+
+    fn resolve_completion_signal(
+        &self,
+        definition: &WorkflowDefinition,
+        node_type: NodeType,
+        output: &Value,
+        last_signal: Option<super::runtime::NextSignal>,
+    ) -> Option<super::runtime::NextSignal> {
+        if last_signal.is_some() {
+            return last_signal;
+        }
+
+        if node_type != NodeType::End {
+            return None;
+        }
+
+        if !matches!(&definition.trigger.trigger_type, TriggerType::Webhook) {
+            return None;
+        }
+
+        if !matches!(
+            definition.trigger.response_mode.as_ref(),
+            Some(ResponseMode::Sync)
+        ) {
+            return None;
+        }
+
+        Some(super::runtime::NextSignal {
+            signal_type: "webhook_response".to_string(),
+            payload: json!({
+                "statusCode": 200,
+                "body": output.clone()
+            }),
+        })
     }
 
     fn terminated_summary(
