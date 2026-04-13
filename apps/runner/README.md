@@ -166,6 +166,7 @@ curl -i \
 - `set_state`
 - `switch`
 - `code` (`js/javascript`, host Node.js 22+ runtime)
+- `shell`
 - `sub_workflow`
 - `shell`
 - `wait`

@@ -197,7 +197,7 @@
           </p>
         </div>
         <span
-          class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600"
+          class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 truncate"
           >{{ runnerTriggerSummaryLabel }}</span
         >
       </div>
