@@ -158,7 +158,6 @@ curl -i \
 - `respond`
 - `fetch`
 - `set_state`
-- `if_else`
 - `switch`
 - `code` (`js/javascript`, host Node.js 22+ runtime)
 - `sub_workflow`
@@ -234,25 +233,6 @@ curl -i \
 }
 ```
 
-### `if_else`
-
-布尔分支节点。`config.expression` 解析后按 truthy/falsey 判断；如果配置了 `config.equals`，则改为做相等比较。节点返回的 `branchKey` 固定是 `then` 或 `else`，所以 transition 通常这样写：
-
-```json
-{
-  "id": "dispatch_gate",
-  "type": "if_else",
-  "name": "Need Dispatch",
-  "config": { "expression": "{{trigger.body.needsDispatch}}" }
-}
-```
-
-```json
-[
-  { "from": "dispatch_gate", "to": "dispatch_command", "label": "then" },
-  { "from": "dispatch_gate", "to": "mark_skipped", "label": "else" }
-]
-```
 
 ### `switch`
 
