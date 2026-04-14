@@ -64,6 +64,15 @@
           class="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold text-slate-600"
           >{{ workflowStatusLabel }}</span
         >
+        <Button
+          v-if="persistedWorkflowId"
+          variant="ghost"
+          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          @click="handleOpenWorkflowRuns"
+        >
+          <LoaderCircle class="h-3.5 w-3.5" />
+          查看运行
+        </Button>
       </div>
 
       <div
@@ -132,6 +141,14 @@
         </Button>
       </div>
     </header>
+
+    <WorkflowRunListDialog
+      :open="isWorkflowRunListOpen"
+      :workflow-id="persistedWorkflowId ?? ''"
+      :workflow-name="workflowTitle"
+      @update:open="handleWorkflowRunListOpenChange"
+      @select-run="handleOpenWorkflowRunFromList"
+    />
 
     <!-- Floating Left Panel -->
     <aside
@@ -838,6 +855,7 @@ import { toast } from "vue-sonner";
 
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
+import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import WorkflowTerminalNode from "@/components/workflow/WorkflowTerminalNode.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -917,6 +935,7 @@ const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
 const isLoadingWorkflow = ref(false);
 const isRunningWorkflow = ref(false);
+const isWorkflowRunListOpen = ref(false);
 const isTerminatingWorkflow = ref(false);
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const activeRunSummary = ref<WorkflowRunSummary | null>(null);
@@ -1194,6 +1213,34 @@ const getNextSwitchBranchLabel = (panel: WorkflowNodePanel) => {
 
 const handleBackToList = () => {
   void router.push({ name: "workflow-list" });
+};
+
+const handleOpenWorkflowRuns = () => {
+  if (!persistedWorkflowId.value) {
+    return;
+  }
+
+  isWorkflowRunListOpen.value = true;
+};
+
+const handleWorkflowRunListOpenChange = (open: boolean) => {
+  isWorkflowRunListOpen.value = open;
+};
+
+const handleOpenWorkflowRunFromList = (runId: string) => {
+  if (!persistedWorkflowId.value) {
+    return;
+  }
+
+  void router.push({
+    name: "workflow-editor",
+    params: {
+      id: persistedWorkflowId.value,
+    },
+    query: {
+      runId,
+    },
+  });
 };
 
 const resetCanvasViewport = async () => {

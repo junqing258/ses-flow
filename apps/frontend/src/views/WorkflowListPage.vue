@@ -240,85 +240,13 @@
       </main>
     </div>
 
-    <Dialog :open="isRunListOpen" @update:open="handleRunListOpenChange">
-      <DialogContent
-        class="max-w-2xl rounded-[28px] border border-slate-200/80 bg-[#fcfcfb] p-0 shadow-[0_32px_80px_rgba(15,23,42,0.22)]"
-      >
-        <div class="border-b border-slate-200/80 px-6 py-5">
-          <DialogHeader class="space-y-1">
-            <DialogTitle
-              class="text-lg font-semibold tracking-tight text-slate-950"
-            >
-              {{ selectedWorkflowForRuns?.name ?? "运行列表" }}
-            </DialogTitle>
-            <DialogDescription class="text-sm leading-6 text-slate-500">
-              查看当前工作流仍在执行中的任务，并跳转到对应运行详情。
-            </DialogDescription>
-          </DialogHeader>
-        </div>
-
-        <div class="max-h-[60vh] overflow-y-auto px-6 py-5">
-          <div
-            v-if="isLoadingWorkflowRuns"
-            class="flex items-center justify-center rounded-[22px] border border-slate-200/80 bg-white px-6 py-12 text-sm text-slate-500"
-          >
-            加载运行列表中...
-          </div>
-          <div
-            v-else-if="workflowRuns.length === 0"
-            class="rounded-[22px] border border-dashed border-slate-200 bg-white px-6 py-12 text-center"
-          >
-            <p class="text-sm font-medium text-slate-700">
-              当前没有运行中的任务
-            </p>
-            <p class="mt-2 text-sm leading-6 text-slate-500">
-              如果任务刚刚结束，刷新工作流列表后这里的计数也会同步更新。
-            </p>
-          </div>
-          <div v-else class="space-y-3">
-            <button
-              v-for="run in workflowRuns"
-              :key="run.runId"
-              type="button"
-              class="w-full rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 text-left shadow-[0_14px_30px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50/40"
-              @click="openWorkflowRun(run.runId)"
-            >
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold text-slate-900">
-                    {{ run.runId }}
-                  </p>
-                  <p class="mt-1 text-sm text-slate-500">
-                    {{
-                      run.currentNodeId
-                        ? `当前节点：${run.currentNodeId}`
-                        : "等待获取当前节点"
-                    }}
-                  </p>
-                </div>
-                <span
-                  class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  :class="
-                    run.status === 'waiting'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-cyan-50 text-cyan-700'
-                  "
-                >
-                  {{ formatRunStatusLabel(run.status) }}
-                </span>
-              </div>
-
-              <div
-                class="mt-4 flex items-center justify-between text-xs text-slate-400"
-              >
-                <span>启动于 {{ formatRunTime(run.createdAt) }}</span>
-                <span>更新于 {{ formatRunTime(run.updatedAt) }}</span>
-              </div>
-            </button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <WorkflowRunListDialog
+      :open="isRunListOpen"
+      :workflow-id="selectedWorkflowForRuns?.id ?? ''"
+      :workflow-name="selectedWorkflowForRuns?.name"
+      @update:open="handleRunListOpenChange"
+      @select-run="openWorkflowRun"
+    />
   </section>
 </template>
 
@@ -337,19 +265,11 @@ import {
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
+import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   fetchWorkflowList,
-  fetchWorkflowRuns,
-  type WorkflowRunListItem,
   type WorkflowSummary,
 } from "@/features/workflow/api";
 
@@ -382,9 +302,7 @@ const activeTab = ref<WorkflowTabId>("drafts");
 const workflowSummaries = ref<WorkflowSummary[]>([]);
 const isLoadingWorkflows = ref(false);
 const isRunListOpen = ref(false);
-const isLoadingWorkflowRuns = ref(false);
 const selectedWorkflowForRuns = ref<WorkflowListItem | null>(null);
-const workflowRuns = ref<WorkflowRunListItem[]>([]);
 
 const draftWorkflows = computed<WorkflowListItem[]>(() =>
   workflowSummaries.value.map((workflow, index) => ({
@@ -470,20 +388,8 @@ const handleRunListOpenChange = (open: boolean) => {
 
   if (!open) {
     selectedWorkflowForRuns.value = null;
-    workflowRuns.value = [];
   }
 };
-
-const formatRunStatusLabel = (status: WorkflowRunListItem["status"]) => {
-  if (status === "waiting") {
-    return "Waiting";
-  }
-
-  return "Running";
-};
-
-const formatRunTime = (value: string) =>
-  dayjs(value).format("MMM D · HH:mm:ss");
 
 const openRunList = async (workflow: WorkflowListItem) => {
   if (workflow.runningRunCount === 0) {
@@ -491,18 +397,7 @@ const openRunList = async (workflow: WorkflowListItem) => {
   }
 
   selectedWorkflowForRuns.value = workflow;
-  workflowRuns.value = [];
   isRunListOpen.value = true;
-  isLoadingWorkflowRuns.value = true;
-
-  try {
-    workflowRuns.value = await fetchWorkflowRuns(workflow.id);
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "加载运行列表失败");
-    handleRunListOpenChange(false);
-  } finally {
-    isLoadingWorkflowRuns.value = false;
-  }
 };
 
 const openWorkflowRun = (runId: string) => {
