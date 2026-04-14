@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -328,22 +329,10 @@ impl NodeExecutor for CodeExecutor {
         node: &NodeDefinition,
         context: &NodeExecutionContext<'_>,
     ) -> Result<NodeExecutionResult, RunnerError> {
-        let language = node
-            .config
-            .get("language")
-            .or_else(|| node.config.get("lang"))
-            .and_then(Value::as_str)
-            .unwrap_or("js");
-        if !matches!(language, "js" | "javascript") {
-            return Err(RunnerError::CodeExecution(format!(
-                "node {} only supports js/javascript, got {}",
-                node.id, language
-            )));
-        }
-
+        let language = parse_code_language(node)?;
         let params = resolve_mapping(node, context);
         let spec = resolve_code_execution_spec(node)?;
-        let process_output = execute_js_code(&spec, context, &params, node.timeout_ms)?;
+        let process_output = execute_code(&spec, language, context, &params, node.timeout_ms)?;
 
         Ok(build_code_result(process_output.result).with_logs(process_output.logs))
     }
@@ -1032,8 +1021,9 @@ fn resolve_code_file_path(base_dir: Option<&Path>, path: &str) -> Result<PathBuf
     })
 }
 
-fn execute_js_code(
+fn execute_code(
     spec: &CodeExecutionSpec,
+    language: CodeLanguage,
     context: &NodeExecutionContext<'_>,
     params: &Value,
     timeout_ms: Option<u64>,
@@ -1043,16 +1033,23 @@ fn execute_js_code(
         "input": context.input,
         "state": context.state,
         "env": env_to_value(context.env),
-        "params": params
+        "params": params,
+        "requiresTypeTransform": language == CodeLanguage::TypeScript
     });
-    match spec {
-        CodeExecutionSpec::InlineSource(source) => {
+    let mut temporary_module = None;
+    match (language, spec) {
+        (CodeLanguage::JavaScript, CodeExecutionSpec::InlineSource(source)) => {
             payload["source"] = Value::String(source.clone());
         }
-        CodeExecutionSpec::Module {
+        (CodeLanguage::TypeScript, CodeExecutionSpec::InlineSource(source)) => {
+            let module = TemporaryCodeModule::create(source)?;
+            payload["modulePath"] = Value::String(module.path().to_string_lossy().to_string());
+            temporary_module = Some(module);
+        }
+        (_, CodeExecutionSpec::Module {
             module_path,
             export_name,
-        } => {
+        }) => {
             payload["modulePath"] = Value::String(module_path.clone());
             payload["exportName"] = Value::String(export_name.clone());
         }
@@ -1060,7 +1057,11 @@ fn execute_js_code(
     let request = serde_json::to_vec(&payload)
         .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
 
-    let mut child = Command::new("node")
+    let mut command = Command::new("node");
+    if language == CodeLanguage::TypeScript {
+        command.arg("--experimental-transform-types");
+    }
+    let mut child = command
         .args(["--input-type=module", "--eval", NODE_RUNNER_BOOTSTRAP])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1079,6 +1080,7 @@ fn execute_js_code(
     }
 
     let output = wait_for_process_output(child, timeout_ms, "code")?;
+    drop(temporary_module);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -1140,6 +1142,24 @@ fn value_to_branch_key(value: Value) -> Option<String> {
         Value::Null => None,
         Value::String(value) => Some(value),
         other => Some(other.to_string()),
+    }
+}
+
+fn parse_code_language(node: &NodeDefinition) -> Result<CodeLanguage, RunnerError> {
+    let language = node
+        .config
+        .get("language")
+        .or_else(|| node.config.get("lang"))
+        .and_then(Value::as_str)
+        .unwrap_or("js");
+
+    match language {
+        "js" | "javascript" => Ok(CodeLanguage::JavaScript),
+        "ts" | "typescript" => Ok(CodeLanguage::TypeScript),
+        _ => Err(RunnerError::CodeExecution(format!(
+            "node {} only supports js/javascript/ts/typescript, got {}",
+            node.id, language
+        ))),
     }
 }
 
@@ -1210,12 +1230,24 @@ const {
   input = null,
   state = null,
   env = null,
-  params = null
+  params = null,
+  requiresTypeTransform = false
 } = payload;
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const majorVersion = Number((process.versions.node || '0').split('.')[0] || '0');
-if (!Number.isFinite(majorVersion) || majorVersion < 22) {
-  throw new Error(`Code node requires Node.js 22+, got ${process.version}`);
+const [majorRaw = '0', minorRaw = '0'] = (process.versions.node || '0.0').split('.');
+const majorVersion = Number(majorRaw || '0');
+const minorVersion = Number(minorRaw || '0');
+if (
+  !Number.isFinite(majorVersion) ||
+  !Number.isFinite(minorVersion) ||
+  majorVersion < 22 ||
+  (requiresTypeTransform && majorVersion === 22 && minorVersion < 20)
+) {
+  throw new Error(
+    requiresTypeTransform
+      ? `TypeScript code node requires Node.js 22.20+, got ${process.version}`
+      : `Code node requires Node.js 22+, got ${process.version}`
+  );
 }
 const logs = [];
 const normalize = (value) => {
@@ -1286,12 +1318,57 @@ struct CodeProcessOutput {
     logs: Vec<NodeLogRecord>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CodeLanguage {
+    JavaScript,
+    TypeScript,
+}
+
 enum CodeExecutionSpec {
     InlineSource(String),
     Module {
         module_path: String,
         export_name: String,
     },
+}
+
+struct TemporaryCodeModule {
+    path: PathBuf,
+}
+
+impl TemporaryCodeModule {
+    fn create(source: &str) -> Result<Self, RunnerError> {
+        static TEMP_CODE_MODULE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+        let unique = TEMP_CODE_MODULE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "ses-runner-code-{}-{}-{}.mts",
+            std::process::id(),
+            unique,
+            std::thread::current().name().unwrap_or("worker")
+        ));
+        let wrapped = format!(
+            "export default async function (trigger, input, state, env, params) {{\n{source}\n}}\n"
+        );
+        fs::write(&path, wrapped).map_err(|error| {
+            RunnerError::CodeExecution(format!(
+                "failed to write temporary TypeScript module {}: {error}",
+                path.display()
+            ))
+        })?;
+
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TemporaryCodeModule {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
 }
 // endregion Shell / Code 节点数据结构
 

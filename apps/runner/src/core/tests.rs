@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -31,6 +32,23 @@ impl WorkflowRunObserver for RecordingObserver {
             .expect("observer summaries lock should not be poisoned")
             .push(summary.clone());
     }
+}
+
+fn node_supports_typescript_code() -> bool {
+    let Ok(output) = Command::new("node").arg("-v").output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+
+    let version = String::from_utf8_lossy(&output.stdout);
+    let trimmed = version.trim().trim_start_matches('v');
+    let mut parts = trimmed.split('.');
+    let major = parts.next().and_then(|value| value.parse::<u32>().ok());
+    let minor = parts.next().and_then(|value| value.parse::<u32>().ok());
+
+    matches!((major, minor), (Some(major), Some(minor)) if major > 22 || (major == 22 && minor >= 20))
 }
 
 fn spawn_echo_http_server() -> String {
@@ -1101,6 +1119,57 @@ fn rejects_code_node_when_timeout_is_exceeded() {
         error,
         crate::error::RunnerError::CodeExecution(message) if message.contains("timeout")
     ));
+}
+
+#[test]
+fn supports_inline_typescript_code_node() {
+    if !node_supports_typescript_code() {
+        return;
+    }
+
+    let definition: WorkflowDefinition = serde_json::from_value(json!({
+        "meta": { "key": "code-typescript-inline-flow", "name": "Code TypeScript Inline Flow", "version": 1 },
+        "trigger": { "type": "manual" },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "run_code",
+                "type": "code",
+                "name": "Run TypeScript",
+                "inputMapping": {
+                    "qty": "{{input.qty}}",
+                    "orderNo": "{{input.orderNo}}"
+                },
+                "config": {
+                    "language": "typescript",
+                    "source": "const quantity: number = Number(params.qty ?? 0);\nconst payload: { orderNo: string | null; normalizedQty: number } = {\n  orderNo: params.orderNo ?? null,\n  normalizedQty: quantity * 2,\n};\nreturn { output: payload, statePatch: { code: payload } };"
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "run_code" },
+            { "from": "run_code", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("typescript workflow should deserialize");
+    let engine = WorkflowEngine::new();
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "body": { "orderNo": "SO-TS-1", "qty": 3 }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("inline typescript should run");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+    assert_eq!(summary.timeline[1].output["orderNo"], json!("SO-TS-1"));
+    assert_eq!(summary.timeline[1].output["normalizedQty"], json!(6));
+    assert_eq!(summary.state["code"]["normalizedQty"], json!(6));
 }
 
 #[test]

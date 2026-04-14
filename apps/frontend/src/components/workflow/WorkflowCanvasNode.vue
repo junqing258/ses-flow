@@ -120,7 +120,7 @@ const containerClass = computed(() =>
       id="in"
       type="target"
       :position="Position.Left"
-      class="!left-0 !h-3 !w-3 !-translate-x-1/2 !border-2 !border-(--node-accent)! !bg-white"
+      class="left-0! h-3! w-3! -translate-x-1/2! border-2! !border-(--node-accent)! bg-white!"
     />
 
     <div
@@ -128,7 +128,7 @@ const containerClass = computed(() =>
       :style="{ height: `${branchNodeHeight}px` }"
     >
       <div
-        class="flex w-[56px] items-center justify-center bg-[var(--node-accent)] text-white"
+        class="flex w-14 items-center justify-center bg-(--node-accent) text-white"
       >
         <component :is="IconComponent" class="h-5 w-5" />
       </div>
@@ -164,7 +164,7 @@ const containerClass = computed(() =>
       id="out"
       type="source"
       :position="Position.Right"
-      class="!right-0 !h-3 !w-3 !translate-x-1/2 !border-2 !border-(--node-accent)! !bg-white"
+      class="right-0! h-3! w-3! translate-x-1/2! border-2! !border-(--node-accent)! bg-white!"
     />
 
     <template v-else>
@@ -193,7 +193,7 @@ const containerClass = computed(() =>
           type="source"
           :position="Position.Right"
           connectable="single"
-          class="!right-0 !h-3 !w-3 !translate-x-1/2 !-translate-y-1/2 !border-2 !border-(--node-accent)! !bg-white"
+          class="right-0! h-3! w-3! translate-x-1/2! -translate-y-1/2! border-2! !border-(--node-accent)! bg-white!"
           :style="{
             top: resolveBranchTop(index, branchHandles.length),
           }"

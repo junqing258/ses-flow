@@ -1377,6 +1377,8 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
       return;
     }
 
+    pageMode.value = "edit";
+
     clearRunSummaryPolling();
 
     if (activeRunSummary.value && activeRunWorkflowId.value === workflowId) {

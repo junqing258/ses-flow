@@ -1,6 +1,7 @@
 import { Position, type Edge, type Node } from "@vue-flow/core";
 import {
   Activity,
+  Code2,
   Clock3,
   Database,
   GitBranch,
@@ -20,6 +21,7 @@ import {
 
 export const WORKFLOW_ICON_MAP = {
   activity: Activity,
+  code: Code2,
   clock: Clock3,
   database: Database,
   gitBranch: GitBranch,
@@ -463,6 +465,13 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
         icon: "zap",
         accent: "#F97316",
       },
+      {
+        id: "palette-code",
+        kind: "effect",
+        label: "Code",
+        icon: "code",
+        accent: "#0F766E",
+      },
     ],
   },
   {
@@ -729,6 +738,77 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           label: "节点 ID",
           type: "readonly",
           value: "end_right",
+        },
+      ],
+    },
+  },
+  code_node: {
+    tabs: ["base", "mapping", "retry"],
+    fieldsByTab: {
+      base: [
+        {
+          key: "source",
+          label: "代码内容",
+          type: "textarea",
+          value:
+            "return {\n  output: {\n    ok: true,\n    received: params,\n  },\n};",
+        },
+        {
+          key: "language",
+          label: "语言",
+          type: "select",
+          value: "javascript",
+          options: [
+            { label: "javascript", value: "javascript" },
+            { label: "typescript", value: "typescript" },
+          ],
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "执行代码逻辑",
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: "3000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "code_node",
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value:
+            "使用 Runner 的 Code 节点执行内联 JavaScript；可读取 trigger / input / state / env / params。",
+        },
+      ],
+      mapping: [
+        {
+          key: "payload",
+          label: "入参 / params",
+          type: "textarea",
+          value: "{\n  orderId: input.orderId,\n  requestId: trigger.headers.requestId\n}",
+        },
+      ],
+      retry: [
+        {
+          key: "retryPolicy",
+          label: "失败重试",
+          type: "select",
+          value: "none",
+        },
+        {
+          key: "maxAttempts",
+          label: "最大重试次数",
+          type: "input",
+          value: "1",
         },
       ],
     },
@@ -1140,6 +1220,33 @@ export const createWorkflowNodeDraft = (
         panel,
       };
     }
+    case "palette-code": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("code_node");
+      const subtitle = "新建代码节点";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          data: {
+            accent: "#0F766E",
+            icon: "code",
+            kind: "effect",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Code",
+          },
+        },
+        panel,
+      };
+    }
     case "palette-if-else": {
       const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
       const panel = clonePanel("switch_biz_type");
@@ -1234,6 +1341,7 @@ export const createWorkflowNodeDraft = (
       const panel = clonePanel("assign_task");
       const subtitle = `新建${item.label}`;
       const titleMap: Partial<Record<WorkflowPaletteItem["id"], string>> = {
+        "palette-code": "Code",
         "palette-shell": "Shell",
         "palette-respond": "Respond",
         "palette-subflow": "Sub-Workflow",

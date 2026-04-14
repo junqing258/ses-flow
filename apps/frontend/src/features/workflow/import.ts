@@ -49,6 +49,8 @@ const getPaletteIdForRunnerNodeType = (nodeType: string) => {
       return "palette-respond";
     case "sub_workflow":
       return "palette-subflow";
+    case "code":
+      return "palette-code";
     case "shell":
       return "palette-shell";
     case "webhook_trigger":
@@ -291,8 +293,7 @@ const createImportedNode = (
     node.type === "shell" ||
     node.type === "task" ||
     node.type === "respond" ||
-    node.type === "sub_workflow" ||
-    node.type === "code"
+    node.type === "sub_workflow"
   ) {
     setPanelFieldValue(
       nextPanel,
@@ -309,6 +310,26 @@ const createImportedNode = (
       nextPanel,
       "workingDirectory",
       String(node.config?.workingDirectory ?? node.config?.cwd ?? ""),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "payload",
+      serializeMappingValue(node.inputMapping),
+    );
+  }
+
+  if (node.type === "code") {
+    setPanelFieldValue(
+      nextPanel,
+      "source",
+      String(
+        node.config?.source ?? node.config?.js ?? node.config?.code ?? "",
+      ),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "language",
+      String(node.config?.language ?? node.config?.lang ?? "javascript"),
     );
     setPanelFieldValue(
       nextPanel,

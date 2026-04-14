@@ -415,6 +415,10 @@ const extractNodeType = (node: WorkflowFlowNode) => {
     return "sub_workflow";
   }
 
+  if (node.data.title === "Code") {
+    return "code";
+  }
+
   return "shell";
 };
 
@@ -505,6 +509,19 @@ const buildNodeDefinition = (
     if (workingDirectory) {
       definition.config.workingDirectory = workingDirectory;
     }
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "payload"),
+    );
+  }
+
+  if (type === "code") {
+    definition.config = {
+      language:
+        getFieldValue(panel, "base", "language") || "javascript",
+      source:
+        getFieldValue(panel, "base", "source") ||
+        "return { output: params };",
+    };
     definition.inputMapping = parseMappingValue(
       getFieldValue(panel, "mapping", "payload"),
     );

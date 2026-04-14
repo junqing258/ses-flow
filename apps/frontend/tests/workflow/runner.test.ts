@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Position } from "@vue-flow/core";
 
 import {
+  createWorkflowNodeDraft,
   createWorkflowEdges,
   createWorkflowPanels,
   setSwitchBranches,
@@ -359,6 +360,88 @@ describe("buildRunnerWorkflowDefinition", () => {
       type: "webhook",
       path: "/api/workflow/inbound-order",
       responseMode: "sync",
+    });
+  });
+
+  it("exports code nodes with code-specific runner config", () => {
+    const baseNodes = createExampleWorkflowNodes().filter(
+      (node) => node.id !== "assign_task",
+    );
+    const { node: codeNode, panel: codePanel } = createWorkflowNodeDraft(
+      {
+        id: "palette-code",
+        kind: "effect",
+        label: "Code",
+        icon: "code",
+        accent: "#0F766E",
+      },
+      { x: 1184, y: 88 },
+      baseNodes,
+    );
+
+    codeNode.id = "run_code";
+    codeNode.data.nodeKey = "run_code";
+
+    (codePanel.fieldsByTab.base ?? []).forEach((field) => {
+      if (field.key === "nodeId") {
+        field.value = "run_code";
+      }
+      if (field.key === "nodeName") {
+        field.value = "执行 JavaScript";
+      }
+      if (field.key === "language") {
+        field.value = "javascript";
+      }
+      if (field.key === "source") {
+        field.value = "return { output: { normalizedQty: params.qty * 2 } };";
+      }
+    });
+
+    const payloadField = (codePanel.fieldsByTab.mapping ?? []).find(
+      (field) => field.key === "payload",
+    );
+
+    if (!payloadField) {
+      throw new Error("code payload field should exist");
+    }
+
+    payloadField.value = "{\n  qty: input.qty\n}";
+
+    const panels = createWorkflowPanels();
+    panels.run_code = codePanel;
+
+    const definition = buildRunnerWorkflowDefinition(
+      [...baseNodes, codeNode],
+      createWorkflowEdges().map((edge) =>
+        edge.id === "switch->assign"
+          ? {
+              ...edge,
+              id: "switch->code",
+              target: "run_code",
+            }
+          : edge,
+      ),
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
+
+    const codeDefinition = definition.nodes.find((node) => node.id === "run_code");
+
+    expect(codeDefinition).toMatchObject({
+      id: "run_code",
+      name: "执行 JavaScript",
+      type: "code",
+      config: {
+        language: "javascript",
+        source: "return { output: { normalizedQty: params.qty * 2 } };",
+      },
+      inputMapping: {
+        qty: "{{input.qty}}",
+      },
     });
   });
 });

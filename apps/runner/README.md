@@ -165,7 +165,7 @@ curl -i \
 - `fetch`
 - `set_state`
 - `switch`
-- `code` (`js/javascript`, host Node.js 22+ runtime)
+- `code` (`js/javascript/ts/typescript`, host Node.js 22.20+ runtime)
 - `shell`
 - `sub_workflow`
 - `shell`
@@ -338,9 +338,9 @@ curl -i \
 
 ### `code`
 
-运行 JavaScript 节点，要求宿主环境为 `Node.js 22+`。
+运行 JavaScript / TypeScript 节点，要求宿主环境为 `Node.js 22.20+`。
 
-- `config.language` / `config.lang` 目前只支持 `js` 或 `javascript`
+- `config.language` / `config.lang` 目前支持 `js` / `javascript` / `ts` / `typescript`
 - 可通过 `config.source` / `js` / `code` 写内联脚本
 - 也可通过 `config.sourcePath` / `filePath` 读取文件
 - 或通过 `config.modulePath` + `config.exportName` 调用模块导出函数
@@ -348,6 +348,7 @@ curl -i \
 - 返回普通 JSON 时会直接作为节点输出；返回 `{ output, statePatch, branchKey }` 时可同时控制输出、状态更新和分支
 - `timeoutMs` 可限制最长执行时间
 - 下个节点通过 `{{input}}` 或 `{{input.xxx}}` 读取 code 的返回值；如果用了 envelope 返回，则读取的是 `output`
+- `typescript` 会使用 Node.js 的类型转换能力执行；内联脚本和 `.ts/.mts` 模块都要求宿主版本满足 `22.20+`
 
 ```json
 {
@@ -359,7 +360,7 @@ curl -i \
     "requestId": "{{trigger.headers.requestId}}"
   },
   "config": {
-    "language": "js",
+    "language": "typescript",
     "modulePath": "examples/code-flow-handler.mjs",
     "exportName": "default"
   },
