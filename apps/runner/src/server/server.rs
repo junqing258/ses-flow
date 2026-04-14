@@ -18,11 +18,11 @@ use crate::core::runtime::{
     WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
-use crate::services::WorkflowServices;
+use crate::services::{WorkflowRunner, WorkflowServices};
 use crate::store::{
     InMemoryCatalogStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
-    WorkflowDetailRecord, WorkflowRunRecord, WorkflowRunStore, WorkflowRunner,
-    WorkflowSummaryRecord, WorkspaceRecord,
+    WorkflowDetailRecord, WorkflowRunRecord, WorkflowRunStore, WorkflowSummaryRecord,
+    WorkspaceRecord,
 };
 
 #[derive(Debug, Error)]

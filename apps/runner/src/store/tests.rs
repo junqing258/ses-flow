@@ -8,7 +8,8 @@ use serde_json::json;
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::WorkflowEngine;
 use crate::core::runtime::{RunEnvironment, WorkflowRunStatus};
-use crate::store::{InMemoryRunStore, WorkflowRunStore, WorkflowRunner};
+use crate::services::WorkflowRunner;
+use crate::store::{InMemoryRunStore, WorkflowRunStore};
 
 #[test]
 fn stores_waiting_snapshot_and_resumes_by_run_id() {

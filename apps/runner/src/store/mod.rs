@@ -2,7 +2,6 @@ pub mod catalog;
 pub mod inmemory_catalog;
 pub mod memory;
 pub mod postgres;
-pub mod runner;
 
 pub use catalog::{
     PostgresCatalogStore, StoredWorkflowDefinition, WorkflowCatalogStore, WorkflowDetailRecord,
@@ -11,7 +10,6 @@ pub use catalog::{
 pub use inmemory_catalog::InMemoryCatalogStore;
 pub use memory::{InMemoryRunStore, WorkflowRunRecord, WorkflowRunStore};
 pub use postgres::PostgresRunStore;
-pub use runner::WorkflowRunner;
 
 #[cfg(test)]
 mod tests;

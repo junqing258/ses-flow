@@ -6,8 +6,7 @@ use crate::core::runtime::{
     RunEnvironment, WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
-
-use super::WorkflowRunStore;
+use crate::store::WorkflowRunStore;
 
 pub struct WorkflowRunner {
     engine: WorkflowEngine,
