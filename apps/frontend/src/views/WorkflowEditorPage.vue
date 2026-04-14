@@ -163,7 +163,7 @@
 
     <aside
       v-if="isAiMode"
-      class="pointer-events-auto absolute right-[392px] top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div class="border-b border-slate-100 px-4 py-4">
         <div class="flex items-start justify-between gap-3">
@@ -172,12 +172,13 @@
               AI 工作流编辑助手
             </p>
             <p class="mt-1 text-[11px] leading-5 text-slate-500">
-              Web 端只负责展示 `session_id` 和预览结果。会话编辑动作在 Claude
-              Code 中完成，并由它通过 `ses-flow-skill` 推送预览。
+              Web 端只负责展示 `runner_base_url`、`session_id` 和预览结果。
+              会话编辑动作在 Claude Code 中完成，并由它通过 `ses-flow-skill`
+              推送预览。
             </p>
           </div>
           <span
-            class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+            class="rounded-full px-2.5 py-1 text-[11px] font-semibold text-nowrap"
             :class="
               assistantConnectionState === 'connected'
                 ? 'bg-emerald-50 text-emerald-700'
@@ -211,37 +212,41 @@
           </p>
         </div>
 
-        <div class="space-y-1.5">
-          <label
-            class="block text-xs font-semibold tracking-wide text-slate-500"
-            >session_id</label
+        <div
+          class="rounded-[14px] border border-slate-200/80 bg-white px-3 py-2"
+        >
+          <p
+            class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500"
           >
-          <div class="flex gap-2">
-            <Input :model-value="assistantSessionId" readonly />
-            <Button
-              variant="ghost"
-              class="shrink-0 rounded-full"
-              :disabled="!assistantSessionId"
-              @click="handleCopyAssistantSessionId"
-            >
-              复制
-            </Button>
-          </div>
+            runner_base_url: {{ assistantRunnerBaseUrl }}
+          </p>
+          <p
+            class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500"
+          >
+            session_id: {{ assistantSessionId || "(创建中)" }}
+          </p>
+        </div>
+        <div class="space-y-1.5">
+          <p class="text-[11px] leading-5 text-slate-500">
+            首次请把 `runner_base_url` 和 `session_id` 一起提供给 Claude
+            Code，后续它会用这个前缀拼接会话接口地址。
+          </p>
         </div>
 
-        <div class="rounded-[18px] border border-slate-200/80 bg-white p-3">
+        <!--  <div class="rounded-[18px] border border-slate-200/80 bg-white p-3">
           <p class="text-xs font-semibold tracking-wide text-slate-500">
             Claude Code 调用提示
           </p>
           <pre
             class="mt-3 overflow-x-auto rounded-2xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"
-          ><code>session_id: {{ assistantSessionId || "(创建中)" }}
+          ><code>runner_base_url: {{ assistantRunnerBaseUrl }}
+session_id: {{ assistantSessionId || "(创建中)" }}
 skill: ses-flow-skill
-update: PUT /runner-api/edit-sessions/{{ assistantSessionId || ":session_id" }}
-preview: WS /runner-api/edit-sessions/{{ assistantSessionId || ":session_id" }}/ws</code></pre>
+update: PUT {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}
+preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}/ws</code></pre>
           <p class="mt-3 text-[11px] leading-5 text-slate-500">
-            AI 模式下 Web 侧不提供输入框、创建按钮或同步按钮；Claude Code 拿到
-            `session_id` 后更新临时会话，runner
+            AI 模式下 Web 侧不提供输入框、创建按钮或同步按钮；首次请把
+            `runner_base_url` 和 `session_id` 一起提供给 Claude Code，它会据此拼接接口并更新临时会话，runner
             校验通过后会自动刷新这里的画布预览。
           </p>
         </div>
@@ -251,7 +256,7 @@ preview: WS /runner-api/edit-sessions/{{ assistantSessionId || ":session_id" }}/
         >
           AI 模式已锁定 Web 编辑。请在 Claude Code
           中继续增删节点、改映射和调整分支。
-        </div>
+        </div> -->
 
         <div
           v-if="assistantSessionError"
@@ -1001,6 +1006,7 @@ import {
   type WorkflowRunSummary,
 } from "@/features/workflow/runner";
 import {
+  WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL,
   buildWorkflowEditSessionWsUrl,
   createWorkflowEditSession,
   type WorkflowEditSession,
@@ -1163,6 +1169,7 @@ const persistedWorkflowId = computed(() =>
 );
 const workflowTitle = computed(() => workflowMeta.name || "New workflow");
 const hasAssistantSession = computed(() => Boolean(assistantSession.value));
+const assistantRunnerBaseUrl = WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL;
 const assistantSessionId = computed(
   () => assistantSession.value?.sessionId ?? "",
 );
@@ -1407,19 +1414,6 @@ const ensureAssistantSessionForAiMode = async () => {
     toast.error(assistantSessionError.value);
   } finally {
     isCreatingAssistantSession.value = false;
-  }
-};
-
-const handleCopyAssistantSessionId = async () => {
-  if (!assistantSessionId.value) {
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(assistantSessionId.value);
-    toast.success("session_id 已复制");
-  } catch {
-    toast.error("复制 session_id 失败");
   }
 };
 

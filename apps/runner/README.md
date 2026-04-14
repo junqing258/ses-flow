@@ -51,10 +51,16 @@ cargo run -- --host 127.0.0.1 --port 3002 --database-url "postgresql://user:pass
 export DATABASE_URL="postgresql://user:password@localhost/dbname"
 cargo run -- --host 127.0.0.1 --port 3002
 
+# optionally restrict CORS origins instead of allowing all origins
+export RUNNER_CORS_ALLOW_ORIGINS="http://localhost:5173,https://ses.example.com"
+cargo run -- --host 127.0.0.1 --port 3002
+
 cargo test
 ```
 
 默认使用 PostgreSQL 持久化存储，数据库连接字符串默认为 `postgresql://runner:runner@localhost/runner`。可以通过 `--database-url` 参数或 `DATABASE_URL` 环境变量指定自定义连接字符串。
+
+Runner API 默认开启跨域支持，便于前端或本地工具直接访问。若设置 `RUNNER_CORS_ALLOW_ORIGINS`，则会按逗号分隔的 origin 白名单收敛允许的跨域来源；未设置时默认允许所有来源。
 
 `apps/runner` 现在默认以服务器模式启动，开发模式会通过 `cargo watch` 在源码变化后自动重启。
 

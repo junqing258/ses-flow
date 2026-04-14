@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tokio::time::sleep;
@@ -18,6 +18,76 @@ fn build_app() -> axum::Router {
     build_router(ApiState {
         server: Arc::new(WorkflowServer::new()),
     })
+}
+
+#[tokio::test]
+async fn adds_cors_headers_to_json_responses() {
+    let app = build_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/health")
+                .header(header::ORIGIN, "http://localhost:5173")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .expect("cors header should be present"),
+        "*"
+    );
+}
+
+#[tokio::test]
+async fn handles_cors_preflight_requests() {
+    let app = build_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/workflows")
+                .header(header::ORIGIN, "http://localhost:5173")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type,x-request-id")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert!(response.status().is_success());
+    assert_eq!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .expect("allow origin should be present"),
+        "*"
+    );
+    assert!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_METHODS)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.contains("POST")),
+        "preflight should advertise POST support"
+    );
+    assert!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_HEADERS)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value == "*" || value.to_ascii_lowercase().contains("content-type")),
+        "preflight should allow requested headers"
+    );
 }
 
 #[tokio::test]

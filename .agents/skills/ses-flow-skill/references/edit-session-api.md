@@ -1,18 +1,26 @@
-# Edit Session API
+# 编辑会话 API
 
-## Purpose
+## 用途
 
-These endpoints back SES Flow AI mode.
+这些端点为 SES Flow 的 AI 模式提供支撑。
 
-- Claude Code updates the draft in runner.
-- Runner validates and stores the temporary draft.
-- Web subscribes to the session and refreshes preview.
+- Claude Code 在 runner 中更新草稿。
+- Runner 负责校验并存储临时草稿。
+- Web 订阅会话并刷新预览。
 
-## Create
+## 调用前缀
 
-`POST /runner-api/edit-sessions`
+首次进入 AI 会话时，除了 `session_id`，还必须同时提供 `runner_base_url`。
 
-Request body:
+- `runner_base_url` 是以下所有 HTTP / WS 接口的请求前缀。
+- 常见值可以是 `/runner-api`，也可以是完整地址，例如 `http://localhost:3000/runner-api`。
+- 后续如果前缀未变，可以继续沿用同一个 `runner_base_url`。
+
+## 创建
+
+`POST {runner_base_url}/edit-sessions`
+
+请求体：
 
 ```json
 {
@@ -46,7 +54,7 @@ Request body:
 }
 ```
 
-Response fields:
+响应字段：
 
 - `sessionId`
 - `workspaceId`
@@ -56,23 +64,23 @@ Response fields:
 - `createdAt`
 - `updatedAt`
 
-## Update
+## 更新
 
-`PUT /runner-api/edit-sessions/{session_id}`
+`PUT {runner_base_url}/edit-sessions/{session_id}`
 
-Request body matches create.
+请求体与创建接口一致。
 
-Notes:
+说明：
 
-- Send the full `workflow`, not a partial patch.
-- `editorDocument` is optional but recommended for accurate canvas preview.
-- Runner validates the workflow before saving.
+- 发送完整的 `workflow`，不要只传局部补丁。
+- `editorDocument` 是可选的，但为了获得准确的画布预览，建议一并发送。
+- Runner 会在保存前校验工作流。
 
-## Preview Stream
+## 预览流
 
-`WS /runner-api/edit-sessions/{session_id}/ws`
+`WS {runner_base_url}/edit-sessions/{session_id}/ws`
 
-Message shape:
+消息结构：
 
 ```json
 {
@@ -89,14 +97,15 @@ Message shape:
 }
 ```
 
-`eventType` values currently include:
+当前 `eventType` 的取值包括：
 
 - `snapshot`
 - `created`
 - `updated`
 
-## AI Mode Rules
+## AI 模式规则
 
-- Web is preview only in AI mode.
-- Claude Code should hold the editing conversation and mutate the session through runner.
-- Keep `editor.editor.pageMode` or equivalent restored state aligned to AI preview intent.
+- AI 模式下，Web 只用于预览。
+- Claude Code 应承接编辑对话，并通过 runner 修改会话。
+- 首次调用时，应同时拿到 `runner_base_url` 与 `session_id`，再拼接具体接口地址。
+- 保持 `editor.editor.pageMode` 或等价的恢复状态与 AI 预览意图一致。

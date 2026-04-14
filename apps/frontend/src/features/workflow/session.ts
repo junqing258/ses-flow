@@ -1,11 +1,10 @@
 import { request as sendRequest } from "@/lib/request";
-
+import { RUNNER_BASE_URL } from "./api";
 import type { PersistedWorkflowDocument } from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 
-const RUNNER_BASE_URL = (
-  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api"
-).replace(/\/$/, "");
+export const WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL = RUNNER_BASE_URL;
+
 const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
 
 export interface WorkflowEditSession {
@@ -72,13 +71,16 @@ export const createWorkflowEditSession = async (
   let response: Response;
 
   try {
-    response = await sendRequest(`${RUNNER_BASE_URL}/edit-sessions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    response = await sendRequest(
+      `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildRequestBody(request)),
       },
-      body: JSON.stringify(buildRequestBody(request)),
-    });
+    );
   } catch {
     throw new SessionRequestError(
       "Runner 服务不可达，请确认本地 runner 已启动",
@@ -99,7 +101,7 @@ export const updateWorkflowEditSession = async (
 
   try {
     response = await sendRequest(
-      `${RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}`,
+      `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}`,
       {
         method: "PUT",
         headers: {
@@ -121,7 +123,7 @@ export const updateWorkflowEditSession = async (
 };
 
 export const buildWorkflowEditSessionWsUrl = (sessionId: string) => {
-  const path = `${RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}/ws`;
+  const path = `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}/ws`;
 
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path.replace(/^http/, "ws");

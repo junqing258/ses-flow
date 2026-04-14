@@ -1,3 +1,4 @@
+use std::env;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
@@ -6,7 +7,7 @@ use async_stream::stream;
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{MatchedPath, Path, State};
-use axum::http::{Method, Request, StatusCode};
+use axum::http::{HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -15,6 +16,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tracing::{debug, info, warn};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 use crate::core::definition::WorkflowDefinition;
 use crate::core::runtime::{RunEnvironment, WorkflowRunEvent, WorkflowRunSummary};
@@ -49,7 +51,48 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/runs/{run_id}/terminate", post(terminate_workflow))
         .route("/runs/{run_id}/events", get(stream_run_events))
         .layer(middleware::from_fn(log_http_requests))
+        .layer(build_cors_layer())
         .with_state(state)
+}
+
+fn build_cors_layer() -> CorsLayer {
+    let base_layer = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_headers(Any);
+
+    match load_cors_origins() {
+        Some(Ok(origins)) => base_layer.allow_origin(AllowOrigin::list(origins)),
+        Some(Err(error)) => {
+            warn!(
+                error = %error,
+                "invalid RUNNER_CORS_ALLOW_ORIGINS, falling back to allow-all CORS",
+            );
+            base_layer.allow_origin(Any)
+        }
+        None => base_layer.allow_origin(Any),
+    }
+}
+
+fn load_cors_origins() -> Option<Result<Vec<HeaderValue>, axum::http::header::InvalidHeaderValue>> {
+    let raw_origins = env::var("RUNNER_CORS_ALLOW_ORIGINS").ok()?;
+    let trimmed = raw_origins.trim();
+
+    if trimmed.is_empty() || trimmed == "*" {
+        return None;
+    }
+
+    Some(parse_cors_origins(trimmed))
+}
+
+fn parse_cors_origins(
+    raw_origins: &str,
+) -> Result<Vec<HeaderValue>, axum::http::header::InvalidHeaderValue> {
+    raw_origins
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(HeaderValue::from_str)
+        .collect()
 }
 
 async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
@@ -310,7 +353,7 @@ async fn terminate_workflow(
 
 #[cfg(test)]
 mod tests {
-    use super::should_skip_access_log;
+    use super::{parse_cors_origins, should_skip_access_log};
     use axum::http::Method;
 
     #[test]
@@ -325,6 +368,25 @@ mod tests {
             &Method::GET,
             "/runs/{run_id}/events"
         ));
+    }
+
+    #[test]
+    fn parses_multiple_cors_origins() {
+        let origins = parse_cors_origins("http://localhost:5173, https://ses.example.com")
+            .expect("origins should parse");
+
+        let values = origins
+            .into_iter()
+            .map(|value| value.to_str().expect("header should be utf8").to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            values,
+            vec![
+                "http://localhost:5173".to_string(),
+                "https://ses.example.com".to_string()
+            ]
+        );
     }
 }
 

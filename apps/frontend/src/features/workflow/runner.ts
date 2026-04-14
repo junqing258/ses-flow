@@ -1,6 +1,7 @@
 import type { Edge } from "@vue-flow/core";
 
 import { request as sendRequest } from "@/lib/request";
+import { RUNNER_BASE_URL } from "./api";
 
 import {
   getSwitchBranches,
@@ -138,9 +139,10 @@ class RunnerRequestError extends Error {
   }
 }
 
-const RUNNER_BASE_URL = (
+/* const RUNNER_BASE_URL = (
   import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api"
-).replace(/\/$/, "");
+).replace(/\/$/, ""); */
+
 const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
 const DEFAULT_WORKSPACE_NAME = "SES Workflow Editor";
 

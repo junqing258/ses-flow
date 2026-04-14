@@ -31,7 +31,11 @@ export interface WorkflowRunListItem {
   workflowVersion: number;
 }
 
-const WORKFLOW_API_BASE_URL = "/runner-api/workflows";
+export const RUNNER_BASE_URL = (
+  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api"
+).replace(/\/$/, "");
+
+const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";
 
 const parseResponse = async <T>(
   response: Response,
