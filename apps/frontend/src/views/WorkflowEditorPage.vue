@@ -171,11 +171,11 @@
             <p class="text-[14px] font-semibold text-slate-900">
               AI 工作流编辑助手
             </p>
-            <p class="mt-1 text-[11px] leading-5 text-slate-500">
+            <!-- <p class="mt-1 text-[11px] leading-5 text-slate-500">
               Web 端只负责展示 `runner_base_url`、`session_id` 和预览结果。
               会话编辑动作在 Claude Code 中完成，并由它通过 `ses-flow-skill`
               推送预览。
-            </p>
+            </p> -->
           </div>
           <span
             class="rounded-full px-2.5 py-1 text-[11px] font-semibold text-nowrap"
@@ -228,8 +228,7 @@
         </div>
         <div class="space-y-1.5">
           <p class="text-[11px] leading-5 text-slate-500">
-            首次请把 `runner_base_url` 和 `session_id` 一起提供给 Claude
-            Code，后续它会用这个前缀拼接会话接口地址。
+            首次请把 <span>runner_base_url</span> 和 <span>session_id</span> 一起提供给 Agent ，后续它会用这个前缀拼接会话接口地址。
           </p>
         </div>
 
