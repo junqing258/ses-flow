@@ -1,0 +1,7 @@
+interface:
+  display_name: "SES Flow Skill"
+  short_description: "Push workflow draft updates into SES Flow AI mode"
+  default_prompt: "Use $ses-flow-skill to edit an SES Flow workflow through runner edit sessions and refresh the AI preview."
+
+policy:
+  allow_implicit_invocation: true
