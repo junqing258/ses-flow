@@ -235,6 +235,144 @@ async fn streams_waiting_run_summary_over_sse() {
     assert!(text.contains("\"status\":\"waiting\""));
 }
 
+#[tokio::test]
+async fn creates_and_updates_edit_session_draft() {
+    let app = build_app();
+    let workflow = json!({
+        "meta": {
+            "key": "edit-session-flow",
+            "name": "Edit Session Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/edit-sessions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "workspaceId": "ws-ai",
+                        "workflowId": "wf-ai-1",
+                        "editorDocument": {
+                            "schemaVersion": "1.0"
+                        },
+                        "workflow": workflow
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_body = create_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let create_payload: Value =
+        serde_json::from_slice(&create_body).expect("response body should be valid json");
+    let session_id = create_payload["sessionId"]
+        .as_str()
+        .expect("session id should be present")
+        .to_string();
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/edit-sessions/{session_id}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "workflowId": "wf-ai-1",
+                        "editorDocument": {
+                            "schemaVersion": "1.0",
+                            "workflow": {
+                                "name": "Updated Flow"
+                            }
+                        },
+                        "workflow": {
+                            "meta": {
+                                "key": "edit-session-flow",
+                                "name": "Updated Flow",
+                                "version": 1
+                            },
+                            "trigger": {
+                                "type": "manual"
+                            },
+                            "inputSchema": {
+                                "type": "object"
+                            },
+                            "nodes": [
+                                { "id": "start_1", "type": "start", "name": "Start" },
+                                { "id": "end_1", "type": "end", "name": "End" }
+                            ],
+                            "transitions": [
+                                { "from": "start_1", "to": "end_1" }
+                            ],
+                            "policies": {}
+                        }
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(update_response.status(), StatusCode::OK);
+
+    let get_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/edit-sessions/{session_id}"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_body = get_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let get_payload: Value =
+        serde_json::from_slice(&get_body).expect("response body should be valid json");
+
+    assert_eq!(get_payload["sessionId"], json!(session_id));
+    assert_eq!(get_payload["workflowId"], json!("wf-ai-1"));
+    assert_eq!(
+        get_payload["workflow"]["meta"]["name"],
+        json!("Updated Flow")
+    );
+}
+
 fn spawn_echo_http_server() -> String {
     let listener =
         TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");

@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use async_stream::stream;
 use axum::body::Body;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{MatchedPath, Path, State};
 use axum::http::{Method, Request, StatusCode};
 use axum::middleware::{self, Next};
@@ -33,6 +34,15 @@ pub fn build_router(state: ApiState) -> Router {
         .route(
             "/workflows/{workflow_id}/runs",
             get(list_workflow_runs).post(execute_workflow),
+        )
+        .route("/edit-sessions", post(create_edit_session))
+        .route(
+            "/edit-sessions/{session_id}",
+            get(get_edit_session).put(update_edit_session),
+        )
+        .route(
+            "/edit-sessions/{session_id}/ws",
+            get(stream_edit_session_ws),
         )
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
@@ -104,6 +114,17 @@ pub struct ExecuteWorkflowRequest {
     pub trigger: Option<Value>,
     #[serde(default)]
     pub env: Option<RunEnvironment>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EditSessionUpsertRequest {
+    #[serde(rename = "workspaceId", default)]
+    pub workspace_id: Option<String>,
+    #[serde(rename = "workflowId", default)]
+    pub workflow_id: Option<String>,
+    #[serde(rename = "editorDocument", default)]
+    pub editor_document: Option<Value>,
+    pub workflow: WorkflowDefinition,
 }
 
 #[derive(Debug, Deserialize)]
@@ -179,6 +200,38 @@ async fn get_workflow(
 ) -> Result<Json<crate::store::WorkflowDetailRecord>, ApiError> {
     debug!(workflow_id = %workflow_id, "fetching workflow");
     Ok(Json(state.server.get_workflow(&workflow_id)?))
+}
+
+async fn create_edit_session(
+    State(state): State<ApiState>,
+    Json(request): Json<EditSessionUpsertRequest>,
+) -> Result<Json<crate::store::WorkflowEditSessionRecord>, ApiError> {
+    Ok(Json(state.server.create_edit_session(
+        request.workspace_id,
+        request.workflow_id,
+        request.workflow,
+        request.editor_document,
+    )?))
+}
+
+async fn get_edit_session(
+    State(state): State<ApiState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<crate::store::WorkflowEditSessionRecord>, ApiError> {
+    Ok(Json(state.server.get_edit_session(&session_id)?))
+}
+
+async fn update_edit_session(
+    State(state): State<ApiState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<EditSessionUpsertRequest>,
+) -> Result<Json<crate::store::WorkflowEditSessionRecord>, ApiError> {
+    Ok(Json(state.server.update_edit_session(
+        &session_id,
+        request.workflow_id,
+        request.workflow,
+        request.editor_document,
+    )?))
 }
 
 async fn list_workflow_runs(
@@ -307,6 +360,82 @@ async fn stream_run_events(
     };
 
     Ok(Sse::new(event_stream).keep_alive(KeepAlive::default()))
+}
+
+async fn stream_edit_session_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<ApiState>,
+    Path(session_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let initial_session = state.server.get_edit_session(&session_id)?;
+    let server = state.server.clone();
+
+    Ok(ws.on_upgrade(move |socket| async move {
+        handle_edit_session_socket(socket, server, initial_session).await;
+    }))
+}
+
+async fn handle_edit_session_socket(
+    mut socket: WebSocket,
+    server: Arc<WorkflowServer>,
+    initial_session: crate::store::WorkflowEditSessionRecord,
+) {
+    if send_edit_session_message(
+        &mut socket,
+        &crate::store::WorkflowEditSessionEvent::new("snapshot", initial_session.clone()),
+    )
+    .await
+    .is_err()
+    {
+        return;
+    }
+
+    let mut receiver = server.subscribe_edit_sessions();
+
+    loop {
+        tokio::select! {
+            received = receiver.recv() => {
+                match received {
+                    Ok(event) if event.session_id == initial_session.session_id => {
+                        if send_edit_session_message(&mut socket, &event).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!(
+                            session_id = %initial_session.session_id,
+                            skipped,
+                            "edit session websocket subscriber lagged behind",
+                        );
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            message = socket.recv() => {
+                match message {
+                    Some(Ok(Message::Ping(payload))) => {
+                        if socket.send(Message::Pong(payload)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(_)) => {}
+                }
+            }
+        }
+    }
+}
+
+async fn send_edit_session_message(
+    socket: &mut WebSocket,
+    event: &crate::store::WorkflowEditSessionEvent,
+) -> Result<(), ()> {
+    let payload = serde_json::to_string(event).map_err(|_| ())?;
+    socket
+        .send(Message::Text(payload.into()))
+        .await
+        .map_err(|_| ())
 }
 
 fn sse_summary_event(event: &WorkflowRunEvent) -> Event {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use runner::api::{ApiState, build_router};
 use runner::server::WorkflowServer;
-use runner::store::{PostgresCatalogStore, PostgresRunStore};
+use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
 
@@ -33,11 +33,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     info!(database_url = %database_url, "initializing PostgreSQL stores");
     let run_store = Arc::new(PostgresRunStore::new(&database_url).await?);
     let catalog_store = Arc::new(PostgresCatalogStore::new(run_store.get_pool()).await?);
+    let edit_session_store = Arc::new(PostgresEditSessionStore::new(run_store.get_pool()).await?);
 
     let router = build_router(ApiState {
-        server: Arc::new(WorkflowServer::with_store_and_catalog(
+        server: Arc::new(WorkflowServer::with_store_catalog_and_sessions(
             run_store,
             catalog_store,
+            edit_session_store,
         )),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;

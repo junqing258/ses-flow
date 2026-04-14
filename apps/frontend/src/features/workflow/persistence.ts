@@ -46,7 +46,7 @@ interface PersistedWorkflowOptions {
   workflowName: string;
 }
 
-export type WorkflowPageMode = "edit" | "run";
+export type WorkflowPageMode = "edit" | "run" | "ai";
 
 export interface WorkflowRunDraft {
   body: string;
@@ -68,7 +68,8 @@ export interface WorkflowEditorState {
 const createDefaultWorkflowRunDraft = (): WorkflowRunDraft => ({
   body: '{\n  "orderId": "SO-10001",\n  "laneCode": "A-01",\n  "bizType": "A"\n}',
   env: '{\n  "tenantId": "tenant-a",\n  "warehouseId": "WHS-SH-01",\n  "operatorId": "demo-user"\n}',
-  headers: '{\n  "x-request-id": "wf-run-demo-001",\n  "x-source": "workflow-editor"\n}',
+  headers:
+    '{\n  "x-request-id": "wf-run-demo-001",\n  "x-source": "workflow-editor"\n}',
   triggerMode: "manual",
 });
 
@@ -98,7 +99,9 @@ const cloneNodeData = (
     isDefault: branch.isDefault,
     label: branch.label,
   })),
-  executionStatus: options.includeExecutionStatus ? data.executionStatus : undefined,
+  executionStatus: options.includeExecutionStatus
+    ? data.executionStatus
+    : undefined,
   icon: data.icon,
   kind: data.kind,
   nodeKey: data.nodeKey,
@@ -114,19 +117,19 @@ const cloneNodes = (
   nodes
     .filter((node) => node.data.kind !== "branch-label")
     .map((node) => ({
-    data: cloneNodeData(node.data, options),
-    deletable: node.deletable,
-    draggable: node.draggable,
-    id: node.id,
-    parentNode: node.parentNode,
-    position: {
-      x: node.position.x,
-      y: node.position.y,
-    },
-    selectable: node.selectable,
-    sourcePosition: node.sourcePosition,
-    targetPosition: node.targetPosition,
-    type: node.type,
+      data: cloneNodeData(node.data, options),
+      deletable: node.deletable,
+      draggable: node.draggable,
+      id: node.id,
+      parentNode: node.parentNode,
+      position: {
+        x: node.position.x,
+        y: node.position.y,
+      },
+      selectable: node.selectable,
+      sourcePosition: node.sourcePosition,
+      targetPosition: node.targetPosition,
+      type: node.type,
     })) as WorkflowFlowNode[];
 
 const cloneEdgeStyle = (style: Edge["style"]) => {
@@ -134,13 +137,16 @@ const cloneEdgeStyle = (style: Edge["style"]) => {
     return undefined;
   }
 
-  return Object.entries(style).reduce<Record<string, string | number>>((accumulator, [key, value]) => {
-    if (typeof value === "string" || typeof value === "number") {
-      accumulator[key] = value;
-    }
+  return Object.entries(style).reduce<Record<string, string | number>>(
+    (accumulator, [key, value]) => {
+      if (typeof value === "string" || typeof value === "number") {
+        accumulator[key] = value;
+      }
 
-    return accumulator;
-  }, {});
+      return accumulator;
+    },
+    {},
+  );
 };
 
 const cloneEdges = (edges: Edge[]): Edge[] =>
@@ -160,7 +166,9 @@ const cloneEdges = (edges: Edge[]): Edge[] =>
     updatable: edge.updatable,
   }));
 
-const clonePanels = (panelByNodeId: Record<string, WorkflowNodePanel>): Record<string, WorkflowNodePanel> =>
+const clonePanels = (
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+): Record<string, WorkflowNodePanel> =>
   Object.fromEntries(
     Object.entries(panelByNodeId).map(([nodeId, panel]) => [
       nodeId,
@@ -211,9 +219,12 @@ const ensureWebhookResponseModeField = (
         return [nodeId, panel] as const;
       }
 
-      const methodIndex = baseFields.findIndex((field) => field.key === "method");
+      const methodIndex = baseFields.findIndex(
+        (field) => field.key === "method",
+      );
       const nextBaseFields = [...baseFields];
-      const insertAt = methodIndex >= 0 ? methodIndex + 1 : nextBaseFields.length;
+      const insertAt =
+        methodIndex >= 0 ? methodIndex + 1 : nextBaseFields.length;
 
       nextBaseFields.splice(insertAt, 0, {
         key: defaultField.key,
@@ -237,7 +248,9 @@ const ensureWebhookResponseModeField = (
 };
 
 const findPaletteItem = (paletteItemId: string): WorkflowPaletteItem => {
-  const paletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).find((item) => item.id === paletteItemId);
+  const paletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+    (category) => category.items,
+  ).find((item) => item.id === paletteItemId);
 
   if (!paletteItem) {
     throw new Error(`Workflow palette item not found: ${paletteItemId}`);
@@ -247,8 +260,16 @@ const findPaletteItem = (paletteItemId: string): WorkflowPaletteItem => {
 };
 
 export const createNewWorkflowEditorState = (): WorkflowEditorState => {
-  const startDraft = createWorkflowNodeDraft(findPaletteItem("palette-start"), { x: 120, y: 260 }, []);
-  const endDraft = createWorkflowNodeDraft(findPaletteItem("palette-end"), { x: 520, y: 260 }, [startDraft.node]);
+  const startDraft = createWorkflowNodeDraft(
+    findPaletteItem("palette-start"),
+    { x: 120, y: 260 },
+    [],
+  );
+  const endDraft = createWorkflowNodeDraft(
+    findPaletteItem("palette-end"),
+    { x: 520, y: 260 },
+    [startDraft.node],
+  );
   const startNode: WorkflowFlowNode = {
     ...startDraft.node,
     data: {
@@ -288,7 +309,8 @@ export const createNewWorkflowEditorState = (): WorkflowEditorState => {
   };
 };
 
-export const createInitialWorkflowEditorState = (): WorkflowEditorState => createNewWorkflowEditorState();
+export const createInitialWorkflowEditorState = (): WorkflowEditorState =>
+  createNewWorkflowEditorState();
 
 export const createPersistedWorkflowDocument = (
   nodes: WorkflowFlowNode[],
@@ -333,6 +355,7 @@ export const createWorkflowEditorStateFromDocument = (
     panelByNodeId,
     pageMode: document.editor.pageMode ?? fallbackState.pageMode,
     runDraft: cloneRunDraft(document.editor.runDraft),
-    selectedNodeId: document.editor.selectedNodeId ?? fallbackState.selectedNodeId,
+    selectedNodeId:
+      document.editor.selectedNodeId ?? fallbackState.selectedNodeId,
   };
 };

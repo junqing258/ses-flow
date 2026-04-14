@@ -20,9 +20,10 @@ use crate::core::runtime::{
 use crate::error::RunnerError;
 use crate::services::{WorkflowRunner, WorkflowServices};
 use crate::store::{
-    InMemoryCatalogStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
-    WorkflowDetailRecord, WorkflowRunRecord, WorkflowRunStore, WorkflowSummaryRecord,
-    WorkspaceRecord,
+    InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition,
+    WorkflowCatalogStore, WorkflowDetailRecord, WorkflowEditSessionEvent,
+    WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
+    WorkflowSummaryRecord, WorkspaceRecord,
 };
 
 #[derive(Debug, Error)]
@@ -52,34 +53,61 @@ pub struct WorkflowServer {
     store: Arc<dyn WorkflowRunStore>,
     runner: Arc<WorkflowRunner>,
     catalog: Arc<dyn WorkflowCatalogStore>,
+    edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     run_registry: RunRegistry,
     events: broadcast::Sender<WorkflowRunEvent>,
+    edit_session_events: broadcast::Sender<WorkflowEditSessionEvent>,
 }
 
 impl WorkflowServer {
     pub fn new() -> Self {
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
-        Self::with_store_and_catalog(Arc::new(InMemoryRunStore::new()), catalog)
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
+            Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_and_sessions(
+            Arc::new(InMemoryRunStore::new()),
+            catalog,
+            edit_sessions,
+        )
     }
 
     pub fn with_store(store: Arc<dyn WorkflowRunStore>) -> Self {
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
-        Self::with_store_and_catalog(store, catalog)
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
+            Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_and_sessions(store, catalog, edit_sessions)
     }
 
     pub fn with_catalog(catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
         debug!("initializing workflow server with custom catalog");
-        Self::with_store_and_catalog(Arc::new(InMemoryRunStore::new()), catalog)
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
+            Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_and_sessions(
+            Arc::new(InMemoryRunStore::new()),
+            catalog,
+            edit_sessions,
+        )
     }
 
     pub fn with_store_and_catalog(
         store: Arc<dyn WorkflowRunStore>,
         catalog: Arc<dyn WorkflowCatalogStore>,
     ) -> Self {
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
+            Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_and_sessions(store, catalog, edit_sessions)
+    }
+
+    pub fn with_store_catalog_and_sessions(
+        store: Arc<dyn WorkflowRunStore>,
+        catalog: Arc<dyn WorkflowCatalogStore>,
+        edit_sessions: Arc<dyn WorkflowEditSessionStore>,
+    ) -> Self {
         debug!("initializing workflow server with custom store and catalog");
         let (events, _) = broadcast::channel(256);
+        let (edit_session_events, _) = broadcast::channel(256);
         let run_registry = RunRegistry::default();
         let observer = Arc::new(BroadcastRunObserver {
             store: store.clone(),
@@ -102,13 +130,19 @@ impl WorkflowServer {
             store,
             runner,
             catalog,
+            edit_sessions,
             run_registry,
             events,
+            edit_session_events,
         }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<WorkflowRunEvent> {
         self.events.subscribe()
+    }
+
+    pub fn subscribe_edit_sessions(&self) -> broadcast::Receiver<WorkflowEditSessionEvent> {
+        self.edit_session_events.subscribe()
     }
 
     pub fn register_workflow(
@@ -168,6 +202,70 @@ impl WorkflowServer {
             workflow_key: stored_workflow.definition.meta.key,
             workflow_version: stored_workflow.definition.meta.version,
         })
+    }
+
+    pub fn create_edit_session(
+        &self,
+        workspace_id: Option<String>,
+        workflow_id: Option<String>,
+        definition: WorkflowDefinition,
+        editor_document: Option<serde_json::Value>,
+    ) -> Result<WorkflowEditSessionRecord, ServerError> {
+        definition.validate()?;
+
+        let now = Utc::now();
+        let session = WorkflowEditSessionRecord {
+            session_id: new_session_id(),
+            workspace_id: workspace_id.unwrap_or_else(|| "ses-workflow-editor".to_string()),
+            workflow_id,
+            workflow: definition,
+            editor_document,
+            created_at: now,
+            updated_at: now,
+        };
+
+        self.edit_sessions.save_session(&session)?;
+        self.publish_edit_session("created", &session);
+        Ok(session)
+    }
+
+    pub fn get_edit_session(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowEditSessionRecord, ServerError> {
+        self.edit_sessions.load_session(session_id)?.ok_or_else(|| {
+            ServerError::NotFound(format!("workflow edit session not found: {session_id}"))
+        })
+    }
+
+    pub fn update_edit_session(
+        &self,
+        session_id: &str,
+        workflow_id: Option<String>,
+        definition: WorkflowDefinition,
+        editor_document: Option<serde_json::Value>,
+    ) -> Result<WorkflowEditSessionRecord, ServerError> {
+        definition.validate()?;
+        let existing = self
+            .edit_sessions
+            .load_session(session_id)?
+            .ok_or_else(|| {
+                ServerError::NotFound(format!("workflow edit session not found: {session_id}"))
+            })?;
+
+        let session = WorkflowEditSessionRecord {
+            session_id: existing.session_id,
+            workspace_id: existing.workspace_id,
+            workflow_id: workflow_id.or(existing.workflow_id),
+            workflow: definition,
+            editor_document,
+            created_at: existing.created_at,
+            updated_at: Utc::now(),
+        };
+
+        self.edit_sessions.save_session(&session)?;
+        self.publish_edit_session("updated", &session);
+        Ok(session)
     }
 
     pub fn list_workflows(&self) -> Result<Vec<WorkflowSummaryRecord>, ServerError> {
@@ -414,6 +512,18 @@ impl WorkflowServer {
         }
     }
 
+    fn publish_edit_session(&self, event_type: &str, session: &WorkflowEditSessionRecord) {
+        if let Err(error) = self
+            .edit_session_events
+            .send(WorkflowEditSessionEvent::new(event_type, session.clone()))
+        {
+            debug!(
+                session_id = %error.0.session_id,
+                "skipped workflow edit session broadcast because there are no subscribers",
+            );
+        }
+    }
+
     fn to_workflow_summary(
         &self,
         workflow: StoredWorkflowDefinition,
@@ -590,4 +700,14 @@ fn new_workflow_id() -> String {
         .unwrap_or(0);
     let sequence = WORKFLOW_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("wf-{epoch_ms}-{sequence}")
+}
+
+fn new_session_id() -> String {
+    static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
+    let epoch_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let sequence = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("sess-{epoch_ms}-{sequence}")
 }

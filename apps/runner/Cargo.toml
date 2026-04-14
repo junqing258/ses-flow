@@ -8,7 +8,7 @@ license = "UNLICENSED"
 [dependencies]
 async-stream = "0.3"
 async-trait = "0.1"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 futures-core = "0.3"

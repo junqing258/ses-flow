@@ -100,6 +100,17 @@
         >
           <Play class="h-3.5 w-3.5" />
         </button>
+        <button
+          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
+          :class="
+            isAiMode
+              ? 'bg-slate-100 text-slate-800'
+              : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800'
+          "
+          @click="handlePageModeChange('ai')"
+        >
+          <Bot class="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div class="flex items-center gap-1.5 pointer-events-auto">
@@ -149,6 +160,107 @@
       @update:open="handleWorkflowRunListOpenChange"
       @select-run="handleOpenWorkflowRunFromList"
     />
+
+    <aside
+      v-if="isAiMode"
+      class="pointer-events-auto absolute right-[392px] top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    >
+      <div class="border-b border-slate-100 px-4 py-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[14px] font-semibold text-slate-900">
+              AI 工作流编辑助手
+            </p>
+            <p class="mt-1 text-[11px] leading-5 text-slate-500">
+              Web 端只负责展示 `session_id` 和预览结果。会话编辑动作在 Claude
+              Code 中完成，并由它通过 `ses-flow-skill` 推送预览。
+            </p>
+          </div>
+          <span
+            class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+            :class="
+              assistantConnectionState === 'connected'
+                ? 'bg-emerald-50 text-emerald-700'
+                : assistantConnectionState === 'connecting'
+                  ? 'bg-amber-50 text-amber-700'
+                  : 'bg-slate-100 text-slate-600'
+            "
+            >{{ assistantConnectionLabel }}</span
+          >
+        </div>
+      </div>
+
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div
+          class="rounded-[18px] border border-slate-200/80 bg-slate-50/70 p-3"
+        >
+          <p class="text-xs font-semibold tracking-wide text-slate-500">
+            会话状态
+          </p>
+          <p class="mt-2 text-sm font-medium text-slate-900">
+            {{
+              isCreatingAssistantSession
+                ? "正在创建 AI 会话"
+                : hasAssistantSession
+                  ? "会话已就绪"
+                  : "等待创建会话"
+            }}
+          </p>
+          <p class="mt-1 text-[11px] leading-5 text-slate-500">
+            最近同步：{{ assistantSessionUpdatedLabel }}
+          </p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label
+            class="block text-xs font-semibold tracking-wide text-slate-500"
+            >session_id</label
+          >
+          <div class="flex gap-2">
+            <Input :model-value="assistantSessionId" readonly />
+            <Button
+              variant="ghost"
+              class="shrink-0 rounded-full"
+              :disabled="!assistantSessionId"
+              @click="handleCopyAssistantSessionId"
+            >
+              复制
+            </Button>
+          </div>
+        </div>
+
+        <div class="rounded-[18px] border border-slate-200/80 bg-white p-3">
+          <p class="text-xs font-semibold tracking-wide text-slate-500">
+            Claude Code 调用提示
+          </p>
+          <pre
+            class="mt-3 overflow-x-auto rounded-2xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"
+          ><code>session_id: {{ assistantSessionId || "(创建中)" }}
+skill: ses-flow-skill
+update: PUT /runner-api/edit-sessions/{{ assistantSessionId || ":session_id" }}
+preview: WS /runner-api/edit-sessions/{{ assistantSessionId || ":session_id" }}/ws</code></pre>
+          <p class="mt-3 text-[11px] leading-5 text-slate-500">
+            AI 模式下 Web 侧不提供输入框、创建按钮或同步按钮；Claude Code 拿到
+            `session_id` 后更新临时会话，runner
+            校验通过后会自动刷新这里的画布预览。
+          </p>
+        </div>
+
+        <div
+          class="rounded-[18px] border border-slate-200/80 bg-slate-50/70 px-3 py-3 text-[12px] leading-5 text-slate-600"
+        >
+          AI 模式已锁定 Web 编辑。请在 Claude Code
+          中继续增删节点、改映射和调整分支。
+        </div>
+
+        <div
+          v-if="assistantSessionError"
+          class="rounded-[18px] border border-rose-100 bg-rose-50 px-3 py-3 text-[12px] leading-5 text-rose-700"
+        >
+          {{ assistantSessionError }}
+        </div>
+      </div>
+    </aside>
 
     <!-- Floating Left Panel -->
     <aside
@@ -836,6 +948,7 @@ import {
   ChevronLeft,
   Compass,
   Code,
+  Bot,
   Hand,
   LoaderCircle,
   MoreHorizontal,
@@ -888,6 +1001,12 @@ import {
   type WorkflowRunSummary,
 } from "@/features/workflow/runner";
 import {
+  buildWorkflowEditSessionWsUrl,
+  createWorkflowEditSession,
+  type WorkflowEditSession,
+  type WorkflowEditSessionEvent,
+} from "@/features/workflow/session";
+import {
   WORKFLOW_EMPTY_TAB_TEXT,
   WORKFLOW_EDGE_STYLE,
   WORKFLOW_EDGE_TYPE,
@@ -937,12 +1056,19 @@ const isLoadingWorkflow = ref(false);
 const isRunningWorkflow = ref(false);
 const isWorkflowRunListOpen = ref(false);
 const isTerminatingWorkflow = ref(false);
+const isCreatingAssistantSession = ref(false);
+const assistantSession = ref<WorkflowEditSession | null>(null);
+const assistantSessionError = ref("");
+const assistantConnectionState = ref<
+  "idle" | "connecting" | "connected" | "disconnected"
+>("idle");
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const activeRunSummary = ref<WorkflowRunSummary | null>(null);
 const activeRunId = ref("");
 const activeRunWorkflowId = ref("");
 const runErrorMessage = ref("");
 let runSummaryPollTimer: number | null = null;
+let assistantSessionSocket: WebSocket | null = null;
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();
@@ -1001,6 +1127,7 @@ const selectedNodeIcon = computed(
 );
 const isEditMode = computed(() => pageMode.value === "edit");
 const isRunMode = computed(() => pageMode.value === "run");
+const isAiMode = computed(() => pageMode.value === "ai");
 const isSelectedSwitchNode = computed(
   () => selectedNodeData.value.kind === "switch",
 );
@@ -1035,6 +1162,29 @@ const persistedWorkflowId = computed(() =>
     : undefined,
 );
 const workflowTitle = computed(() => workflowMeta.name || "New workflow");
+const hasAssistantSession = computed(() => Boolean(assistantSession.value));
+const assistantSessionId = computed(
+  () => assistantSession.value?.sessionId ?? "",
+);
+const assistantConnectionLabel = computed(() => {
+  switch (assistantConnectionState.value) {
+    case "connecting":
+      return "连接中";
+    case "connected":
+      return "已连接";
+    case "disconnected":
+      return "已断开";
+    default:
+      return "未启动";
+  }
+});
+const assistantSessionUpdatedLabel = computed(() => {
+  if (!assistantSession.value?.updatedAt) {
+    return "尚未同步";
+  }
+
+  return new Date(assistantSession.value.updatedAt).toLocaleString("zh-CN");
+});
 const workflowNodeNameMap = computed<Record<string, string>>(() =>
   nodes.value.reduce<Record<string, string>>((accumulator, node) => {
     accumulator[node.id] = node.data.subtitle ?? node.data.title;
@@ -1223,6 +1373,56 @@ const handleOpenWorkflowRuns = () => {
   isWorkflowRunListOpen.value = true;
 };
 
+const ensureAssistantSessionForAiMode = async () => {
+  if (isCreatingAssistantSession.value) {
+    return;
+  }
+
+  if (assistantSession.value?.sessionId) {
+    if (!assistantSessionSocket) {
+      connectAssistantSessionSocket(assistantSession.value.sessionId);
+    }
+
+    return;
+  }
+
+  isCreatingAssistantSession.value = true;
+  assistantSessionError.value = "";
+
+  try {
+    const session = await createWorkflowEditSession({
+      editorDocument: buildCurrentEditorDocument({
+        pageMode: "ai",
+      }),
+      workflow: runnerWorkflowPreview.value,
+      workflowId: persistedWorkflowId.value,
+    });
+
+    assistantSession.value = session;
+    connectAssistantSessionSocket(session.sessionId);
+    toast.success(`AI 编辑会话已创建：${session.sessionId}`);
+  } catch (error) {
+    assistantSessionError.value =
+      error instanceof Error ? error.message : "创建 AI 编辑会话失败";
+    toast.error(assistantSessionError.value);
+  } finally {
+    isCreatingAssistantSession.value = false;
+  }
+};
+
+const handleCopyAssistantSessionId = async () => {
+  if (!assistantSessionId.value) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(assistantSessionId.value);
+    toast.success("session_id 已复制");
+  } catch {
+    toast.error("复制 session_id 失败");
+  }
+};
+
 const handleWorkflowRunListOpenChange = (open: boolean) => {
   isWorkflowRunListOpen.value = open;
 };
@@ -1257,6 +1457,100 @@ const queueCanvasViewportReset = () => {
   }
 
   void resetCanvasViewport();
+};
+
+const buildCurrentEditorDocument = (
+  overrides: Partial<{
+    pageMode: WorkflowPageMode;
+    status: "draft" | "published";
+  }> = {},
+) =>
+  createPersistedWorkflowDocument(
+    nodes.value,
+    edges.value,
+    panelByNodeId.value,
+    {
+      activeTab: activeTab.value,
+      pageMode: overrides.pageMode ?? pageMode.value,
+      runDraft: runDraft.value,
+      selectedNodeId: selectedNodeId.value,
+      status: overrides.status ?? workflowMeta.status,
+      version: workflowMeta.version,
+      workflowId: workflowMeta.id,
+      workflowName: workflowMeta.name,
+    },
+  );
+
+const applyAssistantSessionPreview = (session: WorkflowEditSession) => {
+  const nextState = session.editorDocument
+    ? createWorkflowEditorStateFromDocument(session.editorDocument)
+    : createWorkflowEditorStateFromRunnerDefinition(session.workflow);
+
+  workflowMeta.id = session.workflowId?.trim() || workflowMeta.id;
+  workflowMeta.name = session.workflow.meta.name ?? workflowMeta.name;
+  workflowMeta.status =
+    session.workflow.meta.status === "published" ? "published" : "draft";
+  workflowMeta.version = `v${session.workflow.meta.version}`;
+  applyWorkflowEditorState(nextState);
+  pageMode.value = "ai";
+};
+
+const closeAssistantSessionSocket = () => {
+  if (assistantSessionSocket) {
+    const socket = assistantSessionSocket;
+    assistantSessionSocket = null;
+    assistantConnectionState.value = "idle";
+    socket.close();
+  }
+};
+
+const connectAssistantSessionSocket = (sessionId: string) => {
+  closeAssistantSessionSocket();
+  assistantConnectionState.value = "connecting";
+
+  const socket = new WebSocket(buildWorkflowEditSessionWsUrl(sessionId));
+  assistantSessionSocket = socket;
+
+  socket.onopen = () => {
+    assistantConnectionState.value = "connected";
+    assistantSessionError.value = "";
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data) as WorkflowEditSessionEvent;
+
+      if (!payload.session) {
+        return;
+      }
+
+      assistantSession.value = payload.session;
+      applyAssistantSessionPreview(payload.session);
+    } catch {
+      assistantSessionError.value = "AI 会话更新解析失败";
+    }
+  };
+
+  socket.onerror = () => {
+    assistantSessionError.value = "AI 会话连接异常";
+  };
+
+  socket.onclose = () => {
+    if (assistantSessionSocket === socket) {
+      assistantSessionSocket = null;
+    }
+
+    assistantConnectionState.value = hasAssistantSession.value
+      ? "disconnected"
+      : "idle";
+  };
+};
+
+const resetAssistantSession = () => {
+  closeAssistantSessionSocket();
+  assistantSession.value = null;
+  assistantSessionError.value = "";
+  assistantConnectionState.value = "idle";
 };
 
 const applyWorkflowEditorState = (state: WorkflowEditorState) => {
@@ -1328,6 +1622,7 @@ const resetToInitialWorkflow = () => {
   workflowMeta.name = DEFAULT_WORKFLOW_ID;
   workflowMeta.status = "draft";
   workflowMeta.version = "v3";
+  resetAssistantSession();
   resetRunSession();
   applyWorkflowEditorState(nextState);
 };
@@ -1403,6 +1698,13 @@ const restoreWorkflowRunFromRoute = async (
 const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
   isLoadingWorkflow.value = true;
 
+  if (
+    assistantSession.value?.workflowId &&
+    assistantSession.value.workflowId !== workflowId
+  ) {
+    resetAssistantSession();
+  }
+
   try {
     const workflow = await fetchWorkflowDetail(workflowId);
     const state = workflow.document
@@ -1452,13 +1754,23 @@ const handleTabChange = (value: string | number) => {
 const handlePageModeChange = (mode: WorkflowPageMode) => {
   if (mode === "edit") {
     resetRunSession();
+    closeAssistantSessionSocket();
 
     if (getRouteRunId(route.query.runId)) {
       void clearRouteRunId(workflowMeta.id);
     }
   }
 
+  if (mode === "run") {
+    closeAssistantSessionSocket();
+  }
+
   pageMode.value = mode;
+
+  if (mode === "ai") {
+    resetRunSession();
+    void ensureAssistantSessionForAiMode();
+  }
 };
 
 const syncSelectedNodeData = () => {
@@ -2378,6 +2690,7 @@ onPaneReady(() => {
 });
 
 onBeforeUnmount(() => {
+  closeAssistantSessionSocket();
   clearRunSummaryPolling();
   window.removeEventListener("keydown", handleWindowKeydown);
 });
