@@ -163,7 +163,7 @@
 
     <aside
       v-if="isAiMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div class="border-b border-slate-100 px-4 py-4">
         <div class="flex items-start justify-between gap-3">
@@ -270,7 +270,7 @@ preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || 
     <!-- Floating Left Panel -->
     <aside
       v-if="isEditMode"
-      class="pointer-events-auto absolute left-6 top-24 bottom-6 z-10 flex w-[240px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[240px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div class="min-h-0 flex-1 overflow-y-auto py-3 px-2">
         <div
@@ -319,7 +319,7 @@ preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || 
 
     <aside
       v-else
-      class="pointer-events-auto absolute left-6 top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
         class="flex h-[84px] shrink-0 items-center justify-between border-b border-slate-50 px-4"
@@ -470,7 +470,7 @@ preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || 
     <!-- Floating Right Properties Panel -->
     <aside
       v-if="isEditMode && selectedNodeId"
-      class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
         class="flex h-[68px] shrink-0 items-center gap-3 px-4 border-b border-slate-50"
@@ -704,13 +704,13 @@ preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || 
 
     <aside
       v-else-if="isRunMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
-        class="flex h-[72px] shrink-0 items-center gap-3 border-b border-slate-50 px-4"
+        class="flex h-18 shrink-0 items-center gap-3 border-b border-slate-50 px-4"
       >
         <div
-          class="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-slate-900 text-white shadow-sm"
+          class="flex h-9.5 w-9.5 items-center justify-center rounded-[12px] bg-slate-900 text-white shadow-sm"
         >
           <Webhook v-if="runDraft.triggerMode === 'webhook'" class="h-4 w-4" />
           <Play v-else class="h-4 w-4" />
