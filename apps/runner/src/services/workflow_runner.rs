@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::WorkflowEngine;
-use crate::core::runtime::{
-    RunEnvironment, WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary,
-};
+use crate::core::runtime::{RunEnvironment, WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary};
 use crate::error::RunnerError;
 use crate::store::WorkflowRunStore;
 

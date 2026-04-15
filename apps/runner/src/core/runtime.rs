@@ -23,7 +23,7 @@ impl Default for RunEnvironment {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NodeExecutionContext<'a> {
     pub run_id: &'a str,
     pub workflow_key: &'a str,
@@ -32,6 +32,13 @@ pub struct NodeExecutionContext<'a> {
     pub input: &'a Value,
     pub state: &'a Value,
     pub env: &'a RunEnvironment,
+    pub controller: &'a dyn WorkflowRunController,
+}
+
+impl NodeExecutionContext<'_> {
+    pub fn should_terminate(&self) -> bool {
+        self.controller.should_terminate(self.run_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

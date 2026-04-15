@@ -10,21 +10,19 @@ use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
+use super::{WorkflowEventStream, WorkflowEventStreams};
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::{WorkflowEngine, new_run_id};
 use crate::core::runtime::{
-    RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunStatus,
-    WorkflowRunSummary,
+    RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
 use crate::services::{WorkflowRunner, WorkflowServices};
 use crate::store::{
-    InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition,
-    WorkflowCatalogStore, WorkflowDetailRecord, WorkflowEditSessionRecord,
-    WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
+    InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
+    WorkflowDetailRecord, WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
     WorkflowSummaryRecord, WorkspaceRecord,
 };
-use super::{WorkflowEventStream, WorkflowEventStreams};
 
 #[derive(Debug, Error)]
 pub enum ServerError {
@@ -62,40 +60,25 @@ impl WorkflowServer {
     pub fn new() -> Self {
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
-        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
-            Arc::new(InMemoryEditSessionStore::new());
-        Self::with_store_catalog_and_sessions(
-            Arc::new(InMemoryRunStore::new()),
-            catalog,
-            edit_sessions,
-        )
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_and_sessions(Arc::new(InMemoryRunStore::new()), catalog, edit_sessions)
     }
 
     pub fn with_store(store: Arc<dyn WorkflowRunStore>) -> Self {
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
-        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
-            Arc::new(InMemoryEditSessionStore::new());
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
         Self::with_store_catalog_and_sessions(store, catalog, edit_sessions)
     }
 
     pub fn with_catalog(catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
         debug!("initializing workflow server with custom catalog");
-        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
-            Arc::new(InMemoryEditSessionStore::new());
-        Self::with_store_catalog_and_sessions(
-            Arc::new(InMemoryRunStore::new()),
-            catalog,
-            edit_sessions,
-        )
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_and_sessions(Arc::new(InMemoryRunStore::new()), catalog, edit_sessions)
     }
 
-    pub fn with_store_and_catalog(
-        store: Arc<dyn WorkflowRunStore>,
-        catalog: Arc<dyn WorkflowCatalogStore>,
-    ) -> Self {
-        let edit_sessions: Arc<dyn WorkflowEditSessionStore> =
-            Arc::new(InMemoryEditSessionStore::new());
+    pub fn with_store_and_catalog(store: Arc<dyn WorkflowRunStore>, catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
         Self::with_store_catalog_and_sessions(store, catalog, edit_sessions)
     }
 
@@ -219,13 +202,10 @@ impl WorkflowServer {
         Ok(session)
     }
 
-    pub fn get_edit_session(
-        &self,
-        session_id: &str,
-    ) -> Result<WorkflowEditSessionRecord, ServerError> {
-        self.edit_sessions.load_session(session_id)?.ok_or_else(|| {
-            ServerError::NotFound(format!("workflow edit session not found: {session_id}"))
-        })
+    pub fn get_edit_session(&self, session_id: &str) -> Result<WorkflowEditSessionRecord, ServerError> {
+        self.edit_sessions
+            .load_session(session_id)?
+            .ok_or_else(|| ServerError::NotFound(format!("workflow edit session not found: {session_id}")))
     }
 
     pub fn update_edit_session(
@@ -239,9 +219,7 @@ impl WorkflowServer {
         let existing = self
             .edit_sessions
             .load_session(session_id)?
-            .ok_or_else(|| {
-                ServerError::NotFound(format!("workflow edit session not found: {session_id}"))
-            })?;
+            .ok_or_else(|| ServerError::NotFound(format!("workflow edit session not found: {session_id}")))?;
 
         let session = WorkflowEditSessionRecord {
             session_id: existing.session_id,
@@ -265,10 +243,7 @@ impl WorkflowServer {
             .into_iter()
             .map(|workflow| {
                 let active_run_count = self
-                    .list_active_runs(
-                        &workflow.definition.meta.key,
-                        workflow.definition.meta.version,
-                    )?
+                    .list_active_runs(&workflow.definition.meta.key, workflow.definition.meta.version)?
                     .len() as u32;
                 self.to_workflow_summary(workflow, active_run_count)
             })
@@ -297,10 +272,7 @@ impl WorkflowServer {
         })
     }
 
-    pub fn list_workflow_runs(
-        &self,
-        workflow_id: &str,
-    ) -> Result<Vec<WorkflowRunRecord>, ServerError> {
+    pub fn list_workflow_runs(&self, workflow_id: &str) -> Result<Vec<WorkflowRunRecord>, ServerError> {
         let stored_workflow = self
             .catalog
             .load_workflow(workflow_id)?
@@ -372,8 +344,7 @@ impl WorkflowServer {
         let runner = self.runner.clone();
         let fallback = self.clone();
         tokio::task::spawn_blocking(move || {
-            let run_result =
-                runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
+            let run_result = runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
             if let Err(error) = run_result {
                 error!(
                     workflow_id = %stored_workflow.id,
@@ -443,8 +414,7 @@ impl WorkflowServer {
         let fallback = self.clone();
         let run_id = run_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let resume_result =
-                runner.resume_by_run_id(&stored_workflow.definition, &run_id, event);
+            let resume_result = runner.resume_by_run_id(&stored_workflow.definition, &run_id, event);
             if let Err(error) = resume_result {
                 error!(
                     workflow_id = %stored_workflow.id,
@@ -478,9 +448,7 @@ impl WorkflowServer {
             .ok_or_else(|| ServerError::NotFound(format!("workflow run not found: {run_id}")))?;
 
         match summary.status {
-            WorkflowRunStatus::Completed
-            | WorkflowRunStatus::Failed
-            | WorkflowRunStatus::Terminated => Ok(summary),
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated => Ok(summary),
             WorkflowRunStatus::Waiting => {
                 info!(run_id = %run_id, "terminating waiting workflow run");
                 let terminated = WorkflowRunSummary {
@@ -494,27 +462,68 @@ impl WorkflowServer {
                     last_signal: summary.last_signal,
                     resume_state: None,
                 };
-                self.publish_summary(&terminated);
+                self.publish_summary_with_workflow_fallback(&terminated);
                 Ok(terminated)
             }
             WorkflowRunStatus::Running => {
-                info!(run_id = %run_id, "termination requested for running workflow run");
-                self.run_registry.request_termination(run_id);
                 if let Some(workflow_id) = self.run_registry.resolve(run_id) {
+                    info!(run_id = %run_id, "termination requested for running workflow run");
+                    self.run_registry.request_termination(run_id);
                     self.events.publish_workflow_runs_changed(&workflow_id, &summary);
+                    Ok(summary)
+                } else {
+                    info!(run_id = %run_id, "terminating orphaned running workflow run");
+                    let terminated = WorkflowRunSummary {
+                        run_id: summary.run_id,
+                        workflow_key: summary.workflow_key,
+                        workflow_version: summary.workflow_version,
+                        status: WorkflowRunStatus::Terminated,
+                        current_node_id: summary.current_node_id,
+                        state: summary.state,
+                        timeline: summary.timeline,
+                        last_signal: summary.last_signal,
+                        resume_state: None,
+                    };
+                    self.publish_summary_with_workflow_fallback(&terminated);
+                    Ok(terminated)
                 }
-                Ok(summary)
             }
         }
     }
 
     fn publish_summary(&self, summary: &WorkflowRunSummary) {
-        persist_summary_and_publish_events(
-            self.store.as_ref(),
-            &self.run_registry,
-            &self.events,
-            summary,
-        );
+        persist_summary_and_publish_events(self.store.as_ref(), &self.run_registry, &self.events, summary);
+    }
+
+    fn publish_summary_with_workflow_fallback(&self, summary: &WorkflowRunSummary) {
+        let workflow_id = self.run_registry.resolve(&summary.run_id);
+        self.publish_summary(summary);
+
+        if workflow_id.is_none() {
+            if let Some(workflow_id) = self.resolve_workflow_id_for_summary(summary) {
+                self.events.publish_workflow_runs_changed(&workflow_id, summary);
+            }
+        }
+    }
+
+    fn resolve_workflow_id_for_summary(&self, summary: &WorkflowRunSummary) -> Option<String> {
+        match self.catalog.load_all_workflows() {
+            Ok(workflows) => workflows.into_iter().find_map(|workflow| {
+                (workflow.definition.meta.key == summary.workflow_key
+                    && workflow.definition.meta.version == summary.workflow_version)
+                    .then_some(workflow.id)
+            }),
+            Err(error) => {
+                warn!(
+                    run_id = %summary.run_id,
+                    workflow_key = %summary.workflow_key,
+                    workflow_version = summary.workflow_version,
+                    error = %error,
+                    "failed to resolve workflow id for workflow run summary",
+                );
+                None
+            }
+        }
     }
 
     fn to_workflow_summary(
@@ -572,10 +581,7 @@ impl WorkflowServer {
             .store
             .list_runs(workflow_key, workflow_version)?
             .into_iter()
-            .filter(|run| {
-                is_active_run_status(&run.status)
-                    && !self.run_registry.should_terminate(&run.run_id)
-            })
+            .filter(|run| is_active_run_status(&run.status) && !self.run_registry.should_terminate(&run.run_id))
             .collect())
     }
 }
@@ -649,12 +655,7 @@ struct PersistingRunObserver {
 
 impl WorkflowRunObserver for PersistingRunObserver {
     fn on_summary(&self, summary: &WorkflowRunSummary) {
-        persist_summary_and_publish_events(
-            self.store.as_ref(),
-            &self.run_registry,
-            &self.events,
-            summary,
-        );
+        persist_summary_and_publish_events(self.store.as_ref(), &self.run_registry, &self.events, summary);
     }
 }
 
@@ -666,10 +667,7 @@ fn is_terminal_status(status: &WorkflowRunStatus) -> bool {
 }
 
 fn is_active_run_status(status: &WorkflowRunStatus) -> bool {
-    matches!(
-        status,
-        WorkflowRunStatus::Running | WorkflowRunStatus::Waiting
-    )
+    matches!(status, WorkflowRunStatus::Running | WorkflowRunStatus::Waiting)
 }
 
 fn persist_summary(store: &dyn WorkflowRunStore, summary: &WorkflowRunSummary) {

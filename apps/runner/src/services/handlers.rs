@@ -9,11 +9,7 @@ use crate::error::RunnerError;
 
 pub trait TaskHandler: Send + Sync {
     fn name(&self) -> &'static str;
-    fn create(
-        &self,
-        payload: &Value,
-        context: &NodeExecutionContext<'_>,
-    ) -> Result<Value, RunnerError>;
+    fn create(&self, payload: &Value, context: &NodeExecutionContext<'_>) -> Result<Value, RunnerError>;
 }
 
 #[derive(Default, Clone)]
@@ -40,8 +36,7 @@ impl TaskHandlerRegistry {
     where
         H: TaskHandler + 'static,
     {
-        self.handlers
-            .insert(handler.name().to_string(), Arc::new(handler));
+        self.handlers.insert(handler.name().to_string(), Arc::new(handler));
     }
 
     pub fn resolve(&self, name: &str) -> Option<Arc<dyn TaskHandler>> {
@@ -71,11 +66,7 @@ impl TaskHandler for MockManualReviewTaskHandler {
         "manual_review"
     }
 
-    fn create(
-        &self,
-        payload: &Value,
-        context: &NodeExecutionContext<'_>,
-    ) -> Result<Value, RunnerError> {
+    fn create(&self, payload: &Value, context: &NodeExecutionContext<'_>) -> Result<Value, RunnerError> {
         Ok(json!({
             "taskId": format!("task-{}", context.run_id),
             "status": "created",

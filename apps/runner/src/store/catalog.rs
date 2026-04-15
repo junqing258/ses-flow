@@ -64,15 +64,9 @@ pub trait WorkflowCatalogStore: Send + Sync {
     fn load_all_workspaces(&self) -> Result<Vec<WorkspaceRecord>, RunnerError>;
 
     fn save_workflow(&self, workflow: &StoredWorkflowDefinition) -> Result<(), RunnerError>;
-    fn load_workflow(
-        &self,
-        workflow_id: &str,
-    ) -> Result<Option<StoredWorkflowDefinition>, RunnerError>;
+    fn load_workflow(&self, workflow_id: &str) -> Result<Option<StoredWorkflowDefinition>, RunnerError>;
     fn load_all_workflows(&self) -> Result<Vec<StoredWorkflowDefinition>, RunnerError>;
-    fn load_workflows_by_workspace(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Vec<StoredWorkflowDefinition>, RunnerError>;
+    fn load_workflows_by_workspace(&self, workspace_id: &str) -> Result<Vec<StoredWorkflowDefinition>, RunnerError>;
     fn delete_workflow(&self, workflow_id: &str) -> Result<(), RunnerError>;
 }
 
@@ -140,9 +134,7 @@ impl PostgresCatalogStore {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| {
-            RunnerError::Store(format!("Failed to alter workflow_definitions table: {}", e))
-        })?;
+        .map_err(|e| RunnerError::Store(format!("Failed to alter workflow_definitions table: {}", e)))?;
 
         sqlx::query(
             r#"
@@ -211,9 +203,7 @@ impl PostgresCatalogStore {
             .collect()
     }
 
-    async fn load_all_workflows_from_db(
-        &self,
-    ) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
+    async fn load_all_workflows_from_db(&self) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
         let rows = sqlx::query(
             r#"
             SELECT id, workspace_id, workflow_key, workflow_version, name, definition, editor_document, created_at, updated_at
@@ -230,25 +220,23 @@ impl PostgresCatalogStore {
                 let id: String = row
                     .try_get("id")
                     .map_err(|e| RunnerError::Store(format!("Failed to get id: {}", e)))?;
-                let workspace_id: String = row.try_get("workspace_id").map_err(|e| {
-                    RunnerError::Store(format!("Failed to get workspace_id: {}", e))
-                })?;
+                let workspace_id: String = row
+                    .try_get("workspace_id")
+                    .map_err(|e| RunnerError::Store(format!("Failed to get workspace_id: {}", e)))?;
                 let definition_json: serde_json::Value = row
                     .try_get("definition")
                     .map_err(|e| RunnerError::Store(format!("Failed to get definition: {}", e)))?;
-                let editor_document: Option<serde_json::Value> =
-                    row.try_get("editor_document").map_err(|e| {
-                        RunnerError::Store(format!("Failed to get editor_document: {}", e))
-                    })?;
+                let editor_document: Option<serde_json::Value> = row
+                    .try_get("editor_document")
+                    .map_err(|e| RunnerError::Store(format!("Failed to get editor_document: {}", e)))?;
                 let created_at: DateTime<Utc> = row
                     .try_get("created_at")
                     .map_err(|e| RunnerError::Store(format!("Failed to get created_at: {}", e)))?;
                 let updated_at: DateTime<Utc> = row
                     .try_get("updated_at")
                     .map_err(|e| RunnerError::Store(format!("Failed to get updated_at: {}", e)))?;
-                let definition = deserialize_workflow_definition(definition_json).map_err(|e| {
-                    RunnerError::Store(format!("Failed to deserialize workflow definition: {}", e))
-                })?;
+                let definition = deserialize_workflow_definition(definition_json)
+                    .map_err(|e| RunnerError::Store(format!("Failed to deserialize workflow definition: {}", e)))?;
 
                 Ok(StoredWorkflowDefinition {
                     id,
@@ -317,9 +305,8 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
     fn save_workflow(&self, workflow: &StoredWorkflowDefinition) -> Result<(), RunnerError> {
         let pool = self.pool.clone();
         let workflow_clone = workflow.clone();
-        let definition_value = serde_json::to_value(&workflow.definition).map_err(|e| {
-            RunnerError::Store(format!("Failed to serialize workflow definition: {}", e))
-        })?;
+        let definition_value = serde_json::to_value(&workflow.definition)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize workflow definition: {}", e)))?;
         let editor_document_value = workflow.editor_document.clone();
         let cache = self.cache.clone();
 
@@ -362,10 +349,7 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
         })
     }
 
-    fn load_workflow(
-        &self,
-        workflow_id: &str,
-    ) -> Result<Option<StoredWorkflowDefinition>, RunnerError> {
+    fn load_workflow(&self, workflow_id: &str) -> Result<Option<StoredWorkflowDefinition>, RunnerError> {
         let cache = self
             .cache
             .lock()
@@ -381,10 +365,7 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
         Ok(cache.workflows.values().cloned().collect())
     }
 
-    fn load_workflows_by_workspace(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
+    fn load_workflows_by_workspace(&self, workspace_id: &str) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
         let cache = self
             .cache
             .lock()

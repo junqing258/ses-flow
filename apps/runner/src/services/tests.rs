@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::core::runtime::{NodeExecutionContext, RunEnvironment};
+use crate::core::runtime::{NodeExecutionContext, NoopWorkflowRunController, RunEnvironment};
 use crate::services::WorkflowServices;
 
 #[test]
@@ -14,6 +14,7 @@ fn default_services_register_mock_task_handler() {
         input: &json!({}),
         state: &json!({}),
         env: &RunEnvironment::default(),
+        controller: &NoopWorkflowRunController,
     };
 
     let task = services

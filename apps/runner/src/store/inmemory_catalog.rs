@@ -43,9 +43,7 @@ impl WorkflowCatalogStore for InMemoryCatalogStore {
             .state
             .lock()
             .map_err(|_| RunnerError::Store("Failed to acquire catalog lock".to_string()))?;
-        state
-            .workspaces
-            .insert(workspace.id.clone(), workspace.clone());
+        state.workspaces.insert(workspace.id.clone(), workspace.clone());
         Ok(())
     }
 
@@ -81,10 +79,7 @@ impl WorkflowCatalogStore for InMemoryCatalogStore {
         Ok(())
     }
 
-    fn load_workflow(
-        &self,
-        workflow_id: &str,
-    ) -> Result<Option<StoredWorkflowDefinition>, RunnerError> {
+    fn load_workflow(&self, workflow_id: &str) -> Result<Option<StoredWorkflowDefinition>, RunnerError> {
         let state = self
             .state
             .lock()
@@ -100,10 +95,7 @@ impl WorkflowCatalogStore for InMemoryCatalogStore {
         Ok(state.workflows.values().cloned().collect())
     }
 
-    fn load_workflows_by_workspace(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
+    fn load_workflows_by_workspace(&self, workspace_id: &str) -> Result<Vec<StoredWorkflowDefinition>, RunnerError> {
         let state = self
             .state
             .lock()

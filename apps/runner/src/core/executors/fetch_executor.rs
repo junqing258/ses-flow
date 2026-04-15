@@ -1,8 +1,10 @@
 use std::time::Duration;
 
 use reqwest::Method;
-use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::{Client, RequestBuilder, Response};
 use serde_json::{Value, json};
+use tokio::runtime::{Builder, Handle};
+use tokio::time::sleep;
 
 use super::{NodeExecutor, resolve_config, resolve_mapping};
 use crate::core::definition::{NodeDefinition, NodeType};
@@ -28,10 +30,7 @@ impl NodeExecutor for FetchExecutor {
         let headers = resolve_fetch_headers(&resolved_config)?;
         let client = build_fetch_client(node.timeout_ms)?;
         let request_builder = build_fetch_request(&client, &method, &url, headers, &request)?;
-        let response = request_builder
-            .send()
-            .map_err(|error| RunnerError::FetchRequest(error.to_string()))?;
-        let response_payload = build_fetch_response_payload(response)?;
+        let response_payload = execute_fetch_request(request_builder, context)?;
 
         Ok(NodeExecutionResult::success(json!({
             "method": method.as_str(),
@@ -51,9 +50,9 @@ fn resolve_fetch_method(config: &Value) -> Result<Method, RunnerError> {
         .trim()
         .to_ascii_uppercase();
 
-    method.parse::<Method>().map_err(|error| {
-        RunnerError::InvalidFetchConfig(format!("unsupported fetch method {method}: {error}"))
-    })
+    method
+        .parse::<Method>()
+        .map_err(|error| RunnerError::InvalidFetchConfig(format!("unsupported fetch method {method}: {error}")))
 }
 
 fn resolve_fetch_url(config: &Value) -> Result<String, RunnerError> {
@@ -99,9 +98,7 @@ fn resolve_fetch_headers(config: &Value) -> Result<Vec<(String, String)>, Runner
                 Value::Array(_) | Value::Object(_) => Ok((
                     key.clone(),
                     serde_json::to_string(value).map_err(|error| {
-                        RunnerError::InvalidFetchConfig(format!(
-                            "failed to serialize header {key}: {error}"
-                        ))
+                        RunnerError::InvalidFetchConfig(format!("failed to serialize header {key}: {error}"))
                     })?,
                 )),
             }
@@ -118,6 +115,42 @@ fn build_fetch_client(timeout_ms: Option<u64>) -> Result<Client, RunnerError> {
     builder
         .build()
         .map_err(|error| RunnerError::FetchRequest(error.to_string()))
+}
+
+fn execute_fetch_request(
+    request_builder: RequestBuilder,
+    context: &NodeExecutionContext<'_>,
+) -> Result<Value, RunnerError> {
+    let future = async {
+        let request = async {
+            let response = request_builder
+                .send()
+                .await
+                .map_err(|error| RunnerError::FetchRequest(error.to_string()))?;
+            build_fetch_response_payload(response).await
+        };
+        tokio::pin!(request);
+
+        loop {
+            tokio::select! {
+                result = &mut request => return result,
+                _ = sleep(Duration::from_millis(10)) => {
+                    if context.should_terminate() {
+                        return Err(RunnerError::Terminated("fetch node was terminated".to_string()));
+                    }
+                }
+            }
+        }
+    };
+
+    match Handle::try_current() {
+        Ok(handle) => handle.block_on(future),
+        Err(_) => Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| RunnerError::FetchRequest(error.to_string()))?
+            .block_on(future),
+    }
 }
 
 fn build_fetch_request(
@@ -171,13 +204,9 @@ fn value_to_query_pairs(value: &Value) -> Result<Vec<(String, String)>, RunnerEr
             Value::String(text) => text.clone(),
             Value::Bool(boolean) => boolean.to_string(),
             Value::Number(number) => number.to_string(),
-            Value::Array(_) | Value::Object(_) => {
-                serde_json::to_string(value).map_err(|error| {
-                    RunnerError::InvalidFetchConfig(format!(
-                        "failed to serialize query param {key}: {error}"
-                    ))
-                })?
-            }
+            Value::Array(_) | Value::Object(_) => serde_json::to_string(value).map_err(|error| {
+                RunnerError::InvalidFetchConfig(format!("failed to serialize query param {key}: {error}"))
+            })?,
             Value::Null => continue,
         };
         pairs.push((key.clone(), rendered));
@@ -186,7 +215,7 @@ fn value_to_query_pairs(value: &Value) -> Result<Vec<(String, String)>, RunnerEr
     Ok(pairs)
 }
 
-fn build_fetch_response_payload(response: Response) -> Result<Value, RunnerError> {
+async fn build_fetch_response_payload(response: Response) -> Result<Value, RunnerError> {
     let status = response.status();
     let url = response.url().to_string();
     let headers = response
@@ -207,6 +236,7 @@ fn build_fetch_response_payload(response: Response) -> Result<Value, RunnerError
         .to_string();
     let body_text = response
         .text()
+        .await
         .map_err(|error| RunnerError::FetchRequest(error.to_string()))?;
     let data = parse_fetch_response_body(&content_type, &body_text);
 
@@ -229,8 +259,7 @@ fn parse_fetch_response_body(content_type: &str, body_text: &str) -> Value {
     }
 
     if content_type.contains("json") {
-        return serde_json::from_str(body_text)
-            .unwrap_or_else(|_| Value::String(body_text.to_string()));
+        return serde_json::from_str(body_text).unwrap_or_else(|_| Value::String(body_text.to_string()));
     }
 
     Value::String(body_text.to_string())

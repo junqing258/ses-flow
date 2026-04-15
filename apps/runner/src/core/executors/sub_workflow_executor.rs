@@ -4,9 +4,7 @@ use serde_json::{Value, json};
 
 use super::{NodeExecutor, clone_env, resolve_mapping, resolve_sub_workflow_definition};
 use crate::core::definition::{NodeDefinition, NodeType};
-use crate::core::runtime::{
-    NextSignal, NodeExecutionContext, NodeExecutionResult, WorkflowRunStatus,
-};
+use crate::core::runtime::{NextSignal, NodeExecutionContext, NodeExecutionResult, WorkflowRunStatus};
 use crate::core::template::nested_state_patch;
 use crate::error::RunnerError;
 use crate::services::WorkflowServices;

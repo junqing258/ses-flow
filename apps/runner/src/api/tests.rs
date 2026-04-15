@@ -1,19 +1,56 @@
-use std::sync::Arc;
-use std::time::Duration;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tower::ServiceExt;
 
 use crate::api::{ApiState, build_router};
 use crate::server::WorkflowServer;
+use crate::store::{InMemoryRunStore, WorkflowRunStore};
 
 fn build_app() -> axum::Router {
     build_router(ApiState {
         server: Arc::new(WorkflowServer::new()),
     })
+}
+
+fn build_app_with_server(server: Arc<WorkflowServer>) -> axum::Router {
+    build_router(ApiState { server })
+}
+
+fn spawn_delayed_http_server(delay: Duration) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("delayed test server should bind to a random port");
+    let address = listener
+        .local_addr()
+        .expect("delayed test server should expose local address");
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+
+            let mut buffer = [0u8; 1024];
+            let _ = stream.read(&mut buffer);
+            thread::sleep(delay);
+
+            let response_body = json!({ "status": "slow" }).to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+
+    format!("http://{address}")
 }
 
 #[tokio::test]
@@ -138,8 +175,7 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let upload_payload: Value =
-        serde_json::from_slice(&upload_body).expect("response body should be valid json");
+    let upload_payload: Value = serde_json::from_slice(&upload_body).expect("response body should be valid json");
     let workflow_id = upload_payload["workflowId"]
         .as_str()
         .expect("workflow id should be present")
@@ -174,8 +210,7 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let execute_payload: Value =
-        serde_json::from_slice(&execute_body).expect("response body should be valid json");
+    let execute_payload: Value = serde_json::from_slice(&execute_body).expect("response body should be valid json");
     let run_id = execute_payload["runId"]
         .as_str()
         .expect("run id should be present")
@@ -241,8 +276,7 @@ async fn creates_and_updates_edit_session_draft() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let create_payload: Value =
-        serde_json::from_slice(&create_body).expect("response body should be valid json");
+    let create_payload: Value = serde_json::from_slice(&create_body).expect("response body should be valid json");
     let session_id = create_payload["sessionId"]
         .as_str()
         .expect("session id should be present")
@@ -313,15 +347,11 @@ async fn creates_and_updates_edit_session_draft() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let get_payload: Value =
-        serde_json::from_slice(&get_body).expect("response body should be valid json");
+    let get_payload: Value = serde_json::from_slice(&get_body).expect("response body should be valid json");
 
     assert_eq!(get_payload["sessionId"], json!(session_id));
     assert_eq!(get_payload["workflowId"], json!("wf-ai-1"));
-    assert_eq!(
-        get_payload["workflow"]["meta"]["name"],
-        json!("Updated Flow")
-    );
+    assert_eq!(get_payload["workflow"]["meta"]["name"], json!("Updated Flow"));
 }
 
 #[tokio::test]
@@ -381,8 +411,7 @@ async fn terminates_waiting_run() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let terminate_payload: Value =
-        serde_json::from_slice(&terminate_body).expect("response body should be valid json");
+    let terminate_payload: Value = serde_json::from_slice(&terminate_body).expect("response body should be valid json");
     assert_eq!(terminate_payload["status"], json!("terminated"));
 
     let terminated_summary = get_summary(app, &run_id).await;
@@ -390,7 +419,7 @@ async fn terminates_waiting_run() {
 }
 
 #[tokio::test]
-async fn terminates_running_run_after_current_node_finishes() {
+async fn terminates_running_code_run_without_waiting_for_current_node() {
     let app = build_app();
     let workflow = json!({
         "meta": {
@@ -410,10 +439,10 @@ async fn terminates_running_run_after_current_node_finishes() {
                 "id": "run_code",
                 "type": "code",
                 "name": "Run Code",
+                "timeoutMs": 5000,
                 "config": {
                     "language": "js",
-                    "source": "await new Promise((resolve) => setTimeout(resolve, 150)); return { output: { done: true } };",
-                    "timeoutMs": 5000
+                    "source": "await new Promise((resolve) => setTimeout(resolve, 5000)); return { output: { done: true } };"
                 }
             },
             { "id": "end_1", "type": "end", "name": "End" }
@@ -427,6 +456,16 @@ async fn terminates_running_run_after_current_node_finishes() {
 
     let workflow_id = upload_workflow(app.clone(), workflow).await;
     let run_id = start_run(app.clone(), &workflow_id, json!({})).await;
+
+    for _ in 0..40 {
+        let summary = get_summary(app.clone(), &run_id).await;
+        if summary["currentNodeId"] == json!("run_code") {
+            break;
+        }
+        sleep(Duration::from_millis(25)).await;
+    }
+
+    let started_at = Instant::now();
 
     let terminate_response = app
         .clone()
@@ -444,6 +483,140 @@ async fn terminates_running_run_after_current_node_finishes() {
 
     let terminated_summary = wait_for_status(app, &run_id, "terminated").await;
     assert_eq!(terminated_summary["status"], json!("terminated"));
+    assert!(
+        started_at.elapsed() < Duration::from_secs(1),
+        "running code node should terminate promptly once cancellation is requested",
+    );
+    assert_eq!(terminated_summary["currentNodeId"], json!("run_code"));
+}
+
+#[tokio::test]
+async fn terminates_running_fetch_run_without_waiting_for_response() {
+    let app = build_app();
+    let server_url = spawn_delayed_http_server(Duration::from_secs(5));
+    let workflow = json!({
+        "meta": {
+            "key": "terminate-running-fetch-flow",
+            "name": "Terminate Running Fetch Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "fetch_1",
+                "type": "fetch",
+                "name": "Fetch",
+                "timeoutMs": 10000,
+                "config": {
+                    "method": "GET",
+                    "url": format!("{server_url}/slow")
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "fetch_1" },
+            { "from": "fetch_1", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+
+    let workflow_id = upload_workflow(app.clone(), workflow).await;
+    let run_id = start_run(app.clone(), &workflow_id, json!({})).await;
+
+    for _ in 0..40 {
+        let summary = get_summary(app.clone(), &run_id).await;
+        if summary["currentNodeId"] == json!("fetch_1") {
+            break;
+        }
+        sleep(Duration::from_millis(25)).await;
+    }
+
+    let started_at = Instant::now();
+    let terminate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/runs/{run_id}/terminate"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(terminate_response.status(), StatusCode::OK);
+
+    let terminated_summary = wait_for_status(app, &run_id, "terminated").await;
+    assert_eq!(terminated_summary["status"], json!("terminated"));
+    assert!(
+        started_at.elapsed() < Duration::from_secs(1),
+        "running fetch node should terminate promptly once cancellation is requested",
+    );
+    assert_eq!(terminated_summary["currentNodeId"], json!("fetch_1"));
+}
+
+#[tokio::test]
+async fn terminates_orphaned_running_run_immediately() {
+    let store = Arc::new(InMemoryRunStore::new());
+    store
+        .save_summary(&json_to_summary(json!({
+            "runId": "run-orphan-1",
+            "workflowKey": "orphaned-flow",
+            "workflowVersion": 1,
+            "status": "running",
+            "currentNodeId": "switch_biz_type",
+            "state": {},
+            "timeline": [
+                {
+                    "nodeId": "start",
+                    "nodeType": "start",
+                    "status": "success",
+                    "output": {},
+                    "statePatch": null
+                }
+            ]
+        })))
+        .expect("orphaned running summary should seed");
+
+    let app = build_app_with_server(Arc::new(WorkflowServer::with_store(store.clone())));
+
+    let terminate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/runs/run-orphan-1/terminate")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(terminate_response.status(), StatusCode::OK);
+    let terminate_body = terminate_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let terminate_payload: Value = serde_json::from_slice(&terminate_body).expect("response body should be valid json");
+    assert_eq!(terminate_payload["status"], json!("terminated"));
+
+    let terminated_summary = store
+        .load_summary("run-orphan-1")
+        .expect("summary lookup should succeed")
+        .expect("summary should exist");
+    assert!(matches!(
+        terminated_summary.status,
+        crate::core::runtime::WorkflowRunStatus::Terminated
+    ));
 }
 
 #[tokio::test]
@@ -533,8 +706,7 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let list_payload: Value =
-        serde_json::from_slice(&list_body).expect("response body should be valid json");
+    let list_payload: Value = serde_json::from_slice(&list_body).expect("response body should be valid json");
     assert_eq!(list_payload[0]["workflowId"], json!("wf-editor"));
     assert_eq!(list_payload[0]["name"], json!("Editor Backed Flow"));
     assert_eq!(list_payload[0]["status"], json!("published"));
@@ -557,13 +729,9 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let detail_payload: Value =
-        serde_json::from_slice(&detail_body).expect("response body should be valid json");
+    let detail_payload: Value = serde_json::from_slice(&detail_body).expect("response body should be valid json");
     assert_eq!(detail_payload["workflowId"], json!("wf-editor"));
-    assert_eq!(
-        detail_payload["document"]["workflow"]["version"],
-        json!("v3")
-    );
+    assert_eq!(detail_payload["document"]["workflow"]["version"], json!("v3"));
 }
 
 async fn wait_for_terminal_status(app: axum::Router, run_id: &str) -> Value {
@@ -617,8 +785,7 @@ async fn upload_workflow(app: axum::Router, workflow: Value) -> String {
         .await
         .expect("body should collect")
         .to_bytes();
-    let upload_payload: Value =
-        serde_json::from_slice(&upload_body).expect("response body should be valid json");
+    let upload_payload: Value = serde_json::from_slice(&upload_body).expect("response body should be valid json");
     upload_payload["workflowId"]
         .as_str()
         .expect("workflow id should be present")
@@ -650,8 +817,7 @@ async fn start_run(app: axum::Router, workflow_id: &str, trigger: Value) -> Stri
         .await
         .expect("body should collect")
         .to_bytes();
-    let execute_payload: Value =
-        serde_json::from_slice(&execute_body).expect("response body should be valid json");
+    let execute_payload: Value = serde_json::from_slice(&execute_body).expect("response body should be valid json");
     execute_payload["runId"]
         .as_str()
         .expect("run id should be present")
@@ -678,4 +844,8 @@ async fn get_summary(app: axum::Router, run_id: &str) -> Value {
         .expect("body should collect")
         .to_bytes();
     serde_json::from_slice(&body).expect("response body should be valid json")
+}
+
+fn json_to_summary(value: Value) -> crate::core::runtime::WorkflowRunSummary {
+    serde_json::from_value(value).expect("summary json should deserialize")
 }

@@ -11,8 +11,7 @@ static TRACING_INIT: Once = Once::new();
 
 pub fn init_tracing() {
     TRACING_INIT.call_once(|| {
-        let env_filter =
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter()));
+        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter()));
 
         tracing_subscriber::registry()
             .with(env_filter)

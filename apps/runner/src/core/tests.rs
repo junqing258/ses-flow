@@ -52,8 +52,7 @@ fn node_supports_typescript_code() -> bool {
 }
 
 fn spawn_echo_http_server() -> String {
-    let listener =
-        TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");
     let address = listener
         .local_addr()
         .expect("echo test server should expose local address");
@@ -70,9 +69,7 @@ fn spawn_echo_http_server() -> String {
             let mut content_length = 0usize;
 
             loop {
-                let read = stream
-                    .read(&mut chunk)
-                    .expect("echo test server should read request");
+                let read = stream.read(&mut chunk).expect("echo test server should read request");
                 if read == 0 {
                     break;
                 }
@@ -128,9 +125,7 @@ fn parse_content_length(header_text: &str) -> usize {
 }
 
 fn build_echo_response(raw_request: &str) -> String {
-    let (raw_headers, raw_body) = raw_request
-        .split_once("\r\n\r\n")
-        .unwrap_or((raw_request, ""));
+    let (raw_headers, raw_body) = raw_request.split_once("\r\n\r\n").unwrap_or((raw_request, ""));
     let mut lines = raw_headers.lines();
     let request_line = lines.next().unwrap_or_default();
     let mut request_line_parts = request_line.split_whitespace();
@@ -146,8 +141,7 @@ fn build_echo_response(raw_request: &str) -> String {
     let body = if raw_body.trim().is_empty() {
         serde_json::Value::Null
     } else {
-        serde_json::from_str(raw_body)
-            .unwrap_or_else(|_| serde_json::Value::String(raw_body.to_string()))
+        serde_json::from_str(raw_body).unwrap_or_else(|_| serde_json::Value::String(raw_body.to_string()))
     };
 
     json!({
@@ -172,10 +166,7 @@ fn split_target(target: &str) -> (String, serde_json::Value) {
         .split('&')
         .filter_map(|pair| {
             let (key, value) = pair.split_once('=')?;
-            Some((
-                key.to_string(),
-                serde_json::Value::String(value.to_string()),
-            ))
+            Some((key.to_string(), serde_json::Value::String(value.to_string())))
         })
         .collect::<serde_json::Map<_, _>>();
 
@@ -199,9 +190,8 @@ fn load_sorting_flow_definition(fetch_base_url: &str) -> WorkflowDefinition {
 }
 
 fn load_coverage_flow_definition(fetch_base_url: &str) -> WorkflowDefinition {
-    let mut definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../../examples/coverage-flow.json"))
-            .expect("coverage workflow should deserialize");
+    let mut definition: WorkflowDefinition = serde_json::from_str(include_str!("../../examples/coverage-flow.json"))
+        .expect("coverage workflow should deserialize");
     let fetch_node = definition
         .nodes
         .iter_mut()
@@ -311,21 +301,17 @@ fn upgrades_legacy_action_nodes_in_nested_sub_workflow_definitions() {
     }))
     .expect("legacy nested definition should deserialize");
 
-    let subflow_node = definition
-        .node("subflow_1")
-        .expect("subflow node should exist");
+    let subflow_node = definition.node("subflow_1").expect("subflow node should exist");
     let nested = subflow_node
         .config
         .get("definition")
         .cloned()
         .expect("nested definition should exist");
-    let nested_definition = deserialize_workflow_definition(nested)
-        .expect("nested definition should deserialize after normalization");
+    let nested_definition =
+        deserialize_workflow_definition(nested).expect("nested definition should deserialize after normalization");
 
     assert_eq!(
-        nested_definition
-            .node("child_action")
-            .map(|node| node.node_type),
+        nested_definition.node("child_action").map(|node| node.node_type),
         Some(NodeType::Shell)
     );
 }
@@ -346,10 +332,7 @@ fn waits_on_task_branch_for_manual_review() {
         .expect("workflow run should succeed");
 
     assert!(matches!(summary.status, WorkflowRunStatus::Waiting));
-    assert_eq!(
-        summary.current_node_id.as_deref(),
-        Some("manual_review_task")
-    );
+    assert_eq!(summary.current_node_id.as_deref(), Some("manual_review_task"));
 }
 
 #[test]
@@ -368,14 +351,8 @@ fn waits_on_callback_branch_for_auto_sort() {
         .expect("workflow run should succeed");
 
     assert!(matches!(summary.status, WorkflowRunStatus::Waiting));
-    assert_eq!(
-        summary.current_node_id.as_deref(),
-        Some("wait_dispatch_callback")
-    );
-    assert_eq!(
-        summary.state["orderSnapshot"]["data"]["orderNo"],
-        json!("SO-1002")
-    );
+    assert_eq!(summary.current_node_id.as_deref(), Some("wait_dispatch_callback"));
+    assert_eq!(summary.state["orderSnapshot"]["data"]["orderNo"], json!("SO-1002"));
 }
 
 #[test]
@@ -421,11 +398,7 @@ fn resumes_waiting_callback_to_completion() {
         crate::core::runtime::ExecutionStatus::Success
     );
     assert_eq!(
-        resumed
-            .timeline
-            .last()
-            .expect("timeline should not be empty")
-            .output,
+        resumed.timeline.last().expect("timeline should not be empty").output,
         json!({
             "correlationKey": "req-3",
             "event": "rcs.callback",
@@ -701,10 +674,7 @@ fn rejects_resume_when_wait_event_mismatches() {
         )
         .expect_err("resume should be rejected");
 
-    assert!(matches!(
-        error,
-        crate::error::RunnerError::ResumeValidation(_)
-    ));
+    assert!(matches!(error, crate::error::RunnerError::ResumeValidation(_)));
 }
 
 #[test]
@@ -735,10 +705,7 @@ fn rejects_resume_when_correlation_key_mismatches() {
         )
         .expect_err("resume should be rejected");
 
-    assert!(matches!(
-        error,
-        crate::error::RunnerError::ResumeValidation(_)
-    ));
+    assert!(matches!(error, crate::error::RunnerError::ResumeValidation(_)));
 }
 
 #[test]
@@ -944,9 +911,8 @@ fn emits_running_summary_for_the_next_node_after_switch_branch_resolution() {
 
 #[test]
 fn cascades_waiting_sub_workflow_resume_to_parent_completion() {
-    let definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../../examples/subflow-wait-flow.json"))
-            .expect("subflow wait workflow should deserialize");
+    let definition: WorkflowDefinition = serde_json::from_str(include_str!("../../examples/subflow-wait-flow.json"))
+        .expect("subflow wait workflow should deserialize");
     let engine = WorkflowEngine::new();
     let waiting = engine
         .run(
@@ -962,11 +928,7 @@ fn cascades_waiting_sub_workflow_resume_to_parent_completion() {
     assert!(matches!(waiting.status, WorkflowRunStatus::Waiting));
     assert_eq!(waiting.current_node_id.as_deref(), Some("nested_workflow"));
     assert_eq!(
-        waiting
-            .last_signal
-            .as_ref()
-            .expect("signal should exist")
-            .signal_type,
+        waiting.last_signal.as_ref().expect("signal should exist").signal_type,
         "child.callback"
     );
     assert_eq!(waiting.state["nested"]["status"], json!("waiting"));
@@ -1000,8 +962,7 @@ fn cascades_waiting_sub_workflow_resume_to_parent_completion() {
 #[test]
 fn supports_code_node_state_patch_and_priority_branch() {
     let definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../../examples/code-flow.json"))
-            .expect("code workflow should deserialize");
+        serde_json::from_str(include_str!("../../examples/code-flow.json")).expect("code workflow should deserialize");
     let engine = WorkflowEngine::new();
     let summary = engine
         .run(
@@ -1015,10 +976,7 @@ fn supports_code_node_state_patch_and_priority_branch() {
         .expect("workflow run should succeed");
 
     assert!(matches!(summary.status, WorkflowRunStatus::Completed));
-    assert_eq!(
-        summary.timeline[2].node_type,
-        crate::core::definition::NodeType::Code
-    );
+    assert_eq!(summary.timeline[2].node_type, crate::core::definition::NodeType::Code);
     assert_eq!(summary.state["code"]["normalizedQty"], json!(6));
     assert_eq!(summary.state["code"]["branch"], json!("priority"));
     assert_eq!(summary.state["code"]["requestId"], json!("req-code-1"));
@@ -1047,8 +1005,7 @@ fn supports_code_node_state_patch_and_priority_branch() {
 #[test]
 fn supports_code_node_default_branch() {
     let definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../../examples/code-flow.json"))
-            .expect("code workflow should deserialize");
+        serde_json::from_str(include_str!("../../examples/code-flow.json")).expect("code workflow should deserialize");
     let engine = WorkflowEngine::new();
     let summary = engine
         .run(
@@ -1208,10 +1165,7 @@ fn supports_code_node_source_path_script() {
         .expect("source path script should run");
 
     assert!(matches!(summary.status, WorkflowRunStatus::Completed));
-    assert_eq!(
-        summary.timeline[1].node_type,
-        crate::core::definition::NodeType::Code
-    );
+    assert_eq!(summary.timeline[1].node_type, crate::core::definition::NodeType::Code);
     assert_eq!(summary.timeline[1].output["source"], json!("file"));
     assert_eq!(summary.timeline[1].output["orderNo"], json!("SO-SOURCE-1"));
 }
@@ -1283,10 +1237,7 @@ fn supports_code_node_module_export_name_with_base_dir() {
     assert!(matches!(summary.status, WorkflowRunStatus::Completed));
     assert_eq!(summary.timeline[1].output["source"], json!("named-export"));
     assert_eq!(summary.state["moduleResult"]["branch"], json!("priority"));
-    assert_eq!(
-        summary.state["decision"]["handledBy"],
-        json!("priority-module")
-    );
+    assert_eq!(summary.state["decision"]["handledBy"], json!("priority-module"));
     assert_eq!(summary.timeline[1].logs[0].level, "info");
     assert!(summary.timeline[1].logs[0].message.contains("SO-MODULE-1"));
 }

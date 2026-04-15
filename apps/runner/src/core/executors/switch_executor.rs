@@ -30,7 +30,6 @@ impl NodeExecutor for SwitchExecutor {
             other => other.to_string(),
         };
 
-        Ok(NodeExecutionResult::success(json!({ "branch": branch_key }))
-            .with_branch_key(branch_key))
+        Ok(NodeExecutionResult::success(json!({ "branch": branch_key })).with_branch_key(branch_key))
     }
 }

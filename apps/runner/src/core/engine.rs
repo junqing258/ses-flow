@@ -6,14 +6,13 @@ use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
 use super::definition::{
-    NodeType, ResponseMode, TransitionDefinition, TriggerType, WorkflowDefinition,
-    deserialize_workflow_definition,
+    NodeType, ResponseMode, TransitionDefinition, TriggerType, WorkflowDefinition, deserialize_workflow_definition,
 };
 use super::executors::ExecutorRegistry;
 use super::runtime::{
-    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunController,
-    NoopWorkflowRunObserver, RunEnvironment, WorkflowRunController, WorkflowRunObserver,
-    WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary,
+    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunController, NoopWorkflowRunObserver,
+    RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunSnapshot, WorkflowRunStatus,
+    WorkflowRunSummary,
 };
 use super::template::{merge_state, nested_state_patch};
 use crate::error::RunnerError;
@@ -47,15 +46,8 @@ impl WorkflowEngine {
         )
     }
 
-    pub fn with_services_and_observer(
-        services: WorkflowServices,
-        observer: Arc<dyn WorkflowRunObserver>,
-    ) -> Self {
-        Self::with_services_observer_and_controller(
-            services,
-            observer,
-            Arc::new(NoopWorkflowRunController),
-        )
+    pub fn with_services_and_observer(services: WorkflowServices, observer: Arc<dyn WorkflowRunObserver>) -> Self {
+        Self::with_services_observer_and_controller(services, observer, Arc::new(NoopWorkflowRunController))
     }
 
     pub fn with_services_observer_and_controller(
@@ -95,10 +87,7 @@ impl WorkflowEngine {
         );
         definition.validate()?;
         let current_node_id = definition.start_node()?.id.clone();
-        let current_input = trigger
-            .get("body")
-            .cloned()
-            .unwrap_or_else(|| trigger.clone());
+        let current_input = trigger.get("body").cloned().unwrap_or_else(|| trigger.clone());
 
         self.execute_from(
             definition,
@@ -249,8 +238,8 @@ impl WorkflowEngine {
                     .get("event")
                     .and_then(Value::as_str)
                     .unwrap_or("external_callback");
-                let actual_event = extract_value_by_key(resume_input, "event")
-                    .or_else(|| extract_value_by_key(resume_input, "type"));
+                let actual_event =
+                    extract_value_by_key(resume_input, "event").or_else(|| extract_value_by_key(resume_input, "type"));
 
                 match actual_event.and_then(|value| value.as_str().map(str::to_string)) {
                     Some(actual) if actual == expected_event => {}
@@ -284,8 +273,8 @@ impl WorkflowEngine {
                     .get("completeEvent")
                     .and_then(Value::as_str)
                     .unwrap_or("task.completed");
-                let actual_event = extract_value_by_key(resume_input, "event")
-                    .or_else(|| extract_value_by_key(resume_input, "type"));
+                let actual_event =
+                    extract_value_by_key(resume_input, "event").or_else(|| extract_value_by_key(resume_input, "type"));
 
                 match actual_event.and_then(|value| value.as_str().map(str::to_string)) {
                     Some(actual) if actual == expected_event => {}
@@ -303,13 +292,7 @@ impl WorkflowEngine {
                     }
                 }
 
-                validate_field_match(
-                    waiting_node,
-                    snapshot,
-                    resume_input,
-                    "taskId",
-                    &["taskId", "id"],
-                )?;
+                validate_field_match(waiting_node, snapshot, resume_input, "taskId", &["taskId", "id"])?;
 
                 Ok(())
             }
@@ -330,8 +313,7 @@ impl WorkflowEngine {
         resume_input: Value,
     ) -> Result<WorkflowRunSummary, RunnerError> {
         let child_snapshot = extract_child_snapshot(&snapshot)?;
-        let child_definition =
-            resolve_sub_workflow_definition_from_services(waiting_node, &self.services)?;
+        let child_definition = resolve_sub_workflow_definition_from_services(waiting_node, &self.services)?;
         child_definition.validate()?;
 
         let child_engine = WorkflowEngine::with_services_observer_and_controller(
@@ -514,6 +496,7 @@ impl WorkflowEngine {
                 input: &current_input,
                 state: &state,
                 env: &env,
+                controller: self.controller.as_ref(),
             };
             info!(
                 run_id = %run_id,
@@ -523,7 +506,23 @@ impl WorkflowEngine {
                 input = %serde_json::to_string(&current_input).unwrap_or_else(|_| "serialize error".to_string()),
                 "node input before execution",
             );
-            let result = executor.execute(node, &context)?;
+            let result = match executor.execute(node, &context) {
+                Ok(result) => result,
+                Err(RunnerError::Terminated(_)) if self.controller.should_terminate(&run_id) => {
+                    let summary = self.terminated_summary(
+                        &run_id,
+                        &workflow_key,
+                        workflow_version,
+                        Some(node.id.clone()),
+                        state,
+                        timeline,
+                        last_signal,
+                    );
+                    self.emit_summary(&summary);
+                    return Ok(summary);
+                }
+                Err(error) => return Err(error),
+            };
             info!(
                 run_id = %run_id,
                 workflow_key = %workflow_key,
@@ -634,12 +633,8 @@ impl WorkflowEngine {
                     node_id = %node.id,
                     "workflow execution completed",
                 );
-                let completion_signal = self.resolve_completion_signal(
-                    definition,
-                    node.node_type,
-                    &result.output,
-                    last_signal,
-                );
+                let completion_signal =
+                    self.resolve_completion_signal(definition, node.node_type, &result.output, last_signal);
                 let summary = WorkflowRunSummary {
                     run_id,
                     workflow_key,
@@ -725,10 +720,7 @@ impl WorkflowEngine {
             return None;
         }
 
-        if !matches!(
-            definition.trigger.response_mode.as_ref(),
-            Some(ResponseMode::Sync)
-        ) {
+        if !matches!(definition.trigger.response_mode.as_ref(), Some(ResponseMode::Sync)) {
             return None;
         }
 
@@ -807,9 +799,7 @@ fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStat
     }
 }
 
-fn extract_child_snapshot(
-    snapshot: &WorkflowRunSnapshot,
-) -> Result<WorkflowRunSnapshot, RunnerError> {
+fn extract_child_snapshot(snapshot: &WorkflowRunSnapshot) -> Result<WorkflowRunSnapshot, RunnerError> {
     snapshot
         .last_input
         .get("resumeState")
@@ -893,17 +883,7 @@ fn extract_value_by_key(value: &Value, key: &str) -> Option<Value> {
     value
         .get(key)
         .cloned()
-        .or_else(|| {
-            value
-                .get("payload")
-                .and_then(|payload| payload.get(key))
-                .cloned()
-        })
-        .or_else(|| {
-            value
-                .get("headers")
-                .and_then(|headers| headers.get(key))
-                .cloned()
-        })
+        .or_else(|| value.get("payload").and_then(|payload| payload.get(key)).cloned())
+        .or_else(|| value.get("headers").and_then(|headers| headers.get(key)).cloned())
         .or_else(|| value.get("body").and_then(|body| body.get(key)).cloned())
 }

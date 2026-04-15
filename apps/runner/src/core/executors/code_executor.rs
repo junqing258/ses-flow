@@ -141,16 +141,18 @@ fn execute_code(
             payload["modulePath"] = Value::String(module.path().to_string_lossy().to_string());
             temporary_module = Some(module);
         }
-        (_, CodeExecutionSpec::Module {
-            module_path,
-            export_name,
-        }) => {
+        (
+            _,
+            CodeExecutionSpec::Module {
+                module_path,
+                export_name,
+            },
+        ) => {
             payload["modulePath"] = Value::String(module_path.clone());
             payload["exportName"] = Value::String(export_name.clone());
         }
     }
-    let request = serde_json::to_vec(&payload)
-        .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
+    let request = serde_json::to_vec(&payload).map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
 
     let mut command = Command::new("node");
     if language == CodeLanguage::TypeScript {
@@ -174,7 +176,7 @@ fn execute_code(
             .map_err(|error| RunnerError::CodeExecution(error.to_string()))?;
     }
 
-    let output = wait_for_process_output(child, timeout_ms, "code")?;
+    let output = wait_for_process_output(child, timeout_ms, "code", context)?;
     drop(temporary_module);
 
     if !output.status.success() {
@@ -194,9 +196,8 @@ fn execute_code(
         });
     }
 
-    serde_json::from_str::<CodeProcessOutput>(&stdout).map_err(|error| {
-        RunnerError::CodeExecution(format!("code node returned non-JSON value: {error}"))
-    })
+    serde_json::from_str::<CodeProcessOutput>(&stdout)
+        .map_err(|error| RunnerError::CodeExecution(format!("code node returned non-JSON value: {error}")))
 }
 
 fn build_code_result(result: Value) -> NodeExecutionResult {
@@ -359,10 +360,7 @@ enum CodeLanguage {
 
 enum CodeExecutionSpec {
     InlineSource(String),
-    Module {
-        module_path: String,
-        export_name: String,
-    },
+    Module { module_path: String, export_name: String },
 }
 
 struct TemporaryCodeModule {
@@ -380,9 +378,7 @@ impl TemporaryCodeModule {
             unique,
             std::thread::current().name().unwrap_or("worker")
         ));
-        let wrapped = format!(
-            "export default async function (trigger, input, state, env, params) {{\n{source}\n}}\n"
-        );
+        let wrapped = format!("export default async function (trigger, input, state, env, params) {{\n{source}\n}}\n");
         fs::write(&path, wrapped).map_err(|error| {
             RunnerError::CodeExecution(format!(
                 "failed to write temporary TypeScript module {}: {error}",

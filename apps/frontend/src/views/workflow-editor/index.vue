@@ -2694,6 +2694,11 @@ const refreshRunSummary = async (
       return;
     }
 
+    const workflowId = activeRunWorkflowId.value || persistedWorkflowId.value;
+    if (workflowId) {
+      void refreshWorkflowRunCount(workflowId, { silent: true });
+    }
+
     isTerminatingWorkflow.value = false;
     closeRunSummaryEventStream();
     clearRunSummaryPolling();
@@ -2741,7 +2746,22 @@ const handleTerminateRun = async () => {
   try {
     ensureRunSummaryEventStream(runId);
     const summary = await terminateWorkflowRun(runId);
-    scheduleRunSummaryResync(summary.runId);
+    const workflowId = activeRunWorkflowId.value || persistedWorkflowId.value;
+
+    if (shouldPollWorkflowRunSummary(summary.status)) {
+      scheduleRunSummaryResync(summary.runId);
+    } else {
+      activeRunSummary.value = summary;
+      setNodeExecutionStatuses(summary);
+      selectRunFocusedNode(summary);
+      isTerminatingWorkflow.value = false;
+      closeRunSummaryEventStream();
+      clearRunSummaryPolling();
+      if (workflowId) {
+        void refreshWorkflowRunCount(workflowId, { silent: true });
+      }
+    }
+
     toast.success("已发送终止请求");
   } catch (error) {
     isTerminatingWorkflow.value = false;

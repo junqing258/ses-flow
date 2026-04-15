@@ -17,18 +17,10 @@ impl NodeExecutor for WebhookTriggerExecutor {
         node: &NodeDefinition,
         context: &NodeExecutionContext<'_>,
     ) -> Result<NodeExecutionResult, RunnerError> {
-        let mode = node
-            .config
-            .get("mode")
-            .and_then(Value::as_str)
-            .unwrap_or("body");
+        let mode = node.config.get("mode").and_then(Value::as_str).unwrap_or("body");
         let payload = match mode {
             "full" => context.trigger.clone(),
-            "headers" => context
-                .trigger
-                .get("headers")
-                .cloned()
-                .unwrap_or(Value::Null),
+            "headers" => context.trigger.get("headers").cloned().unwrap_or(Value::Null),
             _ => context
                 .trigger
                 .get("body")

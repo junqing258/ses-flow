@@ -15,12 +15,7 @@ impl<'a> EvaluationContext<'a> {
         match value {
             Value::Null | Value::Bool(_) | Value::Number(_) => value.clone(),
             Value::String(text) => self.resolve_string(text),
-            Value::Array(items) => Value::Array(
-                items
-                    .iter()
-                    .map(|item| self.resolve_value(item))
-                    .collect::<Vec<_>>(),
-            ),
+            Value::Array(items) => Value::Array(items.iter().map(|item| self.resolve_value(item)).collect::<Vec<_>>()),
             Value::Object(object) => Value::Object(
                 object
                     .iter()
@@ -107,10 +102,7 @@ pub fn is_truthy(value: &Value) -> bool {
         }
         Value::String(text) => {
             let normalized = text.trim().to_ascii_lowercase();
-            !normalized.is_empty()
-                && normalized != "false"
-                && normalized != "0"
-                && normalized != "null"
+            !normalized.is_empty() && normalized != "false" && normalized != "0" && normalized != "null"
         }
         Value::Array(items) => !items.is_empty(),
         Value::Object(object) => !object.is_empty(),

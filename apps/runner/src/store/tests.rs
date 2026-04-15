@@ -65,9 +65,8 @@ fn stores_waiting_snapshot_and_resumes_by_run_id() {
 
 #[test]
 fn resumes_parent_run_id_for_waiting_sub_workflow() {
-    let definition: WorkflowDefinition =
-        serde_json::from_str(include_str!("../../examples/subflow-wait-flow.json"))
-            .expect("subflow wait workflow should deserialize");
+    let definition: WorkflowDefinition = serde_json::from_str(include_str!("../../examples/subflow-wait-flow.json"))
+        .expect("subflow wait workflow should deserialize");
     let store = Arc::new(InMemoryRunStore::new());
     let runner = WorkflowRunner::new(WorkflowEngine::new(), store.clone());
 
@@ -106,8 +105,7 @@ fn resumes_parent_run_id_for_waiting_sub_workflow() {
 }
 
 fn spawn_echo_http_server() -> String {
-    let listener =
-        TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("echo test server should bind to a random port");
     let address = listener
         .local_addr()
         .expect("echo test server should expose local address");
@@ -121,9 +119,7 @@ fn spawn_echo_http_server() -> String {
             let mut chunk = [0u8; 1024];
 
             loop {
-                let read = stream
-                    .read(&mut chunk)
-                    .expect("echo test server should read request");
+                let read = stream.read(&mut chunk).expect("echo test server should read request");
                 if read == 0 {
                     break;
                 }

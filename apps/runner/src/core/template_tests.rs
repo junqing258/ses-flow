@@ -12,14 +12,8 @@ fn resolves_exact_template_to_original_value_type() {
         output: &json!({}),
     };
 
-    assert_eq!(
-        ctx.resolve_value(&json!("{{trigger.body.orderNo}}")),
-        json!("SO-1")
-    );
-    assert_eq!(
-        ctx.resolve_value(&json!("{{env.warehouseId}}")),
-        json!("WH-1")
-    );
+    assert_eq!(ctx.resolve_value(&json!("{{trigger.body.orderNo}}")), json!("SO-1"));
+    assert_eq!(ctx.resolve_value(&json!("{{env.warehouseId}}")), json!("WH-1"));
 }
 
 #[test]
@@ -32,10 +26,7 @@ fn merges_nested_state_patch_recursively() {
 
     merge_state(
         &mut state,
-        nested_state_patch(
-            "orderSnapshot",
-            json!({"status": "updated", "orderNo": "SO-1"}),
-        ),
+        nested_state_patch("orderSnapshot", json!({"status": "updated", "orderNo": "SO-1"})),
     );
 
     assert_eq!(

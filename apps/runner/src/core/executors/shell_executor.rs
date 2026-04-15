@@ -29,12 +29,7 @@ impl NodeExecutor for ShellExecutor {
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                RunnerError::InvalidShellConfig(format!(
-                    "node {} is missing config.command",
-                    node.id
-                ))
-            })?;
+            .ok_or_else(|| RunnerError::InvalidShellConfig(format!("node {} is missing config.command", node.id)))?;
         let spec = resolve_shell_execution_spec(&resolved_config, command)?;
         let output = execute_shell_command(&spec, context, &payload, node.timeout_ms)?;
 
@@ -42,10 +37,7 @@ impl NodeExecutor for ShellExecutor {
     }
 }
 
-fn resolve_shell_execution_spec(
-    config: &Value,
-    command: &str,
-) -> Result<ShellExecutionSpec, RunnerError> {
+fn resolve_shell_execution_spec(config: &Value, command: &str) -> Result<ShellExecutionSpec, RunnerError> {
     let shell = config
         .get("shell")
         .or_else(|| config.get("program"))
@@ -97,8 +89,9 @@ fn value_to_env_string(value: &Value) -> Result<String, RunnerError> {
         Value::String(text) => Ok(text.clone()),
         Value::Bool(boolean) => Ok(boolean.to_string()),
         Value::Number(number) => Ok(number.to_string()),
-        Value::Array(_) | Value::Object(_) => serde_json::to_string(value)
-            .map_err(|error| RunnerError::InvalidShellConfig(error.to_string())),
+        Value::Array(_) | Value::Object(_) => {
+            serde_json::to_string(value).map_err(|error| RunnerError::InvalidShellConfig(error.to_string()))
+        }
     }
 }
 
@@ -126,14 +119,13 @@ fn execute_shell_command(
     params: &Value,
     timeout_ms: Option<u64>,
 ) -> Result<ShellProcessOutput, RunnerError> {
-    let params_json = serde_json::to_string(params)
-        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
-    let trigger_json = serde_json::to_string(context.trigger)
-        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
-    let input_json = serde_json::to_string(context.input)
-        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
-    let state_json = serde_json::to_string(context.state)
-        .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let params_json = serde_json::to_string(params).map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let trigger_json =
+        serde_json::to_string(context.trigger).map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let input_json =
+        serde_json::to_string(context.input).map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
+    let state_json =
+        serde_json::to_string(context.state).map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
     let env_json = serde_json::to_string(&env_to_value(context.env))
         .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
 
@@ -171,7 +163,7 @@ fn execute_shell_command(
             .map_err(|error| RunnerError::ShellExecution(error.to_string()))?;
     }
 
-    let output = wait_for_process_output(child, timeout_ms, "shell")?;
+    let output = wait_for_process_output(child, timeout_ms, "shell", context)?;
     let exit_code = output.status.code().unwrap_or_default();
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

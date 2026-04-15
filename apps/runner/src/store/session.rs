@@ -27,10 +27,7 @@ pub struct WorkflowEditSessionRecord {
 
 pub trait WorkflowEditSessionStore: Send + Sync {
     fn save_session(&self, session: &WorkflowEditSessionRecord) -> Result<(), RunnerError>;
-    fn load_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<WorkflowEditSessionRecord>, RunnerError>;
+    fn load_session(&self, session_id: &str) -> Result<Option<WorkflowEditSessionRecord>, RunnerError>;
 }
 
 #[derive(Default)]
@@ -54,10 +51,7 @@ impl WorkflowEditSessionStore for InMemoryEditSessionStore {
         Ok(())
     }
 
-    fn load_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<WorkflowEditSessionRecord>, RunnerError> {
+    fn load_session(&self, session_id: &str) -> Result<Option<WorkflowEditSessionRecord>, RunnerError> {
         let state = self
             .sessions
             .lock()
@@ -93,12 +87,7 @@ impl PostgresEditSessionStore {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| {
-            RunnerError::Store(format!(
-                "Failed to create workflow_edit_sessions table: {}",
-                e
-            ))
-        })?;
+        .map_err(|e| RunnerError::Store(format!("Failed to create workflow_edit_sessions table: {}", e)))?;
 
         sqlx::query(
             r#"
@@ -108,12 +97,7 @@ impl PostgresEditSessionStore {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| {
-            RunnerError::Store(format!(
-                "Failed to create workflow_edit_sessions index: {}",
-                e
-            ))
-        })?;
+        .map_err(|e| RunnerError::Store(format!("Failed to create workflow_edit_sessions index: {}", e)))?;
 
         Ok(())
     }
@@ -123,12 +107,8 @@ impl WorkflowEditSessionStore for PostgresEditSessionStore {
     fn save_session(&self, session: &WorkflowEditSessionRecord) -> Result<(), RunnerError> {
         let pool = self.pool.clone();
         let session = session.clone();
-        let workflow_value = serde_json::to_value(&session.workflow).map_err(|e| {
-            RunnerError::Store(format!(
-                "Failed to serialize workflow edit session definition: {}",
-                e
-            ))
-        })?;
+        let workflow_value = serde_json::to_value(&session.workflow)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize workflow edit session definition: {}", e)))?;
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
@@ -161,19 +141,14 @@ impl WorkflowEditSessionStore for PostgresEditSessionStore {
                 .bind(session.updated_at)
                 .execute(&pool)
                 .await
-                .map_err(|e| {
-                    RunnerError::Store(format!("Failed to save workflow edit session: {}", e))
-                })?;
+                .map_err(|e| RunnerError::Store(format!("Failed to save workflow edit session: {}", e)))?;
 
                 Ok(())
             })
         })
     }
 
-    fn load_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<WorkflowEditSessionRecord>, RunnerError> {
+    fn load_session(&self, session_id: &str) -> Result<Option<WorkflowEditSessionRecord>, RunnerError> {
         let pool = self.pool.clone();
         let session_id = session_id.to_string();
 
@@ -196,37 +171,34 @@ impl WorkflowEditSessionStore for PostgresEditSessionStore {
                 .bind(&session_id)
                 .fetch_optional(&pool)
                 .await
-                .map_err(|e| {
-                    RunnerError::Store(format!("Failed to load workflow edit session: {}", e))
-                })?;
+                .map_err(|e| RunnerError::Store(format!("Failed to load workflow edit session: {}", e)))?;
 
                 row.map(|row| {
-                    let workflow_value: Value =
-                        row.try_get("workflow_definition").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get workflow_definition: {}", e))
-                        })?;
+                    let workflow_value: Value = row
+                        .try_get("workflow_definition")
+                        .map_err(|e| RunnerError::Store(format!("Failed to get workflow_definition: {}", e)))?;
                     let workflow = deserialize_workflow_definition(workflow_value)?;
 
                     Ok(WorkflowEditSessionRecord {
-                        session_id: row.try_get("session_id").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get session_id: {}", e))
-                        })?,
-                        workspace_id: row.try_get("workspace_id").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get workspace_id: {}", e))
-                        })?,
-                        workflow_id: row.try_get("workflow_id").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get workflow_id: {}", e))
-                        })?,
+                        session_id: row
+                            .try_get("session_id")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get session_id: {}", e)))?,
+                        workspace_id: row
+                            .try_get("workspace_id")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get workspace_id: {}", e)))?,
+                        workflow_id: row
+                            .try_get("workflow_id")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get workflow_id: {}", e)))?,
                         workflow,
-                        editor_document: row.try_get("editor_document").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get editor_document: {}", e))
-                        })?,
-                        created_at: row.try_get("created_at").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get created_at: {}", e))
-                        })?,
-                        updated_at: row.try_get("updated_at").map_err(|e| {
-                            RunnerError::Store(format!("Failed to get updated_at: {}", e))
-                        })?,
+                        editor_document: row
+                            .try_get("editor_document")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get editor_document: {}", e)))?,
+                        created_at: row
+                            .try_get("created_at")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get created_at: {}", e)))?,
+                        updated_at: row
+                            .try_get("updated_at")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get updated_at: {}", e)))?,
                     })
                 })
                 .transpose()

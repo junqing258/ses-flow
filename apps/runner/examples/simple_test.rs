@@ -76,9 +76,7 @@ fn main() {
     let engine = runner::core::engine::WorkflowEngine::new();
 
     println!("开始运行工作流...");
-    println!(
-        "提示: 观察下方日志中的 'node input before execution' 和 'node output after execution'"
-    );
+    println!("提示: 观察下方日志中的 'node input before execution' 和 'node output after execution'");
     println!();
 
     // 运行工作流

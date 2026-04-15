@@ -19,9 +19,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use super::definition::{
-    NodeDefinition, NodeType, WorkflowDefinition, deserialize_workflow_definition,
-};
+use super::definition::{NodeDefinition, NodeType, WorkflowDefinition, deserialize_workflow_definition};
 use super::runtime::{NodeExecutionContext, NodeExecutionResult, RunEnvironment};
 use super::template::{EvaluationContext, env_to_value};
 use crate::error::RunnerError;
@@ -81,8 +79,7 @@ impl ExecutorRegistry {
     where
         E: NodeExecutor + 'static,
     {
-        self.executors
-            .insert(executor.node_type(), Arc::new(executor));
+        self.executors.insert(executor.node_type(), Arc::new(executor));
     }
 
     pub fn resolve(&self, node_type: NodeType) -> Option<Arc<dyn NodeExecutor>> {
@@ -105,11 +102,7 @@ pub(super) fn resolve_mapping(node: &NodeDefinition, context: &NodeExecutionCont
     template_context.resolve_value(&node.input_mapping)
 }
 
-pub(super) fn resolve_config(
-    node: &NodeDefinition,
-    context: &NodeExecutionContext<'_>,
-    output: &Value,
-) -> Value {
+pub(super) fn resolve_config(node: &NodeDefinition, context: &NodeExecutionContext<'_>, output: &Value) -> Value {
     evaluation_context(context, output).resolve_value(&node.config)
 }
 // endregion 通用解析辅助函数
@@ -118,45 +111,52 @@ pub(super) fn wait_for_process_output(
     mut child: std::process::Child,
     timeout_ms: Option<u64>,
     process_name: &str,
+    context: &NodeExecutionContext<'_>,
 ) -> Result<std::process::Output, RunnerError> {
-    let Some(timeout_ms) = timeout_ms else {
-        return child
-            .wait_with_output()
-            .map_err(|error| match process_name {
-                "shell" => RunnerError::ShellExecution(error.to_string()),
-                _ => RunnerError::CodeExecution(error.to_string()),
-            });
-    };
-
     let started_at = Instant::now();
-    let timeout = Duration::from_millis(timeout_ms);
     loop {
+        if context.should_terminate() {
+            child
+                .kill()
+                .map_err(|error| process_error(process_name, error.to_string()))?;
+            let _ = child.wait();
+            return Err(RunnerError::Terminated(format!("{process_name} node was terminated",)));
+        }
+
         match child.try_wait().map_err(|error| match process_name {
             "shell" => RunnerError::ShellExecution(error.to_string()),
             _ => RunnerError::CodeExecution(error.to_string()),
         })? {
             Some(_) => {
-                return child
-                    .wait_with_output()
-                    .map_err(|error| match process_name {
-                        "shell" => RunnerError::ShellExecution(error.to_string()),
-                        _ => RunnerError::CodeExecution(error.to_string()),
-                    });
-            }
-            None if started_at.elapsed() >= timeout => {
-                child.kill().map_err(|error| match process_name {
+                return child.wait_with_output().map_err(|error| match process_name {
                     "shell" => RunnerError::ShellExecution(error.to_string()),
                     _ => RunnerError::CodeExecution(error.to_string()),
-                })?;
-                let _ = child.wait();
-                let message = format!("{process_name} node exceeded timeout of {timeout_ms}ms");
-                return Err(match process_name {
-                    "shell" => RunnerError::ShellExecution(message),
-                    _ => RunnerError::CodeExecution(message),
                 });
             }
-            None => thread::sleep(Duration::from_millis(10)),
+            None => {
+                if let Some(timeout_ms) = timeout_ms {
+                    let timeout = Duration::from_millis(timeout_ms);
+                    if started_at.elapsed() >= timeout {
+                        child
+                            .kill()
+                            .map_err(|error| process_error(process_name, error.to_string()))?;
+                        let _ = child.wait();
+                        return Err(process_error(
+                            process_name,
+                            format!("{process_name} node exceeded timeout of {timeout_ms}ms"),
+                        ));
+                    }
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
         }
+    }
+}
+
+fn process_error(process_name: &str, message: String) -> RunnerError {
+    match process_name {
+        "shell" => RunnerError::ShellExecution(message),
+        _ => RunnerError::CodeExecution(message),
     }
 }
 

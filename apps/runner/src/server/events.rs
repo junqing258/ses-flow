@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::convert::Infallible;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 use async_stream::stream;
 use axum::response::sse::{Event, Sse};
 use chrono::{DateTime, Utc};
 use futures_core::Stream;
 use serde::Serialize;
+use std::collections::HashMap;
+use std::convert::Infallible;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
 use crate::core::runtime::{WorkflowRunStatus, WorkflowRunSummary};
@@ -15,8 +15,7 @@ use crate::store::WorkflowEditSessionRecord;
 const EVENT_CHANNEL_CAPACITY: usize = 32;
 const ALL_WORKFLOWS_TOPIC: &str = "__all_workflows__";
 
-pub type WorkflowEventStream =
-    Sse<Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>>;
+pub type WorkflowEventStream = Sse<Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>>;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowStreamNotification {
@@ -37,11 +36,7 @@ pub struct WorkflowStreamNotification {
 }
 
 impl WorkflowStreamNotification {
-    fn connected(
-        workflow_id: Option<String>,
-        run_id: Option<String>,
-        session_id: Option<String>,
-    ) -> Self {
+    fn connected(workflow_id: Option<String>, run_id: Option<String>, session_id: Option<String>) -> Self {
         Self {
             event_type: "stream.connected".to_string(),
             workflow_id,
@@ -231,11 +226,7 @@ impl WorkflowEventStreams {
         let _ = sender.send(notification);
     }
 
-    fn ensure_sender(
-        &self,
-        topics: &TopicMap,
-        key: &str,
-    ) -> broadcast::Sender<WorkflowStreamNotification> {
+    fn ensure_sender(&self, topics: &TopicMap, key: &str) -> broadcast::Sender<WorkflowStreamNotification> {
         let mut state = topics.lock().expect("workflow event topics lock should be available");
 
         state

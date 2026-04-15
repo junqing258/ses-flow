@@ -28,6 +28,8 @@ pub enum RunnerError {
     MissingSubWorkflow(String),
     #[error("sub-workflow execution failed: {0}")]
     SubWorkflow(String),
+    #[error("workflow run terminated: {0}")]
+    Terminated(String),
     #[error("workflow run snapshot not found: {0}")]
     MissingRunSnapshot(String),
     #[error("workflow run store error: {0}")]
