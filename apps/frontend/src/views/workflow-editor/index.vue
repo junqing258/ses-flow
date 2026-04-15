@@ -10,6 +10,7 @@
       @drop.prevent="handleCanvasDrop"
     >
       <VueFlow
+        id="workflow-editor-flow"
         :nodes="nodes"
         :edges="edges"
         :delete-key-code="isAiMode ? null : undefined"
@@ -269,6 +270,7 @@ xxx
     <!-- Floating Left Panel -->
     <aside
       v-if="isEditMode"
+      ref="leftCanvasAsideRef"
       class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[240px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div class="min-h-0 flex-1 overflow-y-auto py-3 px-2">
@@ -318,6 +320,7 @@ xxx
 
     <aside
       v-else
+      ref="leftCanvasAsideRef"
       class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
@@ -1048,6 +1051,9 @@ const HISTORY_LIMIT = 50;
 const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
 const ASSISTANT_SESSION_POLL_INTERVAL_MS = 2000;
 const RUN_SUMMARY_RESYNC_DELAY_MS = 1500;
+const CANVAS_FIT_BASE_PADDING_PERCENT = 20;
+const CANVAS_LEFT_ASIDE_GAP_PX = 24;
+const CANVAS_LEFT_PADDING_MAX_RATIO = 0.45;
 
 const route = useRoute();
 const router = useRouter();
@@ -1062,6 +1068,7 @@ const selectedNodeId = ref(initialEditorState.selectedNodeId);
 const activeTab = ref<WorkflowTabId>(initialEditorState.activeTab);
 const pageMode = ref<WorkflowPageMode>(initialEditorState.pageMode);
 const runDraft = ref<WorkflowRunDraft>(initialEditorState.runDraft);
+const leftCanvasAsideRef = ref<HTMLElement | null>(null);
 const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
@@ -1112,7 +1119,9 @@ const expandedCategories = reactive<Record<string, boolean>>(
     ]),
   ),
 );
-const { fitView, onPaneReady, screenToFlowCoordinate } = useVueFlow();
+const WORKFLOW_FLOW_ID = "workflow-editor-flow";
+const { fitView, onPaneReady, screenToFlowCoordinate } =
+  useVueFlow(WORKFLOW_FLOW_ID);
 const isCanvasPaneReady = ref(false);
 const shouldResetCanvasViewport = ref(false);
 
@@ -1454,9 +1463,27 @@ const handleOpenWorkflowRunFromList = (runId: string) => {
 };
 
 const resetCanvasViewport = async () => {
-  await nextTick();
+  await new Promise<void>((resolve) => setTimeout(resolve, 16));
+
+  const asideRect = leftCanvasAsideRef.value?.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || 0;
+  const leftPaddingPx = asideRect
+    ? Math.min(
+        Math.round(asideRect.right + CANVAS_LEFT_ASIDE_GAP_PX),
+        Math.max(80, Math.round(viewportWidth * CANVAS_LEFT_PADDING_MAX_RATIO)),
+      )
+    : 0;
+
   await fitView({
-    padding: 0.2,
+    padding: {
+      top: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+      right: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+      bottom: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+      left: leftPaddingPx
+        ? `${leftPaddingPx}px`
+        : `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+    },
+    duration: 0,
   });
 };
 
@@ -1836,6 +1863,7 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
     }
 
     pageMode.value = "edit";
+    queueCanvasViewportReset();
 
     clearRunSummaryPolling();
 
