@@ -14,11 +14,12 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 ## 核心规则
 
 - `Claude Code` 是编辑核心。在这里完成工作流分析与修改。
-- `runner` 是 AI 会话草稿的事实来源。通过 runner API 进行校验。
+- `runner`服务 是 AI 会话草稿的事实来源。通过 runner API 进行校验。
 - AI 模式下的 `web` 仅用于预览。不要依赖 Web 侧的编辑控件。
-- 首次进入 AI 会话时，除 `session_id` 外，还必须提供 `runner_base_url`，并将其作为所有会话接口请求的前缀。
+- 首次进入 AI 会话时，必须提供 `runner_base_url` + `session_id`，并将其作为所有会话接口请求的前缀。
 - 在 AI 会话期间，应更新临时编辑会话，而不是已发布的工作流记录。
 - 优先同时发送 `workflow` 和 `editorDocument`，这样预览才能恢复完整画布状态。
+- AI 预览使用 HTTP `GET` 拉取会话快照。
 
 ## 何时使用
 
@@ -50,7 +51,11 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
    使用 `PUT {runner_base_url}/edit-sessions/{session_id}` 更新已有会话。  
    以 runner 的校验失败结果为准，修复载荷后再重试。
 
-5. 保持 Web 只读。  
+5. 读取预览快照。  
+   使用 `GET {runner_base_url}/edit-sessions/{session_id}` 获取最新会话快照。  
+   当你刚更新完草稿、需要确认 runner 已接收变更，或要为 Web 只读画布提供最新状态时，都应读取这个接口。
+
+6. 保持 Web 只读。  
    当 AI 模式处于激活状态时，不要让用户在浏览器中手动编辑。浏览器只应展示来自 runner 的最新预览。
 
 ## API 契约
@@ -62,11 +67,26 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - 首次提供：`runner_base_url` + `session_id`
 - 创建会话：`POST {runner_base_url}/edit-sessions`
 - 更新会话：`PUT {runner_base_url}/edit-sessions/{session_id}`
-- 预览流：`WS {runner_base_url}/edit-sessions/{session_id}/ws`
+- 读取预览：`GET {runner_base_url}/edit-sessions/{session_id}`
+
+
+## 默认建议
+
+- AI 预览文档中的 `pageMode` 保持为 `"ai"`。
+- 如果前端已展示 `runner_base_url`，优先使用该值，不要自行猜测其他接口前缀。
+- 除非任务明确要求修改，否则保留现有的工作流 id、名称、版本和节点 id。
+- 更新会话后，可通过 `GET /edit-sessions/{session_id}` 验证 runner 中的最新草稿，而不是依赖本地内存状态。
+
+## 避免事项
+
+- 如果任务只是更新 AI 草稿，不要直接发布工作流。
+- 不要在缺少 `runner_base_url` 的情况下假定请求前缀。
+- 不要把 Web 状态视为高于 runner 会话状态的事实来源。
+- 不要从 `editorDocument` 中移除字段，除非这些字段确实已明确废弃。
 
 ## 仓库定位
 
-在修改产品集成时，请阅读以下文件：
+在遇到问题需要排查时，可阅读以下代码文件：
 
 - `apps/frontend/src/views/WorkflowEditorPage.vue`
 - `apps/frontend/src/features/workflow/session.ts`
@@ -75,17 +95,3 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - `apps/runner/src/api/routes.rs`
 - `apps/runner/src/server/server.rs`
 - `apps/runner/src/store/session.rs`
-
-## 默认建议
-
-- AI 预览文档中的 `pageMode` 保持为 `"ai"`。
-- 如果前端已展示 `runner_base_url`，优先使用该值，不要自行猜测其他接口前缀。
-- 除非任务明确要求修改，否则保留现有的工作流 id、名称、版本和节点 id。
-- 更新会话后，应预期 Web 页面通过 runner 事件刷新，而不是依赖本地状态变更。
-
-## 避免事项
-
-- 如果任务只是更新 AI 草稿，不要直接发布工作流。
-- 不要在缺少 `runner_base_url` 的情况下假定请求前缀。
-- 不要把 Web 状态视为高于 runner 会话状态的事实来源。
-- 不要从 `editorDocument` 中移除字段，除非这些字段确实已明确废弃。

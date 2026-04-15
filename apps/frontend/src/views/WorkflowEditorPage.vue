@@ -180,11 +180,9 @@
           <span
             class="rounded-full px-2.5 py-1 text-[11px] font-semibold text-nowrap"
             :class="
-              assistantConnectionState === 'connected'
-                ? 'bg-emerald-50 text-emerald-700'
-                : assistantConnectionState === 'connecting'
-                  ? 'bg-amber-50 text-amber-700'
-                  : 'bg-slate-100 text-slate-600'
+              assistantConnectionState === 'polling'
+                ? 'bg-sky-50 text-sky-700'
+                : 'bg-slate-100 text-slate-600'
             "
             >{{ assistantConnectionLabel }}</span
           >
@@ -225,10 +223,22 @@
           >
             session_id: {{ assistantSessionId || "(创建中)" }}
           </p>
+          <p
+            class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500 break-all"
+          >
+            preview_get:
+            {{
+              `${assistantRunnerBaseUrl}/edit-sessions/${assistantSessionId || ":session_id"}`
+            }}
+          </p>
         </div>
         <div class="space-y-1.5">
           <p class="text-[11px] leading-5 text-slate-500">
             首次请把 <span>runner_base_url</span> 和 <span>session_id</span> 一起提供给 Agent ，后续它会用这个前缀拼接会话接口地址。
+          </p>
+          <p class="text-[11px] leading-5 text-slate-500">
+            Code Agent 无法使用 websocket 时，可通过上面的 `preview_get`
+            地址直接 GET 最新工作流草稿；Web 端也会自动降级为 GET 轮询预览。
           </p>
         </div>
 
@@ -1006,10 +1016,9 @@ import {
 } from "@/features/workflow/runner";
 import {
   WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL,
-  buildWorkflowEditSessionWsUrl,
   createWorkflowEditSession,
+  fetchWorkflowEditSession,
   type WorkflowEditSession,
-  type WorkflowEditSessionEvent,
 } from "@/features/workflow/session";
 import {
   WORKFLOW_EMPTY_TAB_TEXT,
@@ -1040,6 +1049,7 @@ import {
 const DRAG_DATA_TYPE = "application/x-ses-workflow-node";
 const HISTORY_LIMIT = 50;
 const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
+const ASSISTANT_SESSION_POLL_INTERVAL_MS = 2000;
 
 const route = useRoute();
 const router = useRouter();
@@ -1064,16 +1074,15 @@ const isTerminatingWorkflow = ref(false);
 const isCreatingAssistantSession = ref(false);
 const assistantSession = ref<WorkflowEditSession | null>(null);
 const assistantSessionError = ref("");
-const assistantConnectionState = ref<
-  "idle" | "connecting" | "connected" | "disconnected"
->("idle");
+const assistantConnectionState = ref<"idle" | "polling">("idle");
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const activeRunSummary = ref<WorkflowRunSummary | null>(null);
 const activeRunId = ref("");
 const activeRunWorkflowId = ref("");
 const runErrorMessage = ref("");
 let runSummaryPollTimer: number | null = null;
-let assistantSessionSocket: WebSocket | null = null;
+let assistantSessionPollTimer: number | null = null;
+let assistantSessionPollInFlight = false;
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();
@@ -1174,12 +1183,8 @@ const assistantSessionId = computed(
 );
 const assistantConnectionLabel = computed(() => {
   switch (assistantConnectionState.value) {
-    case "connecting":
-      return "连接中";
-    case "connected":
-      return "已连接";
-    case "disconnected":
-      return "已断开";
+    case "polling":
+      return "轮询中";
     default:
       return "未启动";
   }
@@ -1385,10 +1390,9 @@ const ensureAssistantSessionForAiMode = async () => {
   }
 
   if (assistantSession.value?.sessionId) {
-    if (!assistantSessionSocket) {
-      connectAssistantSessionSocket(assistantSession.value.sessionId);
-    }
-
+    await refreshAssistantSessionPreview(assistantSession.value.sessionId, {
+      silent: true,
+    });
     return;
   }
 
@@ -1405,7 +1409,9 @@ const ensureAssistantSessionForAiMode = async () => {
     });
 
     assistantSession.value = session;
-    connectAssistantSessionSocket(session.sessionId);
+    applyAssistantSessionPreview(session);
+    assistantConnectionState.value = "polling";
+    scheduleAssistantSessionPolling(session.sessionId);
     toast.success(`AI 编辑会话已创建：${session.sessionId}`);
   } catch (error) {
     assistantSessionError.value =
@@ -1488,59 +1494,80 @@ const applyAssistantSessionPreview = (session: WorkflowEditSession) => {
   pageMode.value = "ai";
 };
 
-const closeAssistantSessionSocket = () => {
-  if (assistantSessionSocket) {
-    const socket = assistantSessionSocket;
-    assistantSessionSocket = null;
-    assistantConnectionState.value = "idle";
-    socket.close();
+const clearAssistantSessionPolling = () => {
+  if (assistantSessionPollTimer !== null) {
+    window.clearTimeout(assistantSessionPollTimer);
+    assistantSessionPollTimer = null;
   }
 };
 
-const connectAssistantSessionSocket = (sessionId: string) => {
-  closeAssistantSessionSocket();
-  assistantConnectionState.value = "connecting";
+const scheduleAssistantSessionPolling = (
+  sessionId: string,
+  delay = ASSISTANT_SESSION_POLL_INTERVAL_MS,
+) => {
+  clearAssistantSessionPolling();
 
-  const socket = new WebSocket(buildWorkflowEditSessionWsUrl(sessionId));
-  assistantSessionSocket = socket;
+  if (!isAiMode.value || assistantSession.value?.sessionId !== sessionId) {
+    return;
+  }
 
-  socket.onopen = () => {
-    assistantConnectionState.value = "connected";
+  assistantSessionPollTimer = window.setTimeout(() => {
+    assistantSessionPollTimer = null;
+    void refreshAssistantSessionPreview(sessionId, {
+      silent: true,
+    });
+  }, delay);
+};
+
+const refreshAssistantSessionPreview = async (
+  sessionId: string,
+  options: {
+    silent?: boolean;
+  } = {},
+) => {
+  if (assistantSessionPollInFlight) {
+    return;
+  }
+
+  assistantSessionPollInFlight = true;
+
+  try {
+    const session = await fetchWorkflowEditSession(sessionId);
+
+    if (assistantSession.value?.sessionId !== sessionId) {
+      return;
+    }
+
+    assistantSession.value = session;
+    applyAssistantSessionPreview(session);
     assistantSessionError.value = "";
-  };
-
-  socket.onmessage = (event) => {
-    try {
-      const payload = JSON.parse(event.data) as WorkflowEditSessionEvent;
-
-      if (!payload.session) {
-        return;
-      }
-
-      assistantSession.value = payload.session;
-      applyAssistantSessionPreview(payload.session);
-    } catch {
-      assistantSessionError.value = "AI 会话更新解析失败";
-    }
-  };
-
-  socket.onerror = () => {
-    assistantSessionError.value = "AI 会话连接异常";
-  };
-
-  socket.onclose = () => {
-    if (assistantSessionSocket === socket) {
-      assistantSessionSocket = null;
+    assistantConnectionState.value = "polling";
+  } catch (error) {
+    if (assistantSession.value?.sessionId !== sessionId) {
+      return;
     }
 
-    assistantConnectionState.value = hasAssistantSession.value
-      ? "disconnected"
-      : "idle";
-  };
+    assistantSessionError.value =
+      error instanceof Error ? error.message : "拉取 AI 会话预览失败";
+
+    if (!options.silent) {
+      toast.error(assistantSessionError.value);
+    }
+  } finally {
+    assistantSessionPollInFlight = false;
+
+    if (
+      isAiMode.value &&
+      assistantSession.value?.sessionId === sessionId &&
+      assistantConnectionState.value === "polling"
+    ) {
+      scheduleAssistantSessionPolling(sessionId);
+    }
+  }
 };
 
 const resetAssistantSession = () => {
-  closeAssistantSessionSocket();
+  clearAssistantSessionPolling();
   assistantSession.value = null;
   assistantSessionError.value = "";
   assistantConnectionState.value = "idle";
@@ -1747,7 +1774,7 @@ const handleTabChange = (value: string | number) => {
 const handlePageModeChange = (mode: WorkflowPageMode) => {
   if (mode === "edit") {
     resetRunSession();
-    closeAssistantSessionSocket();
+    clearAssistantSessionPolling();
 
     if (getRouteRunId(route.query.runId)) {
       void clearRouteRunId(workflowMeta.id);
@@ -1755,7 +1782,7 @@ const handlePageModeChange = (mode: WorkflowPageMode) => {
   }
 
   if (mode === "run") {
-    closeAssistantSessionSocket();
+    clearAssistantSessionPolling();
   }
 
   pageMode.value = mode;
@@ -2683,7 +2710,7 @@ onPaneReady(() => {
 });
 
 onBeforeUnmount(() => {
-  closeAssistantSessionSocket();
+  clearAssistantSessionPolling();
   clearRunSummaryPolling();
   window.removeEventListener("keydown", handleWindowKeydown);
 });

@@ -122,6 +122,27 @@ export const updateWorkflowEditSession = async (
   );
 };
 
+export const fetchWorkflowEditSession = async (
+  sessionId: string,
+): Promise<WorkflowEditSession> => {
+  let response: Response;
+
+  try {
+    response = await sendRequest(
+      `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}`,
+    );
+  } catch {
+    throw new SessionRequestError(
+      "Runner 服务不可达，请确认本地 runner 已启动",
+    );
+  }
+
+  return parseSessionResponse<WorkflowEditSession>(
+    response,
+    "获取 AI 编辑会话失败",
+  );
+};
+
 export const buildWorkflowEditSessionWsUrl = (sessionId: string) => {
   const path = `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}/ws`;
 

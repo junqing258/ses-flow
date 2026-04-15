@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Position } from "@vue-flow/core";
 
 import {
   createNewWorkflowEditorState,
@@ -100,8 +101,8 @@ describe("workflow persistence", () => {
       id: "webhook_trigger",
       type: "workflow-card" as const,
       position: { x: 192, y: 176 },
-      sourcePosition: "right" as const,
-      targetPosition: "left" as const,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       data: {
         accent: "#6366F1",
         icon: "webhook" as const,
