@@ -17,7 +17,7 @@
     <div
       class="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 sm:px-8 lg:px-12"
     >
-      <header class="flex items-center justify-between">
+      <header class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <div
             class="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/80 bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
@@ -36,11 +36,21 @@
           </div>
         </div>
 
-        <div
-          class="hidden rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:flex"
-        >
-          {{ workflowSummaries.length }} workflows ·
-          {{ templateWorkflows.length }} templates
+        <div class="flex items-center gap-3">
+          <Button
+            variant="outline"
+            class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+            @click="openHelp"
+          >
+            <BookOpen class="h-4 w-4" />
+            帮助文档
+          </Button>
+          <div
+            class="hidden rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:flex"
+          >
+            {{ workflowSummaries.length }} workflows ·
+            {{ templateWorkflows.length }} templates
+          </div>
         </div>
       </header>
 
@@ -259,6 +269,7 @@
 import dayjs from "dayjs";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import {
+  BookOpen,
   Clock3,
   GitBranchPlus,
   LoaderCircle,
@@ -426,6 +437,10 @@ onBeforeUnmount(() => {
 
 const handleCreate = () => {
   void router.push({ name: "workflow-new" });
+};
+
+const openHelp = () => {
+  void router.push({ path: "/help" });
 };
 
 const openWorkflow = (workflowId: string) => {

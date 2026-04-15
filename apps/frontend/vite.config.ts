@@ -2,6 +2,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { codeInspectorPlugin } from "code-inspector-plugin";
+import Markdown from "unplugin-vue-markdown/vite";
 import { defineConfig } from "vite";
 import Pages from "vite-plugin-pages";
 
@@ -11,11 +12,21 @@ export default defineConfig(() => {
   return {
     plugins: [
       tailwindcss(),
-      vue(),
+      vue({
+        include: [/\.vue$/, /\.md$/],
+      }),
       Pages({
         dirs: [{ dir: "src/routes", baseRoute: "" }],
-        exclude: ['**/component(s)?/**/*.(vue|ts|tsx)', '**/component(s)?/*.(vue|ts|tsx)'],
-        extensions: ['vue', 'tsx'],
+        exclude: ['**/component(s)?/**/*.(vue|ts|tsx|md)', '**/component(s)?/*.(vue|ts|tsx|md)'],
+        extensions: ['vue', 'tsx', 'md'],
+      }),
+      Markdown({
+        markdownOptions: {
+          html: true,
+          linkify: true,
+          typographer: true,
+        },
+        wrapperClasses: "app-markdown",
       }),
       ...(!isVitest
         ? [

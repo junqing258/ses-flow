@@ -5,6 +5,7 @@
 @import "@vue-flow/minimap/dist/style.css";
 
 @plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -205,6 +206,100 @@ body,
 .tool-action-btn.btn-brand .tool-dot.queue,
 .tool-action-btn.btn-brand .tool-dot.waiting {
   background: currentColor;
+}
+
+.app-markdown {
+  @apply prose prose-slate max-w-none;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 40px 24px 72px;
+  color: var(--text);
+}
+
+.app-markdown > :first-child {
+  margin-top: 0;
+}
+
+.app-markdown h1,
+.app-markdown h2,
+.app-markdown h3,
+.app-markdown h4,
+.app-markdown h5,
+.app-markdown h6 {
+  color: var(--app-primary);
+  letter-spacing: -0.02em;
+}
+
+.app-markdown p,
+.app-markdown li {
+  line-height: 1.75;
+}
+
+.app-markdown a {
+  color: var(--info);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.app-markdown a:hover {
+  color: #1e40af;
+}
+
+.app-markdown code:not(pre code) {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 72%);
+  padding: 0.15rem 0.4rem;
+  font-family: "IBM Plex Mono", "SFMono-Regular", "SF Mono", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.app-markdown pre {
+  overflow-x: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 1rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1rem 1.125rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-markdown pre code {
+  color: inherit;
+}
+
+.app-markdown blockquote {
+  border-left: 4px solid var(--accent);
+  background: rgb(255 255 255 / 56%);
+  color: var(--app-muted);
+  padding: 0.875rem 1rem;
+}
+
+.app-markdown table {
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-markdown th,
+.app-markdown td {
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.app-markdown th {
+  background: rgb(248 250 252 / 92%);
+}
+
+.app-markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .app-markdown {
+    padding: 24px 16px 56px;
+  }
 }
 
 .tool-dot {
