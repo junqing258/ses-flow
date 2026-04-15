@@ -13,6 +13,7 @@ DEPLOY_IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEA
 DEPLOY_VITE_RUNNER_BASE_URL="${DEPLOY_VITE_RUNNER_BASE_URL:-/runner-api}"
 DEPLOY_IMAGE_REF="${DEPLOY_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
+DEPLOY_DEBUG="${DEPLOY_DEBUG:-0}"
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<EOF
@@ -30,11 +31,16 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   DEPLOY_IMAGE_TAG             Docker 镜像标签。默认：当前 git 短 SHA
   DEPLOY_VITE_RUNNER_BASE_URL  前端构建参数。默认：/runner-api
   DEPLOY_PLATFORM              目标镜像平台。为空时自动从远端主机探测
+  DEPLOY_DEBUG                 输出调试信息。1 表示开启
 
 示例：
   DEPLOY_SSH_TARGET=root@192.168.110.45 scripts/deploy-runner-ssh.sh
 EOF
   exit 0
+fi
+
+if [[ "$DEPLOY_DEBUG" == "1" ]]; then
+  set -x
 fi
 
 require_command() {
@@ -51,6 +57,26 @@ require_file() {
     echo "缺少必需文件：$path" >&2
     exit 1
   fi
+}
+
+log_step() {
+  printf '%s\n' "==> $1"
+}
+
+debug_log() {
+  if [[ "$DEPLOY_DEBUG" == "1" ]]; then
+    printf '%s\n' "[debug] $1"
+  fi
+}
+
+quote_for_remote_sh() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+remote_sh() {
+  local cmd="$1"
+  debug_log "远端执行：$cmd"
+  ssh "$DEPLOY_SSH_TARGET" "sh -lc $(quote_for_remote_sh "$cmd")"
 }
 
 require_command docker
@@ -78,9 +104,14 @@ trap cleanup EXIT
 
 grep -v '^RUNNER_IMAGE=' "$DEPLOY_ENV_FILE" > "$tmp_env_file" || true
 printf '\nRUNNER_IMAGE=%s\n' "$DEPLOY_IMAGE_REF" >> "$tmp_env_file"
+debug_log "使用环境变量文件：$DEPLOY_ENV_FILE"
+debug_log "临时环境变量文件：$tmp_env_file"
+debug_log "远端部署目录：$DEPLOY_REMOTE_DIR"
+debug_log "镜像引用：$DEPLOY_IMAGE_REF"
 
-echo "==> 检查远端 Docker Compose 支持：$DEPLOY_SSH_TARGET"
-ssh "$DEPLOY_SSH_TARGET" "docker compose version >/dev/null"
+log_step "检查远端 Docker Compose 支持：$DEPLOY_SSH_TARGET"
+remote_sh "docker compose version >/dev/null"
+remote_sh "docker image load --help >/dev/null"
 
 detect_platform() {
   local remote_arch="$1"
@@ -98,19 +129,19 @@ detect_platform() {
 }
 
 if [[ -z "$DEPLOY_PLATFORM" ]]; then
-  remote_arch="$(ssh "$DEPLOY_SSH_TARGET" "uname -m")"
+  remote_arch="$(remote_sh "uname -m")"
   DEPLOY_PLATFORM="$(detect_platform "$remote_arch")"
   if [[ -z "$DEPLOY_PLATFORM" ]]; then
     echo "暂不支持的远端架构：$remote_arch" >&2
     echo "请手动设置 DEPLOY_PLATFORM，例如 linux/amd64 或 linux/arm64。" >&2
     exit 1
   fi
-  echo "==> 自动识别远端架构：$remote_arch -> $DEPLOY_PLATFORM"
+  log_step "自动识别远端架构：$remote_arch -> $DEPLOY_PLATFORM"
 else
-  echo "==> 使用手动指定的平台：$DEPLOY_PLATFORM"
+  log_step "使用手动指定的平台：$DEPLOY_PLATFORM"
 fi
 
-echo "==> 本地构建镜像：$DEPLOY_IMAGE_REF ($DEPLOY_PLATFORM)"
+log_step "本地构建镜像：$DEPLOY_IMAGE_REF ($DEPLOY_PLATFORM)"
 docker buildx build \
   --load \
   --platform "$DEPLOY_PLATFORM" \
@@ -119,26 +150,20 @@ docker buildx build \
   --build-arg "VITE_RUNNER_BASE_URL=$DEPLOY_VITE_RUNNER_BASE_URL" \
   "$ROOT_DIR"
 
-echo "==> 准备远端目录：$DEPLOY_REMOTE_DIR"
-ssh "$DEPLOY_SSH_TARGET" "mkdir -p '$DEPLOY_REMOTE_DIR'"
+log_step "准备远端目录：$DEPLOY_REMOTE_DIR"
+remote_sh "mkdir -p $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")"
 
-echo "==> 上传部署文件"
+log_step "上传部署文件"
 scp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/docker-compose.remote.yml"
 scp "$tmp_env_file" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/.env"
 
-echo "==> 传输镜像到远端主机"
-docker save "$DEPLOY_IMAGE_REF" | gzip | ssh "$DEPLOY_SSH_TARGET" "gunzip | docker load"
+log_step "传输镜像到远端主机"
+docker save "$DEPLOY_IMAGE_REF" | gzip | remote_sh "gunzip | docker load"
 
-echo "==> 重启远端服务"
-ssh "$DEPLOY_SSH_TARGET" "
-  cd '$DEPLOY_REMOTE_DIR' && \
-  docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate
-"
+log_step "重启远端服务"
+remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate"
 
-echo "==> 查看远端服务状态"
-ssh "$DEPLOY_SSH_TARGET" "
-  cd '$DEPLOY_REMOTE_DIR' && \
-  docker compose -f docker-compose.remote.yml --env-file .env ps
-"
+log_step "查看远端服务状态"
+remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env ps"
 
-echo "部署完成：$DEPLOY_IMAGE_REF -> $DEPLOY_SSH_TARGET"
+printf '%s\n' "部署完成：$DEPLOY_IMAGE_REF -> $DEPLOY_SSH_TARGET"

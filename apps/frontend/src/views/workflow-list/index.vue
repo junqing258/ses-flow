@@ -345,7 +345,7 @@ const draftWorkflows = computed<WorkflowListItem[]>(() =>
 );
 
 const templateWorkflows: WorkflowTemplateItem[] = [
-  {
+  /* {
     id: "template-chat-agent",
     name: "Chat agent starter",
     description:
@@ -353,7 +353,7 @@ const templateWorkflows: WorkflowTemplateItem[] = [
     category: "Conversation",
     icon: Wand2,
     iconClass: "bg-[#dbeafe]",
-  },
+  }, */
   {
     id: "template-webhook-ops",
     name: "Webhook automation",
