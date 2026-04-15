@@ -24,6 +24,7 @@ use crate::store::{
     WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
     WorkflowSummaryRecord, WorkspaceRecord,
 };
+use super::{WorkflowEventStream, WorkflowEventStreams};
 
 #[derive(Debug, Error)]
 pub enum ServerError {
@@ -54,6 +55,7 @@ pub struct WorkflowServer {
     catalog: Arc<dyn WorkflowCatalogStore>,
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     run_registry: RunRegistry,
+    events: WorkflowEventStreams,
 }
 
 impl WorkflowServer {
@@ -104,9 +106,11 @@ impl WorkflowServer {
     ) -> Self {
         debug!("initializing workflow server with custom store and catalog");
         let run_registry = RunRegistry::default();
+        let events = WorkflowEventStreams::default();
         let observer = Arc::new(PersistingRunObserver {
             store: store.clone(),
             run_registry: run_registry.clone(),
+            events: events.clone(),
         });
         let controller = Arc::new(ServerRunController {
             run_registry: run_registry.clone(),
@@ -126,6 +130,7 @@ impl WorkflowServer {
             catalog,
             edit_sessions,
             run_registry,
+            events,
         }
     }
 
@@ -209,6 +214,7 @@ impl WorkflowServer {
         };
 
         self.edit_sessions.save_session(&session)?;
+        self.events.publish_session_changed(&session);
         Ok(session)
     }
 
@@ -247,6 +253,7 @@ impl WorkflowServer {
         };
 
         self.edit_sessions.save_session(&session)?;
+        self.events.publish_session_changed(&session);
         Ok(session)
     }
 
@@ -306,6 +313,18 @@ impl WorkflowServer {
 
     pub fn get_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, ServerError> {
         Ok(self.store.load_summary(run_id)?)
+    }
+
+    pub fn subscribe_run_events(&self, run_id: &str) -> WorkflowEventStream {
+        self.events.subscribe_run(run_id)
+    }
+
+    pub fn subscribe_edit_session_events(&self, session_id: &str) -> WorkflowEventStream {
+        self.events.subscribe_session(session_id)
+    }
+
+    pub fn subscribe_workflow_events(&self, workflow_id: &str) -> WorkflowEventStream {
+        self.events.subscribe_workflow(workflow_id)
     }
 
     pub async fn start_workflow(
@@ -482,10 +501,12 @@ impl WorkflowServer {
     }
 
     fn publish_summary(&self, summary: &WorkflowRunSummary) {
-        persist_summary(self.store.as_ref(), summary);
-        if is_terminal_status(&summary.status) {
-            self.run_registry.finish(&summary.run_id);
-        }
+        persist_summary_and_publish_events(
+            self.store.as_ref(),
+            &self.run_registry,
+            &self.events,
+            summary,
+        );
     }
 
     fn to_workflow_summary(
@@ -612,14 +633,17 @@ impl WorkflowRunController for ServerRunController {
 struct PersistingRunObserver {
     store: Arc<dyn WorkflowRunStore>,
     run_registry: RunRegistry,
+    events: WorkflowEventStreams,
 }
 
 impl WorkflowRunObserver for PersistingRunObserver {
     fn on_summary(&self, summary: &WorkflowRunSummary) {
-        persist_summary(self.store.as_ref(), summary);
-        if is_terminal_status(&summary.status) {
-            self.run_registry.finish(&summary.run_id);
-        }
+        persist_summary_and_publish_events(
+            self.store.as_ref(),
+            &self.run_registry,
+            &self.events,
+            summary,
+        );
     }
 }
 
@@ -646,6 +670,26 @@ fn persist_summary(store: &dyn WorkflowRunStore, summary: &WorkflowRunSummary) {
 
     if let Err(error) = persistence_result {
         warn!(run_id = %summary.run_id, error = %error, "failed to persist workflow summary");
+    }
+}
+
+fn persist_summary_and_publish_events(
+    store: &dyn WorkflowRunStore,
+    run_registry: &RunRegistry,
+    events: &WorkflowEventStreams,
+    summary: &WorkflowRunSummary,
+) {
+    let workflow_id = run_registry.resolve(&summary.run_id);
+
+    persist_summary(store, summary);
+    events.publish_run_changed(summary, workflow_id.as_deref());
+
+    if let Some(workflow_id) = workflow_id.as_deref() {
+        events.publish_workflow_runs_changed(workflow_id, summary);
+    }
+
+    if is_terminal_status(&summary.status) {
+        run_registry.finish(&summary.run_id);
     }
 }
 

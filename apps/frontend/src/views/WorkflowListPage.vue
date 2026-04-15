@@ -181,6 +181,11 @@
                     >
                       <LoaderCircle class="h-3.5 w-3.5" />
                       查看运行
+                      <span
+                        class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+                      >
+                        {{ workflow.runningRunCount }}
+                      </span>
                     </Button>
                   </div>
                 </article>
@@ -252,7 +257,7 @@
 
 <script setup lang="ts">
 import dayjs from "dayjs";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   Clock3,
   GitBranchPlus,
@@ -268,10 +273,12 @@ import { toast } from "vue-sonner";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { subscribeWorkflowEvents } from "@/features/workflow/live";
 import {
   fetchWorkflowList,
   type WorkflowSummary,
 } from "@/features/workflow/api";
+import type { EventSourceSubscription } from "@/lib/sse";
 
 type WorkflowTabId = "drafts" | "templates";
 
@@ -303,6 +310,8 @@ const workflowSummaries = ref<WorkflowSummary[]>([]);
 const isLoadingWorkflows = ref(false);
 const isRunListOpen = ref(false);
 const selectedWorkflowForRuns = ref<WorkflowListItem | null>(null);
+const workflowEventSubscriptions = new Map<string, EventSourceSubscription>();
+let workflowListRefreshQueued = false;
 
 const draftWorkflows = computed<WorkflowListItem[]>(() =>
   workflowSummaries.value.map((workflow, index) => ({
@@ -354,20 +363,89 @@ const templateWorkflows: WorkflowTemplateItem[] = [
   },
 ];
 
-const loadWorkflowList = async () => {
+const closeWorkflowEventSubscriptions = () => {
+  workflowEventSubscriptions.forEach((subscription) => subscription.close());
+  workflowEventSubscriptions.clear();
+};
+
+const syncWorkflowEventSubscriptions = (workflowIds: string[]) => {
+  const nextIds = new Set(workflowIds);
+
+  workflowEventSubscriptions.forEach((subscription, workflowId) => {
+    if (nextIds.has(workflowId)) {
+      return;
+    }
+
+    subscription.close();
+    workflowEventSubscriptions.delete(workflowId);
+  });
+
+  workflowIds.forEach((workflowId) => {
+    if (workflowEventSubscriptions.has(workflowId)) {
+      return;
+    }
+
+    const subscription = subscribeWorkflowEvents(workflowId, {
+      onEvent: (notification) => {
+        if (notification.eventType === "stream.connected") {
+          return;
+        }
+
+        void loadWorkflowList({ silent: true });
+      },
+      onError: () => {
+        void loadWorkflowList({ silent: true });
+      },
+    });
+
+    if (subscription) {
+      workflowEventSubscriptions.set(workflowId, subscription);
+    }
+  });
+};
+
+const loadWorkflowList = async (
+  options: {
+    silent?: boolean;
+  } = {},
+) => {
+  if (isLoadingWorkflows.value) {
+    workflowListRefreshQueued = true;
+    return;
+  }
+
   isLoadingWorkflows.value = true;
 
   try {
     workflowSummaries.value = await fetchWorkflowList();
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : "加载工作流列表失败");
+    if (!options.silent) {
+      toast.error(error instanceof Error ? error.message : "加载工作流列表失败");
+    }
   } finally {
     isLoadingWorkflows.value = false;
+
+    if (workflowListRefreshQueued) {
+      workflowListRefreshQueued = false;
+      void loadWorkflowList({ silent: true });
+    }
   }
 };
 
 onMounted(() => {
   void loadWorkflowList();
+});
+
+watch(
+  () => workflowSummaries.value.map((workflow) => workflow.workflowId),
+  (workflowIds) => {
+    syncWorkflowEventSubscriptions(workflowIds);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  closeWorkflowEventSubscriptions();
 });
 
 const handleCreate = () => {

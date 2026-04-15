@@ -76,7 +76,7 @@
 
 <script setup lang="ts">
 import dayjs from "dayjs";
-import { ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 
 import {
@@ -87,9 +87,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  subscribeWorkflowEvents,
+  type WorkflowStreamNotification,
+} from "@/features/workflow/live";
+import {
   fetchWorkflowRuns,
   type WorkflowRunListItem,
 } from "@/features/workflow/api";
+import type { EventSourceSubscription } from "@/lib/sse";
 
 const props = defineProps<{
   open: boolean;
@@ -104,11 +109,40 @@ const emit = defineEmits<{
 
 const isLoading = ref(false);
 const workflowRuns = ref<WorkflowRunListItem[]>([]);
+let workflowEventSubscription: EventSourceSubscription | null = null;
+let loadQueued = false;
+let latestLoadRequestId = 0;
+
+const closeWorkflowEventSubscription = () => {
+  workflowEventSubscription?.close();
+  workflowEventSubscription = null;
+};
+
+const startWorkflowEventSubscription = (workflowId: string) => {
+  closeWorkflowEventSubscription();
+
+  workflowEventSubscription = subscribeWorkflowEvents(workflowId, {
+    onEvent: (notification: WorkflowStreamNotification) => {
+      if (
+        notification.eventType === "stream.connected" ||
+        notification.workflowId !== workflowId
+      ) {
+        return;
+      }
+
+      void loadWorkflowRuns({ silent: true });
+    },
+    onError: () => {
+      void loadWorkflowRuns({ silent: true });
+    },
+  });
+};
 
 const handleOpenChange = (nextOpen: boolean) => {
   emit("update:open", nextOpen);
 
   if (!nextOpen) {
+    closeWorkflowEventSubscription();
     workflowRuns.value = [];
   }
 };
@@ -123,22 +157,48 @@ const formatRunStatusLabel = (status: WorkflowRunListItem["status"]) => {
 
 const formatRunTime = (value: string) => dayjs(value).format("MMM D · HH:mm:ss");
 
-const loadWorkflowRuns = async () => {
+const loadWorkflowRuns = async (
+  options: {
+    silent?: boolean;
+  } = {},
+) => {
   if (!props.workflowId) {
     workflowRuns.value = [];
     return;
   }
 
+  if (isLoading.value) {
+    loadQueued = true;
+    return;
+  }
+
   isLoading.value = true;
-  workflowRuns.value = [];
+  const requestId = ++latestLoadRequestId;
+
+  if (!options.silent) {
+    workflowRuns.value = [];
+  }
 
   try {
-    workflowRuns.value = await fetchWorkflowRuns(props.workflowId);
+    const runs = await fetchWorkflowRuns(props.workflowId);
+
+    if (requestId !== latestLoadRequestId) {
+      return;
+    }
+
+    workflowRuns.value = runs;
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : "加载运行列表失败");
-    emit("update:open", false);
+    if (!options.silent) {
+      toast.error(error instanceof Error ? error.message : "加载运行列表失败");
+      emit("update:open", false);
+    }
   } finally {
     isLoading.value = false;
+
+    if (loadQueued) {
+      loadQueued = false;
+      void loadWorkflowRuns({ silent: true });
+    }
   }
 };
 
@@ -153,13 +213,19 @@ watch(
     const [previousOpen, previousWorkflowId] = previousValue ?? [false, ""] as const;
 
     if (!open || !workflowId) {
+      closeWorkflowEventSubscription();
       return;
     }
 
     if (!previousOpen || workflowId !== previousWorkflowId) {
       void loadWorkflowRuns();
+      startWorkflowEventSubscription(workflowId);
     }
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  closeWorkflowEventSubscription();
+});
 </script>

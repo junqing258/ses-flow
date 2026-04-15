@@ -29,12 +29,15 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/health", get(health))
         .route("/workflows", get(list_workflows).post(upload_workflow))
         .route("/workflows/{workflow_id}", get(get_workflow))
+        .route("/workflows/{workflow_id}/events", get(subscribe_workflow_events))
         .route("/workflows/{workflow_id}/runs", get(list_workflow_runs))
         .route("/workflows/{workflow_id}/run", post(execute_workflow))
         .route("/edit-sessions", post(create_edit_session))
         .route("/edit-sessions/{session_id}", get(get_edit_session))
+        .route("/edit-sessions/{session_id}/events", get(subscribe_edit_session_events))
         .route("/edit-sessions/{session_id}/draft", put(update_edit_session))
         .route("/runs/{run_id}", get(get_run_summary))
+        .route("/runs/{run_id}/events", get(subscribe_run_events))
         .route("/runs/{run_id}/resume", post(resume_workflow))
         .route("/runs/{run_id}/terminate", post(terminate_workflow))
         .layer(middleware::from_fn(log_http_requests))
@@ -247,6 +250,14 @@ async fn get_edit_session(
     Ok(Json(state.server.get_edit_session(&session_id)?))
 }
 
+async fn subscribe_edit_session_events(
+    State(state): State<ApiState>,
+    Path(session_id): Path<String>,
+) -> Result<crate::server::WorkflowEventStream, ApiError> {
+    state.server.get_edit_session(&session_id)?;
+    Ok(state.server.subscribe_edit_session_events(&session_id))
+}
+
 async fn update_edit_session(
     State(state): State<ApiState>,
     Path(session_id): Path<String>,
@@ -266,6 +277,14 @@ async fn list_workflow_runs(
 ) -> Result<Json<Vec<crate::store::WorkflowRunRecord>>, ApiError> {
     debug!(workflow_id = %workflow_id, "listing workflow runs");
     Ok(Json(state.server.list_workflow_runs(&workflow_id)?))
+}
+
+async fn subscribe_workflow_events(
+    State(state): State<ApiState>,
+    Path(workflow_id): Path<String>,
+) -> Result<crate::server::WorkflowEventStream, ApiError> {
+    state.server.get_workflow(&workflow_id)?;
+    Ok(state.server.subscribe_workflow_events(&workflow_id))
 }
 
 async fn execute_workflow(
@@ -318,6 +337,17 @@ async fn get_run_summary(
         .get_summary(&run_id)?
         .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))?;
     Ok(Json(summary))
+}
+
+async fn subscribe_run_events(
+    State(state): State<ApiState>,
+    Path(run_id): Path<String>,
+) -> Result<crate::server::WorkflowEventStream, ApiError> {
+    state
+        .server
+        .get_summary(&run_id)?
+        .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))?;
+    Ok(state.server.subscribe_run_events(&run_id))
 }
 
 async fn terminate_workflow(

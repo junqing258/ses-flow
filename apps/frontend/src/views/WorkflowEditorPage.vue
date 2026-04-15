@@ -77,6 +77,11 @@
         >
           <LoaderCircle class="h-3.5 w-3.5" />
           查看运行
+          <span
+            class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+          >
+            {{ workflowRunCount }}
+          </span>
         </Button>
       </div>
 
@@ -185,8 +190,10 @@
           <span
             class="rounded-full px-2.5 py-1 text-[11px] font-semibold text-nowrap"
             :class="
-              assistantConnectionState === 'polling'
+              assistantConnectionState === 'live'
                 ? 'bg-sky-50 text-sky-700'
+                : assistantConnectionState === 'reconnecting'
+                  ? 'bg-amber-50 text-amber-700'
                 : 'bg-slate-100 text-slate-600'
             "
             >{{ assistantConnectionLabel }}</span
@@ -235,7 +242,7 @@
           </p>
           <p class="text-[11px] leading-5 text-slate-500">
             Code Agent 可通过 GET 会话接口直接读取最新工作流草稿，Web
-            端也会使用 GET 轮询刷新只读预览。
+            端会通过 SSE 接收更新信号，再按需拉取最新只读预览。
           </p>
         </div>
 
@@ -960,11 +967,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  fetchWorkflowRuns,
   fetchWorkflowDetail,
   type WorkflowDetail,
 } from "@/features/workflow/api";
 import { createWorkflowExportDocument } from "@/features/workflow/export";
 import { createWorkflowEditorStateFromRunnerDefinition } from "@/features/workflow/import";
+import {
+  subscribeWorkflowEditSessionEvents,
+  subscribeWorkflowRunEvents,
+  subscribeWorkflowEvents,
+} from "@/features/workflow/live";
 import {
   createInitialWorkflowEditorState,
   createNewWorkflowEditorState,
@@ -1017,11 +1030,13 @@ import {
   type WorkflowPaletteItem,
   type WorkflowTabId,
 } from "@/features/workflow/model";
+import type { EventSourceSubscription } from "@/lib/sse";
 
 const DRAG_DATA_TYPE = "application/x-ses-workflow-node";
 const HISTORY_LIMIT = 50;
 const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
 const ASSISTANT_SESSION_POLL_INTERVAL_MS = 2000;
+const RUN_SUMMARY_RESYNC_DELAY_MS = 1500;
 
 const route = useRoute();
 const router = useRouter();
@@ -1046,15 +1061,25 @@ const isTerminatingWorkflow = ref(false);
 const isCreatingAssistantSession = ref(false);
 const assistantSession = ref<WorkflowEditSession | null>(null);
 const assistantSessionError = ref("");
-const assistantConnectionState = ref<"idle" | "polling">("idle");
+const assistantConnectionState = ref<
+  "idle" | "connecting" | "live" | "reconnecting"
+>("idle");
 const historyStack = ref<WorkflowEditorSnapshot[]>([]);
 const activeRunSummary = ref<WorkflowRunSummary | null>(null);
 const activeRunId = ref("");
 const activeRunWorkflowId = ref("");
+const workflowRunCount = ref(0);
 const runErrorMessage = ref("");
 let runSummaryPollTimer: number | null = null;
 let assistantSessionPollTimer: number | null = null;
 let assistantSessionPollInFlight = false;
+let runSummaryRefreshInFlight = false;
+let runSummaryRefreshQueued = false;
+let runEventSubscription: EventSourceSubscription | null = null;
+let assistantSessionEventSubscription: EventSourceSubscription | null = null;
+let workflowRunCountSubscription: EventSourceSubscription | null = null;
+let workflowRunCountRefreshInFlight = false;
+let workflowRunCountRefreshQueued = false;
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();
@@ -1155,8 +1180,12 @@ const assistantSessionId = computed(
 );
 const assistantConnectionLabel = computed(() => {
   switch (assistantConnectionState.value) {
-    case "polling":
-      return "轮询中";
+    case "connecting":
+      return "连接中";
+    case "live":
+      return "SSE 已连接";
+    case "reconnecting":
+      return "重连中";
     default:
       return "未启动";
   }
@@ -1382,8 +1411,7 @@ const ensureAssistantSessionForAiMode = async () => {
 
     assistantSession.value = session;
     applyAssistantSessionPreview(session);
-    assistantConnectionState.value = "polling";
-    scheduleAssistantSessionPolling(session.sessionId);
+    ensureAssistantSessionEventStream(session.sessionId);
     toast.success(`AI 编辑会话已创建：${session.sessionId}`);
   } catch (error) {
     assistantSessionError.value =
@@ -1473,6 +1501,11 @@ const clearAssistantSessionPolling = () => {
   }
 };
 
+const closeAssistantSessionEventStream = () => {
+  assistantSessionEventSubscription?.close();
+  assistantSessionEventSubscription = null;
+};
+
 const scheduleAssistantSessionPolling = (
   sessionId: string,
   delay = ASSISTANT_SESSION_POLL_INTERVAL_MS,
@@ -1489,6 +1522,59 @@ const scheduleAssistantSessionPolling = (
       silent: true,
     });
   }, delay);
+};
+
+const ensureAssistantSessionEventStream = (sessionId: string) => {
+  if (!isAiMode.value || assistantSession.value?.sessionId !== sessionId) {
+    return;
+  }
+
+  if (assistantSessionEventSubscription) {
+    return;
+  }
+
+  assistantConnectionState.value =
+    assistantConnectionState.value === "live" ? "live" : "connecting";
+  assistantSessionEventSubscription = subscribeWorkflowEditSessionEvents(
+    sessionId,
+    {
+      onOpen: () => {
+        if (assistantSession.value?.sessionId !== sessionId) {
+          return;
+        }
+
+        clearAssistantSessionPolling();
+        assistantConnectionState.value = "live";
+      },
+      onError: () => {
+        if (assistantSession.value?.sessionId !== sessionId) {
+          return;
+        }
+
+        assistantConnectionState.value = "reconnecting";
+        scheduleAssistantSessionPolling(sessionId);
+      },
+      onEvent: (notification) => {
+        if (assistantSession.value?.sessionId !== sessionId) {
+          return;
+        }
+
+        if (notification.eventType === "stream.connected") {
+          assistantConnectionState.value = "live";
+          return;
+        }
+
+        void refreshAssistantSessionPreview(sessionId, {
+          silent: true,
+        });
+      },
+    },
+  );
+
+  if (!assistantSessionEventSubscription) {
+    assistantConnectionState.value = "idle";
+    scheduleAssistantSessionPolling(sessionId);
+  }
 };
 
 const refreshAssistantSessionPreview = async (
@@ -1513,7 +1599,10 @@ const refreshAssistantSessionPreview = async (
     assistantSession.value = session;
     applyAssistantSessionPreview(session);
     assistantSessionError.value = "";
-    assistantConnectionState.value = "polling";
+    ensureAssistantSessionEventStream(sessionId);
+    if (!assistantSessionEventSubscription) {
+      assistantConnectionState.value = "idle";
+    }
   } catch (error) {
     if (assistantSession.value?.sessionId !== sessionId) {
       return;
@@ -1525,20 +1614,18 @@ const refreshAssistantSessionPreview = async (
     if (!options.silent) {
       toast.error(assistantSessionError.value);
     }
-  } finally {
-    assistantSessionPollInFlight = false;
 
-    if (
-      isAiMode.value &&
-      assistantSession.value?.sessionId === sessionId &&
-      assistantConnectionState.value === "polling"
-    ) {
+    if (isAiMode.value) {
+      assistantConnectionState.value = "reconnecting";
       scheduleAssistantSessionPolling(sessionId);
     }
+  } finally {
+    assistantSessionPollInFlight = false;
   }
 };
 
 const resetAssistantSession = () => {
+  closeAssistantSessionEventStream();
   clearAssistantSessionPolling();
   assistantSession.value = null;
   assistantSessionError.value = "";
@@ -1598,6 +1685,7 @@ const setNodeExecutionStatuses = (summary: WorkflowRunSummary | null) => {
 };
 
 const resetRunSession = () => {
+  closeRunSummaryEventStream();
   clearRunSummaryPolling();
   activeRunSummary.value = null;
   activeRunId.value = "";
@@ -1614,6 +1702,8 @@ const resetToInitialWorkflow = () => {
   workflowMeta.name = DEFAULT_WORKFLOW_ID;
   workflowMeta.status = "draft";
   workflowMeta.version = "v3";
+  workflowRunCount.value = 0;
+  closeWorkflowRunCountEventStream();
   resetAssistantSession();
   resetRunSession();
   applyWorkflowEditorState(nextState);
@@ -1647,20 +1737,26 @@ const clearRouteRunId = async (workflowId: string) => {
 
 const restoreWorkflowRunFromRoute = async (
   workflowId: string,
-  workflow: WorkflowDetail,
+  expectedWorkflowKey: string,
+  expectedWorkflowVersion: number,
   requestedRunId: string,
 ) => {
   try {
     const summary = await fetchWorkflowRunSummary(requestedRunId);
 
     if (
-      summary.workflowKey !== workflow.workflow.meta.key ||
-      summary.workflowVersion !== workflow.workflow.meta.version
+      summary.workflowKey !== expectedWorkflowKey ||
+      summary.workflowVersion !== expectedWorkflowVersion
     ) {
       resetRunSession();
       toast.error("该运行记录不属于当前工作流");
       await clearRouteRunId(workflowId);
       return;
+    }
+
+    if (activeRunId.value && activeRunId.value !== summary.runId) {
+      closeRunSummaryEventStream();
+      clearRunSummaryPolling();
     }
 
     activeRunWorkflowId.value = workflowId;
@@ -1673,10 +1769,12 @@ const restoreWorkflowRunFromRoute = async (
     selectRunFocusedNode(summary);
 
     if (shouldPollWorkflowRunSummary(summary.status)) {
-      await refreshRunSummary();
+      ensureRunSummaryEventStream(summary.runId);
+      await refreshRunSummary({ silent: true });
       return;
     }
 
+    closeRunSummaryEventStream();
     clearRunSummaryPolling();
   } catch (error) {
     resetRunSession();
@@ -1711,10 +1809,18 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
     workflowMeta.name = workflow.name;
     workflowMeta.status = workflow.status;
     workflowMeta.version = workflow.version;
+    workflowRunCount.value = workflow.runningRunCount;
+    closeWorkflowRunCountEventStream();
+    ensureWorkflowRunCountEventStream(workflow.workflowId);
     applyWorkflowEditorState(state);
 
     if (requestedRunId) {
-      await restoreWorkflowRunFromRoute(workflowId, workflow, requestedRunId);
+      await restoreWorkflowRunFromRoute(
+        workflowId,
+        workflow.workflow.meta.key,
+        workflow.workflow.meta.version,
+        requestedRunId,
+      );
       return;
     }
 
@@ -1746,6 +1852,7 @@ const handleTabChange = (value: string | number) => {
 const handlePageModeChange = (mode: WorkflowPageMode) => {
   if (mode === "edit") {
     resetRunSession();
+    closeAssistantSessionEventStream();
     clearAssistantSessionPolling();
 
     if (getRouteRunId(route.query.runId)) {
@@ -1754,6 +1861,7 @@ const handlePageModeChange = (mode: WorkflowPageMode) => {
   }
 
   if (mode === "run") {
+    closeAssistantSessionEventStream();
     clearAssistantSessionPolling();
   }
 
@@ -1789,6 +1897,29 @@ watch(
     resetToInitialWorkflow();
   },
   { immediate: true },
+);
+
+watch(
+  () => getRouteRunId(route.query.runId),
+  async (requestedRunId, previousRunId) => {
+    if (
+      route.name !== "workflow-editor" ||
+      typeof route.params.id !== "string" ||
+      !requestedRunId ||
+      requestedRunId === previousRunId ||
+      isLoadingWorkflow.value ||
+      workflowMeta.id !== route.params.id
+    ) {
+      return;
+    }
+
+    await restoreWorkflowRunFromRoute(
+      route.params.id,
+      runnerWorkflowPreview.value.meta.key,
+      runnerWorkflowPreview.value.meta.version,
+      requestedRunId,
+    );
+  },
 );
 
 const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
@@ -2372,6 +2503,140 @@ const clearRunSummaryPolling = () => {
   }
 };
 
+const closeWorkflowRunCountEventStream = () => {
+  workflowRunCountSubscription?.close();
+  workflowRunCountSubscription = null;
+};
+
+const refreshWorkflowRunCount = async (
+  workflowId: string,
+  options: {
+    silent?: boolean;
+  } = {},
+) => {
+  if (workflowRunCountRefreshInFlight) {
+    workflowRunCountRefreshQueued = true;
+    return;
+  }
+
+  workflowRunCountRefreshInFlight = true;
+
+  try {
+    const runs = await fetchWorkflowRuns(workflowId);
+
+    if (persistedWorkflowId.value !== workflowId) {
+      return;
+    }
+
+    workflowRunCount.value = runs.length;
+  } catch (error) {
+    if (!options.silent) {
+      toast.error(error instanceof Error ? error.message : "获取运行数量失败");
+    }
+  } finally {
+    workflowRunCountRefreshInFlight = false;
+
+    if (workflowRunCountRefreshQueued) {
+      workflowRunCountRefreshQueued = false;
+      void refreshWorkflowRunCount(workflowId, { silent: true });
+    }
+  }
+};
+
+const ensureWorkflowRunCountEventStream = (workflowId: string) => {
+  if (!workflowId) {
+    return;
+  }
+
+  if (workflowRunCountSubscription) {
+    return;
+  }
+
+  workflowRunCountSubscription = subscribeWorkflowEvents(workflowId, {
+    onEvent: (notification) => {
+      if (
+        notification.eventType === "stream.connected" ||
+        persistedWorkflowId.value !== workflowId
+      ) {
+        return;
+      }
+
+      void refreshWorkflowRunCount(workflowId, { silent: true });
+    },
+    onError: () => {
+      if (persistedWorkflowId.value !== workflowId) {
+        return;
+      }
+
+      void refreshWorkflowRunCount(workflowId, { silent: true });
+    },
+  });
+};
+
+const closeRunSummaryEventStream = () => {
+  runEventSubscription?.close();
+  runEventSubscription = null;
+};
+
+const scheduleRunSummaryResync = (
+  runId: string,
+  delay = RUN_SUMMARY_RESYNC_DELAY_MS,
+) => {
+  clearRunSummaryPolling();
+
+  if (!activeRunId.value || activeRunId.value !== runId) {
+    return;
+  }
+
+  runSummaryPollTimer = window.setTimeout(() => {
+    runSummaryPollTimer = null;
+    void refreshRunSummary({ silent: true });
+  }, delay);
+};
+
+const ensureRunSummaryEventStream = (runId: string) => {
+  if (!activeRunId.value || activeRunId.value !== runId) {
+    return;
+  }
+
+  if (runEventSubscription) {
+    return;
+  }
+
+  runEventSubscription = subscribeWorkflowRunEvents(runId, {
+    onOpen: () => {
+      if (activeRunId.value !== runId) {
+        return;
+      }
+
+      clearRunSummaryPolling();
+    },
+    onError: () => {
+      if (activeRunId.value !== runId) {
+        return;
+      }
+
+      scheduleRunSummaryResync(runId);
+    },
+    onEvent: (notification) => {
+      if (activeRunId.value !== runId) {
+        return;
+      }
+
+      if (notification.eventType === "stream.connected") {
+        clearRunSummaryPolling();
+        return;
+      }
+
+      void refreshRunSummary({ silent: true });
+    },
+  });
+
+  if (!runEventSubscription) {
+    scheduleRunSummaryResync(runId);
+  }
+};
+
 const selectRunFocusedNode = (summary: WorkflowRunSummary) => {
   const candidateNodeId =
     summary.currentNodeId ??
@@ -2385,13 +2650,29 @@ const selectRunFocusedNode = (summary: WorkflowRunSummary) => {
   }
 };
 
-const refreshRunSummary = async () => {
+const refreshRunSummary = async (
+  _options: {
+    silent?: boolean;
+  } = {},
+) => {
   if (!activeRunId.value) {
     return;
   }
 
+  if (runSummaryRefreshInFlight) {
+    runSummaryRefreshQueued = true;
+    return;
+  }
+
+  const runId = activeRunId.value;
+  runSummaryRefreshInFlight = true;
+
   try {
-    const summary = await fetchWorkflowRunSummary(activeRunId.value);
+    const summary = await fetchWorkflowRunSummary(runId);
+
+    if (activeRunId.value !== runId) {
+      return;
+    }
 
     activeRunSummary.value = summary;
     runErrorMessage.value = "";
@@ -2399,20 +2680,30 @@ const refreshRunSummary = async () => {
     selectRunFocusedNode(summary);
 
     if (shouldPollWorkflowRunSummary(summary.status)) {
+      ensureRunSummaryEventStream(runId);
       clearRunSummaryPolling();
-      runSummaryPollTimer = window.setTimeout(() => {
-        void refreshRunSummary();
-      }, 1200);
       return;
     }
 
     isTerminatingWorkflow.value = false;
+    closeRunSummaryEventStream();
     clearRunSummaryPolling();
   } catch (error) {
+    if (activeRunId.value !== runId) {
+      return;
+    }
+
     isTerminatingWorkflow.value = false;
-    clearRunSummaryPolling();
+    scheduleRunSummaryResync(runId);
     runErrorMessage.value =
       error instanceof Error ? error.message : "获取运行状态失败";
+  } finally {
+    runSummaryRefreshInFlight = false;
+
+    if (runSummaryRefreshQueued) {
+      runSummaryRefreshQueued = false;
+      void refreshRunSummary({ silent: true });
+    }
   }
 };
 
@@ -2444,6 +2735,7 @@ const handleTerminateRun = async () => {
 
     if (summary.status === "terminated") {
       isTerminatingWorkflow.value = false;
+      closeRunSummaryEventStream();
       clearRunSummaryPolling();
       toast.success(`运行已终止：${summary.runId}`);
       return;
@@ -2504,6 +2796,8 @@ const handleRunWorkflow = async () => {
 
     workflowMeta.id = registration.workflowId;
     activeRunWorkflowId.value = registration.workflowId;
+    closeRunSummaryEventStream();
+    clearRunSummaryPolling();
     activeRunId.value = execution.runId;
     activeRunSummary.value = {
       currentNodeId: undefined,
@@ -2697,6 +2991,9 @@ onPaneReady(() => {
 });
 
 onBeforeUnmount(() => {
+  closeAssistantSessionEventStream();
+  closeWorkflowRunCountEventStream();
+  closeRunSummaryEventStream();
   clearAssistantSessionPolling();
   clearRunSummaryPolling();
   window.removeEventListener("keydown", handleWindowKeydown);
