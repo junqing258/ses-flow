@@ -17,12 +17,6 @@ export interface WorkflowEditSession {
   workspaceId: string;
 }
 
-export interface WorkflowEditSessionEvent {
-  eventType: "created" | "snapshot" | "updated";
-  session: WorkflowEditSession;
-  sessionId: string;
-}
-
 export interface WorkflowEditSessionRequest {
   editorDocument?: PersistedWorkflowDocument;
   workflow: RunnerWorkflowDefinition;
@@ -141,15 +135,4 @@ export const fetchWorkflowEditSession = async (
     response,
     "获取 AI 编辑会话失败",
   );
-};
-
-export const buildWorkflowEditSessionWsUrl = (sessionId: string) => {
-  const path = `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}/ws`;
-
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path.replace(/^http/, "ws");
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${path}`;
 };

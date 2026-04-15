@@ -21,8 +21,8 @@ use crate::error::RunnerError;
 use crate::services::{WorkflowRunner, WorkflowServices};
 use crate::store::{
     InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition,
-    WorkflowCatalogStore, WorkflowDetailRecord, WorkflowEditSessionEvent,
-    WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
+    WorkflowCatalogStore, WorkflowDetailRecord, WorkflowEditSessionRecord,
+    WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
     WorkflowSummaryRecord, WorkspaceRecord,
 };
 
@@ -56,7 +56,6 @@ pub struct WorkflowServer {
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     run_registry: RunRegistry,
     events: broadcast::Sender<WorkflowRunEvent>,
-    edit_session_events: broadcast::Sender<WorkflowEditSessionEvent>,
 }
 
 impl WorkflowServer {
@@ -107,7 +106,6 @@ impl WorkflowServer {
     ) -> Self {
         debug!("initializing workflow server with custom store and catalog");
         let (events, _) = broadcast::channel(256);
-        let (edit_session_events, _) = broadcast::channel(256);
         let run_registry = RunRegistry::default();
         let observer = Arc::new(BroadcastRunObserver {
             store: store.clone(),
@@ -133,16 +131,11 @@ impl WorkflowServer {
             edit_sessions,
             run_registry,
             events,
-            edit_session_events,
         }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<WorkflowRunEvent> {
         self.events.subscribe()
-    }
-
-    pub fn subscribe_edit_sessions(&self) -> broadcast::Receiver<WorkflowEditSessionEvent> {
-        self.edit_session_events.subscribe()
     }
 
     pub fn register_workflow(
@@ -225,7 +218,6 @@ impl WorkflowServer {
         };
 
         self.edit_sessions.save_session(&session)?;
-        self.publish_edit_session("created", &session);
         Ok(session)
     }
 
@@ -264,7 +256,6 @@ impl WorkflowServer {
         };
 
         self.edit_sessions.save_session(&session)?;
-        self.publish_edit_session("updated", &session);
         Ok(session)
     }
 
@@ -508,18 +499,6 @@ impl WorkflowServer {
             debug!(
                 run_id = %error.0.run_id,
                 "skipped workflow summary broadcast because there are no subscribers",
-            );
-        }
-    }
-
-    fn publish_edit_session(&self, event_type: &str, session: &WorkflowEditSessionRecord) {
-        if let Err(error) = self
-            .edit_session_events
-            .send(WorkflowEditSessionEvent::new(event_type, session.clone()))
-        {
-            debug!(
-                session_id = %error.0.session_id,
-                "skipped workflow edit session broadcast because there are no subscribers",
             );
         }
     }

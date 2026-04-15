@@ -228,14 +228,6 @@
           >
             session_id: {{ assistantSessionId || "(创建中)" }}
           </div>
-          <!-- <p
-            class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500 break-all"
-          >
-            preview_get:
-            {{
-              `${assistantRunnerBaseUrl}/edit-sessions/${assistantSessionId || ":session_id"}`
-            }}
-          </p> -->
         </div>
         <div class="space-y-1.5">
           <p class="text-[11px] leading-5 text-slate-500">
@@ -246,31 +238,6 @@
             端也会使用 GET 轮询刷新只读预览。
           </p>
         </div>
-
-        <!--  <div class="rounded-[18px] border border-slate-200/80 bg-white p-3">
-          <p class="text-xs font-semibold tracking-wide text-slate-500">
-            Claude Code 调用提示
-          </p>
-          <pre
-            class="mt-3 overflow-x-auto rounded-2xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"
-          ><code>runner_base_url: {{ assistantRunnerBaseUrl }}
-session_id: {{ assistantSessionId || "(创建中)" }}
-skill: ses-flow-skill
-update: PUT {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}/draft
-preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}/ws</code></pre>
-          <p class="mt-3 text-[11px] leading-5 text-slate-500">
-            AI 模式下 Web 侧不提供输入框、创建按钮或同步按钮；首次请把
-            `runner_base_url` 和 `session_id` 一起提供给 Claude Code，它会据此拼接接口并更新临时会话，runner
-            校验通过后会自动刷新这里的画布预览。
-          </p>
-        </div>
-
-        <div
-          class="rounded-[18px] border border-slate-200/80 bg-slate-50/70 px-3 py-3 text-[12px] leading-5 text-slate-600"
-        >
-          AI 模式已锁定 Web 编辑。请在 Claude Code
-          中继续增删节点、改映射和调整分支。
-        </div> -->
 
         <div
           v-if="assistantSessionError"

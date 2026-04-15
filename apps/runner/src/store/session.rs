@@ -25,25 +25,6 @@ pub struct WorkflowEditSessionRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct WorkflowEditSessionEvent {
-    #[serde(rename = "sessionId")]
-    pub session_id: String,
-    #[serde(rename = "eventType")]
-    pub event_type: String,
-    pub session: WorkflowEditSessionRecord,
-}
-
-impl WorkflowEditSessionEvent {
-    pub fn new(event_type: &str, session: WorkflowEditSessionRecord) -> Self {
-        Self {
-            session_id: session.session_id.clone(),
-            event_type: event_type.to_string(),
-            session,
-        }
-    }
-}
-
 pub trait WorkflowEditSessionStore: Send + Sync {
     fn save_session(&self, session: &WorkflowEditSessionRecord) -> Result<(), RunnerError>;
     fn load_session(

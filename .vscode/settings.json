@@ -1,4 +1,7 @@
 {
+  "search.exclude": {
+    "apps/runner/target": true
+  },
   "rust-analyzer.linkedProjects": [
     "apps/runner/Cargo.toml"
   ]
