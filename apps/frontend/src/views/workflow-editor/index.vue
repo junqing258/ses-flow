@@ -1936,6 +1936,10 @@ const handlePageModeChange = (mode: WorkflowPageMode) => {
     resetRunSession();
     void ensureAssistantSessionForAiMode();
   }
+
+  void nextTick().then(() => {
+    queueCanvasViewportReset();
+  });
 };
 
 const syncSelectedNodeData = () => {
