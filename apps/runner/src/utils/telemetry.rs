@@ -57,12 +57,12 @@ where
         let mut visitor = LogVisitor::default();
         event.record(&mut visitor);
 
-        if let Some(message) = visitor.message {
-            write!(writer, " {}", message)?;
+        if !visitor.fields.is_empty() {
+            write!(writer, " ({})", visitor.fields)?;
         }
 
-        if !visitor.fields.is_empty() {
-            write!(writer, " {}", visitor.fields)?;
+        if let Some(message) = visitor.message {
+            write!(writer, " {} ", message)?;
         }
 
         writeln!(writer)
