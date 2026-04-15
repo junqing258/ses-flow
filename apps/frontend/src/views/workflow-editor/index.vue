@@ -4,7 +4,8 @@
   >
     <!-- Main Canvas takes full absolute space -->
     <main
-      class="workflow-canvas absolute inset-0 z-0 h-full w-full"
+      class="workflow-canvas absolute inset-0 z-0 h-full w-full transition-opacity duration-150"
+      :class="canvasVisibilityClass"
       @dragenter.prevent="handleCanvasDragEnter"
       @dragover.prevent="handleCanvasDragOver"
       @drop.prevent="handleCanvasDrop"
@@ -175,6 +176,7 @@
     <aside
       v-if="isAiMode"
       class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      :class="rightAsideVisibilityClass"
     >
       <div class="border-b border-slate-100 px-4 py-4">
         <div class="flex items-start justify-between gap-3">
@@ -473,6 +475,7 @@ xxx
     <aside
       v-if="isEditMode && selectedNodeId"
       class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      :class="rightAsideVisibilityClass"
     >
       <div
         class="flex h-[68px] shrink-0 items-center gap-3 px-4 border-b border-slate-50"
@@ -707,6 +710,7 @@ xxx
     <aside
       v-else-if="isRunMode"
       class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      :class="rightAsideVisibilityClass"
     >
       <div
         class="flex h-18 shrink-0 items-center gap-3 border-b border-slate-50 px-4"
@@ -1073,6 +1077,7 @@ const activeDragPaletteItemId = ref<string | null>(null);
 const isCanvasDropTarget = ref(false);
 const isPublishing = ref(false);
 const isLoadingWorkflow = ref(false);
+const isViewportResetting = ref(true);
 const isRunningWorkflow = ref(false);
 const isWorkflowRunListOpen = ref(false);
 const isTerminatingWorkflow = ref(false);
@@ -1090,6 +1095,7 @@ const workflowRunCount = ref(0);
 const runErrorMessage = ref("");
 let runSummaryPollTimer: number | null = null;
 let assistantSessionPollTimer: number | null = null;
+let viewportResetTimer: number | null = null;
 let assistantSessionPollInFlight = false;
 let runSummaryRefreshInFlight = false;
 let runSummaryRefreshQueued = false;
@@ -1159,6 +1165,12 @@ const selectedNodeIcon = computed(
 const isEditMode = computed(() => pageMode.value === "edit");
 const isRunMode = computed(() => pageMode.value === "run");
 const isAiMode = computed(() => pageMode.value === "ai");
+const canvasVisibilityClass = computed(() =>
+  isViewportResetting.value ? "opacity-0 pointer-events-none" : "opacity-100",
+);
+const rightAsideVisibilityClass = computed(() =>
+  isViewportResetting.value ? "opacity-0 pointer-events-none" : "opacity-100",
+);
 const isSelectedSwitchNode = computed(
   () => selectedNodeData.value.kind === "switch",
 );
@@ -1463,28 +1475,35 @@ const handleOpenWorkflowRunFromList = (runId: string) => {
 };
 
 const resetCanvasViewport = async () => {
-  await new Promise<void>((resolve) => setTimeout(resolve, 16));
+  isViewportResetting.value = true;
 
-  const asideRect = leftCanvasAsideRef.value?.getBoundingClientRect();
-  const viewportWidth = window.innerWidth || 0;
-  const leftPaddingPx = asideRect
-    ? Math.min(
-        Math.round(asideRect.right + CANVAS_LEFT_ASIDE_GAP_PX),
-        Math.max(80, Math.round(viewportWidth * CANVAS_LEFT_PADDING_MAX_RATIO)),
-      )
-    : 0;
+  try {
+    await new Promise<void>((resolve) => setTimeout(resolve, 16));
 
-  await fitView({
-    padding: {
-      top: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
-      right: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
-      bottom: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
-      left: leftPaddingPx
-        ? `${leftPaddingPx}px`
-        : `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
-    },
-    duration: 0,
-  });
+    const asideRect = leftCanvasAsideRef.value?.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || 0;
+    const leftPaddingPx = asideRect
+      ? Math.min(
+          Math.round(asideRect.right + CANVAS_LEFT_ASIDE_GAP_PX),
+          Math.max(80, Math.round(viewportWidth * CANVAS_LEFT_PADDING_MAX_RATIO)),
+        )
+      : 0;
+
+    await fitView({
+      padding: {
+        top: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+        right: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+        bottom: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+        left: leftPaddingPx
+          ? `${leftPaddingPx}px`
+          : `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
+      },
+      duration: 0,
+    });
+  } finally {
+    await new Promise<void>((resolve) => setTimeout(resolve, 32));
+    isViewportResetting.value = false;
+  }
 };
 
 const queueCanvasViewportReset = () => {
@@ -1493,7 +1512,14 @@ const queueCanvasViewportReset = () => {
     return;
   }
 
-  void resetCanvasViewport();
+  if (viewportResetTimer !== null) {
+    window.clearTimeout(viewportResetTimer);
+  }
+
+  viewportResetTimer = window.setTimeout(() => {
+    viewportResetTimer = null;
+    void resetCanvasViewport();
+  }, 0);
 };
 
 const buildCurrentEditorDocument = (
@@ -3032,6 +3058,9 @@ onPaneReady(() => {
   isCanvasPaneReady.value = true;
 
   if (!shouldResetCanvasViewport.value) {
+    if (isViewportResetting.value) {
+      void resetCanvasViewport();
+    }
     return;
   }
 
@@ -3043,6 +3072,10 @@ onBeforeUnmount(() => {
   closeAssistantSessionEventStream();
   closeWorkflowRunCountEventStream();
   closeRunSummaryEventStream();
+  if (viewportResetTimer !== null) {
+    window.clearTimeout(viewportResetTimer);
+    viewportResetTimer = null;
+  }
   clearAssistantSessionPolling();
   clearRunSummaryPolling();
   window.removeEventListener("keydown", handleWindowKeydown);
