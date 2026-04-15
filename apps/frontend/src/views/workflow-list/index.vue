@@ -257,7 +257,7 @@
 
 <script setup lang="ts">
 import dayjs from "dayjs";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   Clock3,
   GitBranchPlus,
@@ -273,7 +273,7 @@ import { toast } from "vue-sonner";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { subscribeWorkflowEvents } from "@/features/workflow/live";
+import { subscribeWorkflowsEvents } from "@/features/workflow/live";
 import {
   fetchWorkflowList,
   type WorkflowSummary,
@@ -310,7 +310,7 @@ const workflowSummaries = ref<WorkflowSummary[]>([]);
 const isLoadingWorkflows = ref(false);
 const isRunListOpen = ref(false);
 const selectedWorkflowForRuns = ref<WorkflowListItem | null>(null);
-const workflowEventSubscriptions = new Map<string, EventSourceSubscription>();
+let workflowsEventSubscription: EventSourceSubscription | null = null;
 let workflowListRefreshQueued = false;
 
 const draftWorkflows = computed<WorkflowListItem[]>(() =>
@@ -363,44 +363,27 @@ const templateWorkflows: WorkflowTemplateItem[] = [
   },
 ];
 
-const closeWorkflowEventSubscriptions = () => {
-  workflowEventSubscriptions.forEach((subscription) => subscription.close());
-  workflowEventSubscriptions.clear();
+const closeWorkflowsEventSubscription = () => {
+  workflowsEventSubscription?.close();
+  workflowsEventSubscription = null;
 };
 
-const syncWorkflowEventSubscriptions = (workflowIds: string[]) => {
-  const nextIds = new Set(workflowIds);
+const ensureWorkflowsEventSubscription = () => {
+  if (workflowsEventSubscription) {
+    return;
+  }
 
-  workflowEventSubscriptions.forEach((subscription, workflowId) => {
-    if (nextIds.has(workflowId)) {
-      return;
-    }
+  workflowsEventSubscription = subscribeWorkflowsEvents({
+    onEvent: (notification) => {
+      if (notification.eventType === "stream.connected") {
+        return;
+      }
 
-    subscription.close();
-    workflowEventSubscriptions.delete(workflowId);
-  });
-
-  workflowIds.forEach((workflowId) => {
-    if (workflowEventSubscriptions.has(workflowId)) {
-      return;
-    }
-
-    const subscription = subscribeWorkflowEvents(workflowId, {
-      onEvent: (notification) => {
-        if (notification.eventType === "stream.connected") {
-          return;
-        }
-
-        void loadWorkflowList({ silent: true });
-      },
-      onError: () => {
-        void loadWorkflowList({ silent: true });
-      },
-    });
-
-    if (subscription) {
-      workflowEventSubscriptions.set(workflowId, subscription);
-    }
+      void loadWorkflowList({ silent: true });
+    },
+    onError: () => {
+      void loadWorkflowList({ silent: true });
+    },
   });
 };
 
@@ -434,18 +417,11 @@ const loadWorkflowList = async (
 
 onMounted(() => {
   void loadWorkflowList();
+  ensureWorkflowsEventSubscription();
 });
 
-watch(
-  () => workflowSummaries.value.map((workflow) => workflow.workflowId),
-  (workflowIds) => {
-    syncWorkflowEventSubscriptions(workflowIds);
-  },
-  { immediate: true },
-);
-
 onBeforeUnmount(() => {
-  closeWorkflowEventSubscriptions();
+  closeWorkflowsEventSubscription();
 });
 
 const handleCreate = () => {

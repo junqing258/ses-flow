@@ -23,6 +23,7 @@ const STREAM_EVENT_NAMES = [
   "stream.resync-required",
   "run.changed",
   "session.changed",
+  "workflow.changed",
   "workflow.runs.changed",
 ];
 
@@ -60,6 +61,19 @@ export const subscribeWorkflowEvents = (
 ): EventSourceSubscription | null =>
   createJsonEventSource<WorkflowStreamNotification>(
     `${RUNNER_BASE_URL}/workflows/${encodeURIComponent(workflowId)}/events`,
+    {
+      eventNames: STREAM_EVENT_NAMES,
+      onError: options.onError,
+      onEvent: options.onEvent,
+      onOpen: options.onOpen,
+    },
+  );
+
+export const subscribeWorkflowsEvents = (
+  options: WorkflowStreamSubscriptionOptions,
+): EventSourceSubscription | null =>
+  createJsonEventSource<WorkflowStreamNotification>(
+    `${RUNNER_BASE_URL}/workflows/events`,
     {
       eventNames: STREAM_EVENT_NAMES,
       onError: options.onError,

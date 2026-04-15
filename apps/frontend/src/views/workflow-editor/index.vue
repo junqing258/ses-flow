@@ -2727,22 +2727,13 @@ const handleTerminateRun = async () => {
 
   isTerminatingWorkflow.value = true;
   runErrorMessage.value = "";
+  const runId = activeRunId.value;
 
   try {
-    const summary = await terminateWorkflowRun(activeRunId.value);
-    activeRunSummary.value = summary;
-    setNodeExecutionStatuses(summary);
-
-    if (summary.status === "terminated") {
-      isTerminatingWorkflow.value = false;
-      closeRunSummaryEventStream();
-      clearRunSummaryPolling();
-      toast.success(`运行已终止：${summary.runId}`);
-      return;
-    }
-
+    ensureRunSummaryEventStream(runId);
+    const summary = await terminateWorkflowRun(runId);
+    scheduleRunSummaryResync(summary.runId);
     toast.success("已发送终止请求");
-    await refreshRunSummary();
   } catch (error) {
     isTerminatingWorkflow.value = false;
     runErrorMessage.value =

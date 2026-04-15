@@ -13,6 +13,7 @@ use crate::core::runtime::{WorkflowRunStatus, WorkflowRunSummary};
 use crate::store::WorkflowEditSessionRecord;
 
 const EVENT_CHANNEL_CAPACITY: usize = 32;
+const ALL_WORKFLOWS_TOPIC: &str = "__all_workflows__";
 
 pub type WorkflowEventStream =
     Sse<Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>>;
@@ -93,6 +94,18 @@ impl WorkflowStreamNotification {
         }
     }
 
+    pub fn workflow_changed(workflow_id: &str) -> Self {
+        Self {
+            event_type: "workflow.changed".to_string(),
+            workflow_id: Some(workflow_id.to_string()),
+            run_id: None,
+            session_id: None,
+            status: None,
+            missed_events: None,
+            emitted_at: Utc::now(),
+        }
+    }
+
     pub fn session_changed(session: &WorkflowEditSessionRecord) -> Self {
         Self {
             event_type: "session.changed".to_string(),
@@ -140,6 +153,14 @@ impl WorkflowEventStreams {
         )
     }
 
+    pub fn subscribe_workflows(&self) -> WorkflowEventStream {
+        self.subscribe(
+            &self.workflow_topics,
+            ALL_WORKFLOWS_TOPIC,
+            WorkflowStreamNotification::connected(None, None, None),
+        )
+    }
+
     pub fn publish_run_changed(&self, summary: &WorkflowRunSummary, workflow_id: Option<&str>) {
         let notification = WorkflowStreamNotification::run_changed(summary, workflow_id);
         self.publish(&self.run_topics, &summary.run_id, notification);
@@ -148,6 +169,21 @@ impl WorkflowEventStreams {
     pub fn publish_workflow_runs_changed(&self, workflow_id: &str, summary: &WorkflowRunSummary) {
         let notification = WorkflowStreamNotification::workflow_runs_changed(workflow_id, summary);
         self.publish(&self.workflow_topics, workflow_id, notification);
+        self.publish(
+            &self.workflow_topics,
+            ALL_WORKFLOWS_TOPIC,
+            WorkflowStreamNotification::workflow_runs_changed(workflow_id, summary),
+        );
+    }
+
+    pub fn publish_workflow_changed(&self, workflow_id: &str) {
+        let notification = WorkflowStreamNotification::workflow_changed(workflow_id);
+        self.publish(&self.workflow_topics, workflow_id, notification);
+        self.publish(
+            &self.workflow_topics,
+            ALL_WORKFLOWS_TOPIC,
+            WorkflowStreamNotification::workflow_changed(workflow_id),
+        );
     }
 
     pub fn publish_session_changed(&self, session: &WorkflowEditSessionRecord) {

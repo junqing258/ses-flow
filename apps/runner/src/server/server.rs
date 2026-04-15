@@ -176,6 +176,7 @@ impl WorkflowServer {
             updated_at: now,
         };
         self.catalog.save_workflow(&stored_workflow)?;
+        self.events.publish_workflow_changed(&stored_workflow.id);
 
         info!(
             workflow_id = %workflow_id,
@@ -325,6 +326,10 @@ impl WorkflowServer {
 
     pub fn subscribe_workflow_events(&self, workflow_id: &str) -> WorkflowEventStream {
         self.events.subscribe_workflow(workflow_id)
+    }
+
+    pub fn subscribe_workflows_events(&self) -> WorkflowEventStream {
+        self.events.subscribe_workflows()
     }
 
     pub async fn start_workflow(

@@ -27,6 +27,7 @@ pub struct ApiState {
 pub fn build_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/workflows/events", get(subscribe_workflows_events))
         .route("/workflows", get(list_workflows).post(upload_workflow))
         .route("/workflows/{workflow_id}", get(get_workflow))
         .route("/workflows/{workflow_id}/events", get(subscribe_workflow_events))
@@ -185,6 +186,12 @@ async fn list_workflows(
 ) -> Result<Json<Vec<crate::store::WorkflowSummaryRecord>>, ApiError> {
     debug!("listing workflows");
     Ok(Json(state.server.list_workflows()?))
+}
+
+async fn subscribe_workflows_events(
+    State(state): State<ApiState>,
+) -> Result<crate::server::WorkflowEventStream, ApiError> {
+    Ok(state.server.subscribe_workflows_events())
 }
 
 async fn upload_workflow(
