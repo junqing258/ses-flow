@@ -46,7 +46,38 @@ docker compose up -d --build
 docker compose down
 ```
 
-## 4. 实现说明
+## 4. 本地构建并通过 SSH 部署
+
+仓库提供了一个本地构建并远程部署的脚本：
+
+```bash
+scripts/deploy-runner-ssh.sh
+```
+
+默认行为：
+
+- 本地构建 `apps/runner/Dockerfile`
+- 默认部署到 `192.168.110.45`
+- 通过 SSH 将镜像流式传到远端并执行 `docker load`
+- 上传 [docker-compose.remote.yml](/Users/zhangjunqing/git-hy/ses-flow/docker-compose.remote.yml) 和本地 `.env`
+- 在远端执行 `docker compose up -d --force-recreate`
+
+常用覆盖参数：
+
+```bash
+DEPLOY_SSH_TARGET=root@192.168.110.45 \
+DEPLOY_REMOTE_DIR=/opt/ses-flow \
+DEPLOY_IMAGE_TAG=$(git rev-parse --short HEAD) \
+scripts/deploy-runner-ssh.sh
+```
+
+脚本依赖：
+
+- 本地有 `docker`、`ssh`、`scp`
+- 远端主机已安装 `docker compose`
+- 本地 `.env` 中已配置可用的 `DATABASE_URL`
+
+## 5. 实现说明
 
 - `runner` 根路径 `/` 会自动跳转到 `/views/`。
 - `runner` 会直接提供 `/views/*` 静态资源访问，适配当前前端的 Vite `base: "/views/"` 配置。

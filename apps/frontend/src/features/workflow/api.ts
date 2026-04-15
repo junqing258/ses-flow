@@ -32,7 +32,7 @@ export interface WorkflowRunListItem {
 }
 
 export const RUNNER_BASE_URL = (
-  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api"
+  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || location.origin + "/runner-api"
 ).replace(/\/$/, "");
 
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";

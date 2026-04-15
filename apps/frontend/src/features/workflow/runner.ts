@@ -138,10 +138,6 @@ class RunnerRequestError extends Error {
   }
 }
 
-/* const RUNNER_BASE_URL = (
-  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || "/runner-api"
-).replace(/\/$/, ""); */
-
 const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
 const DEFAULT_WORKSPACE_NAME = "SES Workflow Editor";
 
