@@ -97,7 +97,7 @@ body,
   height: 100%;
   font-family: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", sans-serif;
   color: var(--text);
-  background: radial-gradient(circle at 20% 15%, var(--bg-top) 0, var(--bg) 46%, var(--bg-bottom) 100%);
+  /* background: radial-gradient(circle at 20% 15%, var(--bg-top) 0, var(--bg) 46%, var(--bg-bottom) 100%); */
 }
 
 .tool-device-icon {
@@ -281,15 +281,18 @@ body,
   border-radius: 1rem;
   background: rgb(255 255 255 / 72%);
   box-shadow: var(--shadow-sm);
+  padding: 1rem;
 }
 
 .app-markdown th,
 .app-markdown td {
   border-bottom: 1px solid var(--panel-border);
+  padding-inline-start: 0.5714286em;
 }
 
 .app-markdown th {
   background: rgb(248 250 252 / 92%);
+  padding-top: 0.5714286em;
 }
 
 .app-markdown tr:last-child td {
