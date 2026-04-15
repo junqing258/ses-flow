@@ -330,8 +330,17 @@
                     "runId": {
                       "type": "string",
                       "example": "run-1775885937139-1"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "accepted"
+                    },
+                    "statusUrl": {
+                      "type": "string",
+                      "example": "/runs/run-1775885937139-1"
                     }
-                  }
+                  },
+                  "required": ["runId", "status", "statusUrl"]
                 }
               }
             }
@@ -367,36 +376,6 @@
           },
           "404": {
             "description": "运行不存在"
-          }
-        }
-      }
-    },
-    "/runs/{runId}/events": {
-      "get": {
-        "summary": "订阅 run SSE 事件",
-        "description": "手动执行后保持连接,可观察 summary 事件;恢复或终止后会继续推送更新",
-        "operationId": "streamRunEvents",
-        "parameters": [
-          {
-            "name": "runId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "run-1775885937139-1"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "SSE 事件流",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
           }
         }
       }

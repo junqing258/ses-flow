@@ -3,7 +3,6 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
@@ -188,121 +187,6 @@ async fn uploads_workflow_and_executes_run_to_completion() {
     let summary = wait_for_terminal_status(app, &run_id).await;
     assert_eq!(summary["status"], json!("completed"));
     assert_eq!(summary["workflowKey"], json!("api-server-flow"));
-}
-
-#[tokio::test]
-async fn streams_waiting_run_summary_over_sse() {
-    let app = build_app();
-    let mut workflow: Value =
-        serde_json::from_str(include_str!("../../examples/sorting-main-flow.json"))
-            .expect("example workflow should deserialize");
-    let fetch_base_url = spawn_echo_http_server();
-    let fetch_node = workflow["nodes"]
-        .as_array_mut()
-        .and_then(|nodes| nodes.iter_mut().find(|node| node["id"] == "fetch_order"))
-        .expect("sorting flow should contain fetch node");
-    fetch_node["config"] = json!({
-        "method": "GET",
-        "url": format!("{fetch_base_url}/todos")
-    });
-
-    let upload_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/workflows")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::to_vec(&json!({
-                        "workspaceId": "ws-sse",
-                        "workflow": workflow
-                    }))
-                    .expect("request should serialize"),
-                ))
-                .expect("request should build"),
-        )
-        .await
-        .expect("request should succeed");
-
-    let upload_body = upload_response
-        .into_body()
-        .collect()
-        .await
-        .expect("body should collect")
-        .to_bytes();
-    let upload_payload: Value =
-        serde_json::from_slice(&upload_body).expect("response body should be valid json");
-    let workflow_id = upload_payload["workflowId"]
-        .as_str()
-        .expect("workflow id should be present")
-        .to_string();
-
-    let execute_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/workflows/{workflow_id}/run"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::to_vec(&json!({
-                        "trigger": {
-                            "headers": {
-                                "requestId": "req-api-sse-1"
-                            },
-                            "body": {
-                                "orderNo": "SO-API-SSE-1",
-                                "bizType": "auto_sort"
-                            }
-                        }
-                    }))
-                    .expect("request should serialize"),
-                ))
-                .expect("request should build"),
-        )
-        .await
-        .expect("request should succeed");
-
-    let execute_body = execute_response
-        .into_body()
-        .collect()
-        .await
-        .expect("body should collect")
-        .to_bytes();
-    let execute_payload: Value =
-        serde_json::from_slice(&execute_body).expect("response body should be valid json");
-    let run_id = execute_payload["runId"]
-        .as_str()
-        .expect("run id should be present")
-        .to_string();
-
-    let waiting_summary = wait_for_status(app.clone(), &run_id, "waiting").await;
-    assert_eq!(waiting_summary["status"], json!("waiting"));
-
-    let sse_response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(format!("/runs/{run_id}/events"))
-                .body(Body::empty())
-                .expect("request should build"),
-        )
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(sse_response.status(), StatusCode::OK);
-    let mut body = sse_response.into_body();
-    let frame = tokio::time::timeout(Duration::from_secs(1), body.frame())
-        .await
-        .expect("sse should produce a frame")
-        .expect("body frame future should succeed")
-        .expect("sse body should not end immediately");
-    let chunk = frame.into_data().expect("frame should contain data");
-    let text = String::from_utf8(chunk.to_vec()).expect("frame should be valid utf8");
-    assert!(text.contains("event: summary"));
-    assert!(text.contains(&format!("\"runId\":\"{run_id}\"")));
-    assert!(text.contains("\"status\":\"waiting\""));
 }
 
 #[tokio::test]

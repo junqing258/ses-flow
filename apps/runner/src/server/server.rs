@@ -8,14 +8,13 @@ use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
-use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::{WorkflowEngine, new_run_id};
 use crate::core::runtime::{
-    RunEnvironment, WorkflowRunController, WorkflowRunEvent, WorkflowRunObserver,
-    WorkflowRunStatus, WorkflowRunSummary,
+    RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunStatus,
+    WorkflowRunSummary,
 };
 use crate::error::RunnerError;
 use crate::services::{WorkflowRunner, WorkflowServices};
@@ -55,7 +54,6 @@ pub struct WorkflowServer {
     catalog: Arc<dyn WorkflowCatalogStore>,
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     run_registry: RunRegistry,
-    events: broadcast::Sender<WorkflowRunEvent>,
 }
 
 impl WorkflowServer {
@@ -105,11 +103,9 @@ impl WorkflowServer {
         edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     ) -> Self {
         debug!("initializing workflow server with custom store and catalog");
-        let (events, _) = broadcast::channel(256);
         let run_registry = RunRegistry::default();
-        let observer = Arc::new(BroadcastRunObserver {
+        let observer = Arc::new(PersistingRunObserver {
             store: store.clone(),
-            events: events.clone(),
             run_registry: run_registry.clone(),
         });
         let controller = Arc::new(ServerRunController {
@@ -130,12 +126,7 @@ impl WorkflowServer {
             catalog,
             edit_sessions,
             run_registry,
-            events,
         }
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<WorkflowRunEvent> {
-        self.events.subscribe()
     }
 
     pub fn register_workflow(
@@ -495,12 +486,6 @@ impl WorkflowServer {
         if is_terminal_status(&summary.status) {
             self.run_registry.finish(&summary.run_id);
         }
-        if let Err(error) = self.events.send(WorkflowRunEvent::from_summary(summary)) {
-            debug!(
-                run_id = %error.0.run_id,
-                "skipped workflow summary broadcast because there are no subscribers",
-            );
-        }
     }
 
     fn to_workflow_summary(
@@ -624,23 +609,16 @@ impl WorkflowRunController for ServerRunController {
     }
 }
 
-struct BroadcastRunObserver {
+struct PersistingRunObserver {
     store: Arc<dyn WorkflowRunStore>,
-    events: broadcast::Sender<WorkflowRunEvent>,
     run_registry: RunRegistry,
 }
 
-impl WorkflowRunObserver for BroadcastRunObserver {
+impl WorkflowRunObserver for PersistingRunObserver {
     fn on_summary(&self, summary: &WorkflowRunSummary) {
         persist_summary(self.store.as_ref(), summary);
         if is_terminal_status(&summary.status) {
             self.run_registry.finish(&summary.run_id);
-        }
-        if let Err(error) = self.events.send(WorkflowRunEvent::from_summary(summary)) {
-            debug!(
-                run_id = %error.0.run_id,
-                "skipped summary broadcast because there are no subscribers",
-            );
         }
     }
 }

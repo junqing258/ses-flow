@@ -177,22 +177,6 @@ pub enum WorkflowRunStatus {
     Terminated,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowRunEvent {
-    #[serde(rename = "runId")]
-    pub run_id: String,
-    pub summary: WorkflowRunSummary,
-}
-
-impl WorkflowRunEvent {
-    pub fn from_summary(summary: &WorkflowRunSummary) -> Self {
-        Self {
-            run_id: summary.run_id.clone(),
-            summary: summary.clone(),
-        }
-    }
-}
-
 pub trait WorkflowRunObserver: Send + Sync {
     fn on_summary(&self, _summary: &WorkflowRunSummary) {}
 }

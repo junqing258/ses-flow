@@ -1,14 +1,11 @@
-use std::convert::Infallible;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
 
-use async_stream::stream;
 use axum::body::Body;
 use axum::extract::{MatchedPath, Path, State};
 use axum::http::{HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
@@ -18,7 +15,7 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, info, warn};
 
 use crate::core::definition::WorkflowDefinition;
-use crate::core::runtime::{RunEnvironment, WorkflowRunEvent, WorkflowRunSummary};
+use crate::core::runtime::{RunEnvironment, WorkflowRunSummary};
 use crate::error::RunnerError;
 use crate::server::{ServerError, WorkflowRegistration, WorkflowServer};
 
@@ -40,7 +37,6 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
         .route("/runs/{run_id}/terminate", post(terminate_workflow))
-        .route("/runs/{run_id}/events", get(stream_run_events))
         .layer(middleware::from_fn(log_http_requests))
         .layer(build_cors_layer())
         .with_state(state)
@@ -183,8 +179,6 @@ struct WorkflowExecutionAccepted {
     status: &'static str,
     #[serde(rename = "statusUrl")]
     status_url: String,
-    #[serde(rename = "eventsUrl")]
-    events_url: String,
 }
 
 async fn health() -> Json<HealthResponse> {
@@ -292,7 +286,6 @@ async fn execute_workflow(
             run_id: summary.run_id.clone(),
             status: "accepted",
             status_url: format!("/runs/{}", summary.run_id),
-            events_url: format!("/runs/{}/events", summary.run_id),
         }),
     ))
 }
@@ -312,7 +305,6 @@ async fn resume_workflow(
             run_id: summary.run_id.clone(),
             status: "accepted",
             status_url: format!("/runs/{}", summary.run_id),
-            events_url: format!("/runs/{}/events", summary.run_id),
         }),
     ))
 }
@@ -350,7 +342,6 @@ mod tests {
     #[test]
     fn keeps_other_access_logs_enabled() {
         assert!(!should_skip_access_log(&Method::POST, "/runs/{run_id}"));
-        assert!(!should_skip_access_log(&Method::GET, "/runs/{run_id}/events"));
     }
 
     #[test]
@@ -371,54 +362,6 @@ mod tests {
             ]
         );
     }
-}
-
-async fn stream_run_events(
-    State(state): State<ApiState>,
-    Path(run_id): Path<String>,
-) -> Result<Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    info!(run_id = %run_id, "subscribing to workflow events");
-    let initial_summary = state
-        .server
-        .get_summary(&run_id)?
-        .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))?;
-    let mut receiver = state.server.subscribe();
-
-    let event_stream = stream! {
-        yield Ok(sse_summary_event(&WorkflowRunEvent::from_summary(&initial_summary)));
-
-        loop {
-            match receiver.recv().await {
-                Ok(event) if event.run_id == run_id => {
-                    yield Ok(sse_summary_event(&event));
-                }
-                Ok(_) => {}
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                    warn!(run_id = %run_id, skipped, "event subscriber lagged behind");
-                    yield Ok(Event::default()
-                        .event("warning")
-                        .data(format!("lagged {skipped} run updates")));
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    };
-
-    Ok(Sse::new(event_stream).keep_alive(KeepAlive::default()))
-}
-
-fn sse_summary_event(event: &WorkflowRunEvent) -> Event {
-    let data = serde_json::to_string(event).unwrap_or_else(|_| {
-        json!({
-            "runId": event.run_id,
-            "summary": {
-                "status": "failed"
-            }
-        })
-        .to_string()
-    });
-
-    Event::default().event("summary").data(data)
 }
 
 fn default_trigger() -> Value {

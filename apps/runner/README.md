@@ -13,7 +13,7 @@
 - `waiting -> resume` 恢复执行能力
 - `sub_workflow` 父子级联恢复
 - `resume` 事件类型与关联键校验
-- HTTP API + SSE 运行状态推送
+- HTTP API 运行状态查询
 
 ## Database Setup
 
@@ -120,7 +120,7 @@ curl -i \
   }'
 ```
 
-返回值会包含 `runId`、`statusUrl`、`eventsUrl`。
+返回值会包含 `runId`、`statusUrl`。
 
 查询 workflow 执行状态：
 
@@ -128,14 +128,6 @@ curl -i \
 curl -i \
   --request GET \
   --url http://127.0.0.1:3002/runs/<run_id>
-```
-
-使用 SSE 持续订阅运行状态和 timeline 更新：
-
-```bash
-curl -N \
-  --request GET \
-  --url http://127.0.0.1:3002/runs/<run_id>/events
 ```
 
 恢复 waiting run：
@@ -376,7 +368,7 @@ curl -i \
 
 ### `respond`
 
-生成一个 `webhook_response` signal，常用于 HTTP/SSE 场景下回包。
+生成一个 `webhook_response` signal，常用于 HTTP 场景下回包。
 
 - `config.statusCode`：响应状态码，默认 `200`
 - `config.terminal = true`：发送响应后直接结束流程

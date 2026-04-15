@@ -63,7 +63,6 @@ export interface WorkflowExecutionRequest {
 }
 
 export interface WorkflowExecutionAccepted {
-  eventsUrl: string;
   runId: string;
   status: string;
   statusUrl: string;
