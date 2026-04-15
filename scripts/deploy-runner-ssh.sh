@@ -7,7 +7,7 @@ DEFAULT_TARGET="root@192.168.110.45"
 DEPLOY_SSH_TARGET="${DEPLOY_SSH_TARGET:-$DEFAULT_TARGET}"
 DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/ses-flow}"
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$ROOT_DIR/.env}"
-DEPLOY_COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-$ROOT_DIR/docker-compose.remote.yml}"
+DEPLOY_COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-$ROOT_DIR/scripts/docker-compose.remote.yml}"
 DEPLOY_IMAGE_REPO="${DEPLOY_IMAGE_REPO:-ses-flow/runner}"
 DEPLOY_IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 DEPLOY_VITE_RUNNER_BASE_URL="${DEPLOY_VITE_RUNNER_BASE_URL:-/runner-api}"
@@ -26,7 +26,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   DEPLOY_SSH_TARGET            远端 SSH 目标。默认：${DEFAULT_TARGET}
   DEPLOY_REMOTE_DIR            远端工作目录。默认：/opt/ses-flow
   DEPLOY_ENV_FILE              本地待上传的环境变量文件。默认：.env
-  DEPLOY_COMPOSE_FILE          远端 compose 模板。默认：docker-compose.remote.yml
+  DEPLOY_COMPOSE_FILE          远端 compose 模板。默认：scripts/docker-compose.remote.yml
   DEPLOY_IMAGE_REPO            Docker 镜像仓库名。默认：ses-flow/runner
   DEPLOY_IMAGE_TAG             Docker 镜像标签。默认：当前 git 短 SHA
   DEPLOY_VITE_RUNNER_BASE_URL  前端构建参数。默认：/runner-api
