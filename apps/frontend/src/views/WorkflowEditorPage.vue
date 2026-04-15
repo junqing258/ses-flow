@@ -12,6 +12,11 @@
       <VueFlow
         :nodes="nodes"
         :edges="edges"
+        :delete-key-code="isAiMode ? null : undefined"
+        :disable-keyboard-a11y="isAiMode"
+        :edges-focusable="!isAiMode"
+        :nodes-focusable="!isAiMode"
+        :selection-key-code="isAiMode ? false : undefined"
         class="h-full w-full"
         @connect="handleConnect"
         @node-click="handleNodeClick"
@@ -223,14 +228,14 @@
           >
             session_id: {{ assistantSessionId || "(创建中)" }}
           </p>
-          <p
+          <!-- <p
             class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500 break-all"
           >
             preview_get:
             {{
               `${assistantRunnerBaseUrl}/edit-sessions/${assistantSessionId || ":session_id"}`
             }}
-          </p>
+          </p> -->
         </div>
         <div class="space-y-1.5">
           <p class="text-[11px] leading-5 text-slate-500">
@@ -2671,6 +2676,21 @@ const isEditableTarget = (target: EventTarget | null) => {
 
 const handleWindowKeydown = (event: KeyboardEvent) => {
   if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  if (isAiMode.value) {
+    const normalizedKey = event.key.toLowerCase();
+
+    if (
+      event.key === "Delete" ||
+      event.key === "Backspace" ||
+      ((event.metaKey || event.ctrlKey) &&
+        normalizedKey === "z")
+    ) {
+      event.preventDefault();
+    }
+
     return;
   }
 
