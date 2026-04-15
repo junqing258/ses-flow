@@ -500,6 +500,9 @@ impl WorkflowServer {
             WorkflowRunStatus::Running => {
                 info!(run_id = %run_id, "termination requested for running workflow run");
                 self.run_registry.request_termination(run_id);
+                if let Some(workflow_id) = self.run_registry.resolve(run_id) {
+                    self.events.publish_workflow_runs_changed(&workflow_id, &summary);
+                }
                 Ok(summary)
             }
         }
@@ -569,7 +572,10 @@ impl WorkflowServer {
             .store
             .list_runs(workflow_key, workflow_version)?
             .into_iter()
-            .filter(|run| is_active_run_status(&run.status))
+            .filter(|run| {
+                is_active_run_status(&run.status)
+                    && !self.run_registry.should_terminate(&run.run_id)
+            })
             .collect())
     }
 }

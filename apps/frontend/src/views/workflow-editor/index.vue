@@ -236,14 +236,23 @@
             session_id: {{ assistantSessionId || "(创建中)" }}
           </div>
         </div>
-        <div class="space-y-1.5">
-          <p class="text-[11px] leading-5 text-slate-500">
-            首次请把 <span>runner_base_url</span> 和 <span>session_id</span> 一起提供给 Agent ，后续它会用这个前缀拼接会话接口地址。
+        <!-- Agent 提示词示例 -->
+        <div class="space-y-2">
+          <p class="text-xs font-semibold tracking-wide text-slate-500">
+            Agent 提示词示例
           </p>
-          <p class="text-[11px] leading-5 text-slate-500">
-            Code Agent 可通过 GET 会话接口直接读取最新工作流草稿，Web
-            端会通过 SSE 接收更新信号，再按需拉取最新只读预览。
-          </p>
+          <pre
+            class="overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100 whitespace-pre-wrap break-all"
+          >请作为 SES Flow 工作流 Agent，使用 ses-flow-skill 协助我编辑当前流程。
+
+runner_base_url: {{ assistantRunnerBaseUrl }}
+session_id: {{ assistantSessionId || "(创建中)" }}
+
+先读取当前会话里的最新工作流草稿，再根据我的需求修改，并推送最新预览给 Web 端。
+
+这次的需求是：
+xxx
+帮我调整当前工作流，并给出你实际做了哪些改动。</pre>
         </div>
 
         <div
