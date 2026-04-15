@@ -66,8 +66,8 @@ export interface WorkflowEditorState {
 }
 
 const createDefaultWorkflowRunDraft = (): WorkflowRunDraft => ({
-  body: '{\n  "orderId": "SO-10001",\n  "laneCode": "A-01",\n  "bizType": "A"\n}',
-  env: '{\n  "tenantId": "tenant-a",\n  "warehouseId": "WHS-SH-01",\n  "operatorId": "demo-user"\n}',
+  body: "{}",
+  env: "{}",
   headers:
     '{\n  "x-request-id": "wf-run-demo-001",\n  "x-source": "workflow-editor"\n}',
   triggerMode: "manual",

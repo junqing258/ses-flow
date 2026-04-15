@@ -8,6 +8,13 @@ import {
 } from "@/features/workflow/persistence";
 
 describe("workflow persistence", () => {
+  it("initializes new workflows with empty trigger body and run env", () => {
+    const state = createNewWorkflowEditorState();
+
+    expect(state.runDraft.body).toBe("{}");
+    expect(state.runDraft.env).toBe("{}");
+  });
+
   it("persists run mode and run draft fields", () => {
     const state = createNewWorkflowEditorState();
     const runDraft = {
@@ -55,9 +62,8 @@ describe("workflow persistence", () => {
 
     expect(restored.pageMode).toBe("edit");
     expect(restored.runDraft.triggerMode).toBe("manual");
-    expect(restored.runDraft.body).toContain('"orderId": "SO-10001"');
-    expect(restored.runDraft.env).toContain('"tenantId": "tenant-a"');
-    expect(restored.runDraft.env).toContain('"warehouseId": "WHS-SH-01"');
+    expect(restored.runDraft.body).toBe("{}");
+    expect(restored.runDraft.env).toBe("{}");
   });
 
   it("does not persist runtime execution status into workflow documents", () => {

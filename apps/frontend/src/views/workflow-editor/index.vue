@@ -194,7 +194,7 @@
                 ? 'bg-sky-50 text-sky-700'
                 : assistantConnectionState === 'reconnecting'
                   ? 'bg-amber-50 text-amber-700'
-                : 'bg-slate-100 text-slate-600'
+                  : 'bg-slate-100 text-slate-600'
             "
             >{{ assistantConnectionLabel }}</span
           >
@@ -243,7 +243,8 @@
           </p>
           <pre
             class="overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100 whitespace-pre-wrap break-all"
-          >请作为 SES Flow 工作流 Agent，使用 ses-flow-skill 协助我编辑当前流程。
+          >
+请作为 SES Flow 工作流 Agent，使用 ses-flow-skill 协助我编辑当前流程。
 
 runner_base_url: {{ assistantRunnerBaseUrl }}
 session_id: {{ assistantSessionId || "(创建中)" }}
@@ -252,7 +253,8 @@ session_id: {{ assistantSessionId || "(创建中)" }}
 
 这次的需求是：
 xxx
-帮我调整当前工作流，并给出你实际做了哪些改动。</pre>
+帮我调整当前工作流，并给出你实际做了哪些改动。</pre
+          >
         </div>
 
         <div
@@ -2966,8 +2968,7 @@ const handleWindowKeydown = (event: KeyboardEvent) => {
     if (
       event.key === "Delete" ||
       event.key === "Backspace" ||
-      ((event.metaKey || event.ctrlKey) &&
-        normalizedKey === "z")
+      ((event.metaKey || event.ctrlKey) && normalizedKey === "z")
     ) {
       event.preventDefault();
     }
