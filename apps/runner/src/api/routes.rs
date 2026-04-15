@@ -98,32 +98,23 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
         .map(MatchedPath::as_str)
         .unwrap_or(uri.path())
         .to_string();
-    let should_skip_log = should_skip_access_log(&method, &matched_path);
     let start = Instant::now();
 
-    if !should_skip_log {
-        debug!(method = %method, uri = %uri, "started request");
-    }
+    debug!(method = %method, uri = %uri, "started request");
 
     let response = next.run(request).await;
 
-    if !should_skip_log {
-        info!(
-            method = %method,
-            matched_path = %matched_path,
-            uri = %uri,
-            request_id = %request_id,
-            status = response.status().as_u16(),
-            latency_ms = start.elapsed().as_millis(),
-            "finished request",
-        );
-    }
+    info!(
+        method = %method,
+        matched_path = %matched_path,
+        uri = %uri,
+        request_id = %request_id,
+        status = response.status().as_u16(),
+        latency_ms = start.elapsed().as_millis(),
+        "finished request",
+    );
 
     response
-}
-
-fn should_skip_access_log(method: &Method, matched_path: &str) -> bool {
-    method == Method::GET && matched_path == "/runs/{run_id}"
 }
 
 #[derive(Debug, Deserialize)]
@@ -361,18 +352,7 @@ async fn terminate_workflow(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_cors_origins, should_skip_access_log};
-    use axum::http::Method;
-
-    #[test]
-    fn skips_run_summary_polling_access_logs() {
-        assert!(should_skip_access_log(&Method::GET, "/runs/{run_id}"));
-    }
-
-    #[test]
-    fn keeps_other_access_logs_enabled() {
-        assert!(!should_skip_access_log(&Method::POST, "/runs/{run_id}"));
-    }
+    use super::parse_cors_origins;
 
     #[test]
     fn parses_multiple_cors_origins() {
