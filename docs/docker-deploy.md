@@ -57,7 +57,8 @@ scripts/deploy-runner-ssh.sh
 默认行为：
 
 - 本地构建 `apps/runner/Dockerfile`
-- 默认部署到 `192.168.110.45`
+- 默认部署到 `root@192.168.110.45`
+- 自动探测远端 CPU 架构，并按远端架构构建镜像
 - 通过 SSH 将镜像流式传到远端并执行 `docker load`
 - 上传 [docker-compose.remote.yml](/Users/zhangjunqing/git-hy/ses-flow/docker-compose.remote.yml) 和本地 `.env`
 - 在远端执行 `docker compose up -d --force-recreate`
@@ -71,9 +72,15 @@ DEPLOY_IMAGE_TAG=$(git rev-parse --short HEAD) \
 scripts/deploy-runner-ssh.sh
 ```
 
+如果自动探测不适用，也可以手动指定平台：
+
+```bash
+DEPLOY_PLATFORM=linux/amd64 scripts/deploy-runner-ssh.sh
+```
+
 脚本依赖：
 
-- 本地有 `docker`、`ssh`、`scp`
+- 本地有 `docker`、`docker buildx`、`ssh`、`scp`
 - 远端主机已安装 `docker compose`
 - 本地 `.env` 中已配置可用的 `DATABASE_URL`
 
