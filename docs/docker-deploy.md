@@ -12,7 +12,7 @@ PostgreSQL 不在本仓库 Docker 编排内启动，`runner` 只通过 `DATABASE
 复制一份部署环境变量：
 
 ```bash
-cp .env.docker.example .env
+cp .env.example .env
 ```
 
 按你的环境修改 `DATABASE_URL`。
@@ -21,7 +21,6 @@ cp .env.docker.example .env
 
 ```dotenv
 DATABASE_URL=postgresql://runner:runner@host.docker.internal:5432/flow-runner
-RUNNER_CORS_ALLOW_ORIGINS=http://localhost:6302
 RUNNER_PORT=6302
 ```
 
