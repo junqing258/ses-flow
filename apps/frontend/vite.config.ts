@@ -51,7 +51,7 @@ export default defineConfig(() => {
           changeOrigin: true,
         },
         "/runner-api": {
-          target: process.env.VITE_RUNNER_PROXY_TARGET ?? "http://127.0.0.1:3002",
+          target: process.env.VITE_RUNNER_PROXY_TARGET ?? "http://127.0.0.1:6302",
           changeOrigin: true,
         },
       },

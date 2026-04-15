@@ -23,7 +23,7 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let host = parse_arg("--host").unwrap_or_else(|| "127.0.0.1".to_string());
-    let port = parse_arg("--port").unwrap_or_else(|| "3002".to_string());
+    let port = parse_arg("--port").unwrap_or_else(|| "6302".to_string());
     let database_url = parse_arg("--database-url")
         .or_else(|| env::var("DATABASE_URL").ok())
         .unwrap_or_else(|| "postgresql://runner:runner@localhost/flow-runner".to_string());

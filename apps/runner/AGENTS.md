@@ -14,7 +14,7 @@
 ## Build, Test, and Development Commands
 除非需要工作区级联验证，否则以下命令均在 `apps/runner` 下执行。
 
-- `cargo run -- --host 127.0.0.1 --port 3002`：本地启动 runner 服务。
+- `cargo run -- --host 127.0.0.1 --port 6302`：本地启动 runner 服务。
 - `cargo test`：运行 runner 的全部 Rust 测试。
 - `cargo build --release`：构建优化后的发布版本。
 - `pnpm --filter runner dev`：通过工作区脚本启动 runner。

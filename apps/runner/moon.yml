@@ -1,6 +1,6 @@
 tasks:
   dev:
-    command: 'cargo watch -x ''run -- --host 127.0.0.1 --port 3002'''
+    command: 'cargo watch -x ''run -- --host 127.0.0.1 --port 6302'''
     preset: 'server'
     inputs:
       - 'Cargo.toml'
@@ -19,7 +19,7 @@ tasks:
       - 'target/release/runner'
 
   start:
-    command: 'cargo run --release -- --host 127.0.0.1 --port 3002'
+    command: 'cargo run --release -- --host 127.0.0.1 --port 6302'
     deps:
       - '~:build'
     preset: 'server'

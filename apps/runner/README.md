@@ -24,7 +24,7 @@
 ```bash
 
 # 运行 runner
-cargo run -- --host 127.0.0.1 --port 3002
+cargo run -- --host 127.0.0.1 --port 6302
 ```
 
 ### Commands
@@ -41,19 +41,19 @@ pnpm exec moon run runner:test
 
 # direct cargo commands still work
 # dev安装 cargo-watch cargo install cargo-watch --locked
-cargo watch -x 'run -- --host 127.0.0.1 --port 3002'
-cargo run -- --host 127.0.0.1 --port 3002
+cargo watch -x 'run -- --host 127.0.0.1 --port 6302'
+cargo run -- --host 127.0.0.1 --port 6302
 
 # with custom PostgreSQL database URL
-cargo run -- --host 127.0.0.1 --port 3002 --database-url "postgresql://user:password@localhost/dbname"
+cargo run -- --host 127.0.0.1 --port 6302 --database-url "postgresql://user:password@localhost/dbname"
 
 # or use environment variable
 export DATABASE_URL="postgresql://user:password@localhost/dbname"
-cargo run -- --host 127.0.0.1 --port 3002
+cargo run -- --host 127.0.0.1 --port 6302
 
 # optionally restrict CORS origins instead of allowing all origins
 export RUNNER_CORS_ALLOW_ORIGINS="http://localhost:5173,https://ses.example.com"
-cargo run -- --host 127.0.0.1 --port 3002
+cargo run -- --host 127.0.0.1 --port 6302
 
 cargo test
 ```
@@ -71,7 +71,7 @@ Runner API 默认开启跨域支持，便于前端或本地工具直接访问。
 ```bash
 curl -i \
   --request POST \
-  --url http://127.0.0.1:3002/runner-api/workflows \
+  --url http://127.0.0.1:6302/runner-api/workflows \
   --header 'content-type: application/json' \
   --data '{
     "workspaceId": "ws-demo",
@@ -110,7 +110,7 @@ curl -i \
 ```bash
   curl -i \
   --request POST \
-  --url http://127.0.0.1:3002/runner-api/workflows/<workflow_id>/run \
+  --url http://127.0.0.1:6302/runner-api/workflows/<workflow_id>/run \
   --header 'content-type: application/json' \
   --data '{
     "trigger": {
@@ -127,7 +127,7 @@ curl -i \
 ```bash
 curl -i \
   --request GET \
-  --url http://127.0.0.1:3002/runner-api/runs/<run_id>
+  --url http://127.0.0.1:6302/runner-api/runs/<run_id>
 ```
 
 恢复 waiting run：
@@ -135,7 +135,7 @@ curl -i \
 ```bash
 curl -i \
   --request POST \
-  --url http://127.0.0.1:3002/runner-api/runs/<run_id>/resume \
+  --url http://127.0.0.1:6302/runner-api/runs/<run_id>/resume \
   --header 'content-type: application/json' \
   --data '{
     "event": {

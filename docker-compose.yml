@@ -1,0 +1,28 @@
+services:
+  runner:
+    build:
+      context: .
+      dockerfile: apps/runner/Dockerfile
+      args:
+        VITE_RUNNER_BASE_URL: /runner-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      RUNNER_CORS_ALLOW_ORIGINS: ${RUNNER_CORS_ALLOW_ORIGINS:-http://localhost:6302}
+      RUNNER_LOG: ${RUNNER_LOG:-info}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${RUNNER_PORT:-6302}:6302"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "Promise.all([fetch('http://127.0.0.1:6302/runner-api/health'), fetch('http://127.0.0.1:6302/views/')]).then(([api, web]) => process.exit(api.ok && web.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s

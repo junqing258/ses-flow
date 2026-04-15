@@ -6,12 +6,13 @@ use axum::body::Body;
 use axum::extract::{MatchedPath, Path, State};
 use axum::http::{HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info, warn};
 
 use crate::core::definition::WorkflowDefinition;
@@ -20,6 +21,7 @@ use crate::error::RunnerError;
 use crate::server::{ServerError, WorkflowRegistration, WorkflowServer};
 
 pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
+pub const RUNNER_VIEWS_BASE_PATH: &str = "/views";
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -28,7 +30,20 @@ pub struct ApiState {
 
 pub fn build_router(state: ApiState) -> Router {
     Router::new()
+        .route("/", get(redirect_to_views))
+        .nest_service(RUNNER_VIEWS_BASE_PATH, build_views_service())
         .nest(RUNNER_API_BASE_PATH, build_api_router(state))
+}
+
+fn build_views_service() -> ServeDir<ServeFile> {
+    let static_dir = env::var("RUNNER_STATIC_DIR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "/app/views".to_string());
+
+    let index_file = format!("{static_dir}/index.html");
+    ServeDir::new(static_dir).fallback(ServeFile::new(index_file))
 }
 
 fn build_api_router(state: ApiState) -> Router {
@@ -51,6 +66,10 @@ fn build_api_router(state: ApiState) -> Router {
         .layer(middleware::from_fn(log_http_requests))
         .layer(build_cors_layer())
         .with_state(state)
+}
+
+async fn redirect_to_views() -> Redirect {
+    Redirect::permanent("/views/")
 }
 
 fn build_cors_layer() -> CorsLayer {
