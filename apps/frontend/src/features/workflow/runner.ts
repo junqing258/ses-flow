@@ -743,7 +743,7 @@ export const executeWorkflowRun = async (
 
   try {
     response = await sendRequest(
-      `${RUNNER_BASE_URL}/workflows/${encodeURIComponent(workflowId)}/runs`,
+      `${RUNNER_BASE_URL}/workflows/${encodeURIComponent(workflowId)}/run`,
       {
         method: "POST",
         headers: {

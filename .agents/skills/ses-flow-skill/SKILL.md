@@ -48,7 +48,7 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
    如果该会话绑定到现有工作流，请保留 `workflowId`。
 
 4. 将草稿推送到 runner。  
-   使用 `PUT {runner_base_url}/edit-sessions/{session_id}` 更新已有会话。  
+   使用 `PUT {runner_base_url}/edit-sessions/{session_id}/draft` 更新已有会话。  
    以 runner 的校验失败结果为准，修复载荷后再重试。
 
 5. 读取预览快照。  
@@ -66,7 +66,7 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 
 - 首次提供：`runner_base_url` + `session_id`
 - 创建会话：`POST {runner_base_url}/edit-sessions`
-- 更新会话：`PUT {runner_base_url}/edit-sessions/{session_id}`
+- 更新会话：`PUT {runner_base_url}/edit-sessions/{session_id}/draft`
 - 读取预览：`GET {runner_base_url}/edit-sessions/{session_id}`
 
 

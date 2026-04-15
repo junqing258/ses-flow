@@ -218,16 +218,16 @@
         <div
           class="rounded-[14px] border border-slate-200/80 bg-white px-3 py-2"
         >
-          <p
+          <div
             class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500"
           >
             runner_base_url: {{ assistantRunnerBaseUrl }}
-          </p>
-          <p
+          </div>
+          <div
             class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500"
           >
             session_id: {{ assistantSessionId || "(创建中)" }}
-          </p>
+          </div>
           <!-- <p
             class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500 break-all"
           >
@@ -242,8 +242,8 @@
             首次请把 <span>runner_base_url</span> 和 <span>session_id</span> 一起提供给 Agent ，后续它会用这个前缀拼接会话接口地址。
           </p>
           <p class="text-[11px] leading-5 text-slate-500">
-            Code Agent 无法使用 websocket 时，可通过上面的 `preview_get`
-            地址直接 GET 最新工作流草稿；Web 端也会自动降级为 GET 轮询预览。
+            Code Agent 可通过 GET 会话接口直接读取最新工作流草稿，Web
+            端也会使用 GET 轮询刷新只读预览。
           </p>
         </div>
 
@@ -256,7 +256,7 @@
           ><code>runner_base_url: {{ assistantRunnerBaseUrl }}
 session_id: {{ assistantSessionId || "(创建中)" }}
 skill: ses-flow-skill
-update: PUT {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}
+update: PUT {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}/draft
 preview: WS {{ assistantRunnerBaseUrl }}/edit-sessions/{{ assistantSessionId || ":session_id" }}/ws</code></pre>
           <p class="mt-3 text-[11px] leading-5 text-slate-500">
             AI 模式下 Web 侧不提供输入框、创建按钮或同步按钮；首次请把

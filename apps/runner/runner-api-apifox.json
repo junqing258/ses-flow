@@ -244,7 +244,7 @@
         }
       }
     },
-    "/workflows/{workflowId}/runs": {
+    "/workflows/{workflowId}/run": {
       "post": {
         "summary": "启动工作流运行",
         "description": "启动一个 wait 类型或 task 类型的运行",

@@ -154,7 +154,7 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/workflows/{workflow_id}/runs"))
+                .uri(format!("/workflows/{workflow_id}/run"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -243,7 +243,7 @@ async fn streams_waiting_run_summary_over_sse() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/workflows/{workflow_id}/runs"))
+                .uri(format!("/workflows/{workflow_id}/run"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -372,7 +372,7 @@ async fn creates_and_updates_edit_session_draft() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri(format!("/edit-sessions/{session_id}"))
+                .uri(format!("/edit-sessions/{session_id}/draft"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -792,7 +792,7 @@ async fn start_run(app: axum::Router, workflow_id: &str, trigger: Value) -> Stri
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/workflows/{workflow_id}/runs"))
+                .uri(format!("/workflows/{workflow_id}/run"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({

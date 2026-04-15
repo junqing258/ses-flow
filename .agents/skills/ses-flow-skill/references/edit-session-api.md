@@ -66,7 +66,7 @@
 
 ## 更新
 
-`PUT {runner_base_url}/edit-sessions/{session_id}`
+`PUT {runner_base_url}/edit-sessions/{session_id}/draft`
 
 请求体与创建接口一致。
 

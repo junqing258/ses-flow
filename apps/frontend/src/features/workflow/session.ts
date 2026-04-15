@@ -101,7 +101,7 @@ export const updateWorkflowEditSession = async (
 
   try {
     response = await sendRequest(
-      `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}`,
+      `${WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL}/edit-sessions/${encodeURIComponent(sessionId)}/draft`,
       {
         method: "PUT",
         headers: {

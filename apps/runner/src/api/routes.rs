@@ -11,7 +11,7 @@ use axum::http::{HeaderValue, Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -33,19 +33,12 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/health", get(health))
         .route("/workflows", get(list_workflows).post(upload_workflow))
         .route("/workflows/{workflow_id}", get(get_workflow))
-        .route(
-            "/workflows/{workflow_id}/runs",
-            get(list_workflow_runs).post(execute_workflow),
-        )
+        .route("/workflows/{workflow_id}/runs", get(list_workflow_runs))
+        .route("/workflows/{workflow_id}/run", post(execute_workflow))
         .route("/edit-sessions", post(create_edit_session))
-        .route(
-            "/edit-sessions/{session_id}",
-            get(get_edit_session).put(update_edit_session),
-        )
-        .route(
-            "/edit-sessions/{session_id}/ws",
-            get(stream_edit_session_ws),
-        )
+        .route("/edit-sessions/{session_id}", get(get_edit_session))
+        .route("/edit-sessions/{session_id}/draft", put(update_edit_session))
+        .route("/edit-sessions/{session_id}/ws", get(stream_edit_session_ws))
         .route("/runs/{run_id}", get(get_run_summary))
         .route("/runs/{run_id}/resume", post(resume_workflow))
         .route("/runs/{run_id}/terminate", post(terminate_workflow))
@@ -84,9 +77,7 @@ fn load_cors_origins() -> Option<Result<Vec<HeaderValue>, axum::http::header::In
     Some(parse_cors_origins(trimmed))
 }
 
-fn parse_cors_origins(
-    raw_origins: &str,
-) -> Result<Vec<HeaderValue>, axum::http::header::InvalidHeaderValue> {
+fn parse_cors_origins(raw_origins: &str) -> Result<Vec<HeaderValue>, axum::http::header::InvalidHeaderValue> {
     raw_origins
         .split(',')
         .map(str::trim)
@@ -293,10 +284,7 @@ async fn execute_workflow(
     info!(workflow_id = %workflow_id, "starting workflow run");
     let trigger = request.trigger.unwrap_or_else(default_trigger);
     let env = request.env.unwrap_or_default();
-    let summary = state
-        .server
-        .start_workflow(&workflow_id, trigger, env)
-        .await?;
+    let summary = state.server.start_workflow(&workflow_id, trigger, env).await?;
     info!(workflow_id = %workflow_id, run_id = %summary.run_id, "workflow run accepted");
 
     Ok((
@@ -364,16 +352,13 @@ mod tests {
     #[test]
     fn keeps_other_access_logs_enabled() {
         assert!(!should_skip_access_log(&Method::POST, "/runs/{run_id}"));
-        assert!(!should_skip_access_log(
-            &Method::GET,
-            "/runs/{run_id}/events"
-        ));
+        assert!(!should_skip_access_log(&Method::GET, "/runs/{run_id}/events"));
     }
 
     #[test]
     fn parses_multiple_cors_origins() {
-        let origins = parse_cors_origins("http://localhost:5173, https://ses.example.com")
-            .expect("origins should parse");
+        let origins =
+            parse_cors_origins("http://localhost:5173, https://ses.example.com").expect("origins should parse");
 
         let values = origins
             .into_iter()
@@ -494,10 +479,7 @@ async fn send_edit_session_message(
     event: &crate::store::WorkflowEditSessionEvent,
 ) -> Result<(), ()> {
     let payload = serde_json::to_string(event).map_err(|_| ())?;
-    socket
-        .send(Message::Text(payload.into()))
-        .await
-        .map_err(|_| ())
+    socket.send(Message::Text(payload.into())).await.map_err(|_| ())
 }
 
 fn sse_summary_event(event: &WorkflowRunEvent) -> Event {
@@ -554,9 +536,7 @@ impl IntoResponse for ApiError {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
-            Self::Runner(RunnerError::MissingRunSnapshot(message)) => {
-                (StatusCode::NOT_FOUND, message)
-            }
+            Self::Runner(RunnerError::MissingRunSnapshot(message)) => (StatusCode::NOT_FOUND, message),
             Self::Runner(RunnerError::Validation(message))
             | Self::Runner(RunnerError::ResumeValidation(message))
             | Self::Runner(RunnerError::Transition(message))
