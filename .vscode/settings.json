@@ -1,8 +1,11 @@
 {
   "search.exclude": {
-    "apps/runner/target": true
+    "apps/runner/target": true,
+    "apps/**/dist": true,
+     "**/node_modules": true  
   },
   "rust-analyzer.linkedProjects": [
-    "apps/runner/Cargo.toml"
+    "apps/runner/Cargo.toml",
+    
   ]
 }

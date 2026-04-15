@@ -9,5 +9,5 @@
 </template>
 
 <script setup lang="ts">
-import WorkflowListPage from "@/views/WorkflowListPage.vue";
+import WorkflowListPage from "@/views/workflow-list/index.vue";
 </script>
