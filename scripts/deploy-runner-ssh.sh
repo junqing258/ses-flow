@@ -22,6 +22,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 在本地构建 runner Docker 镜像，通过 SSH 传输到远端主机，
 上传部署文件，并重启远端容器。
 
+首次使用前先执行（需要本地公钥）： ssh-copy-id ${DEFAULT_TARGET}
+
 可覆盖环境变量：
   DEPLOY_SSH_TARGET            远端 SSH 目标。默认：${DEFAULT_TARGET}
   DEPLOY_REMOTE_DIR            远端工作目录。默认：/opt/ses-flow
