@@ -10,6 +10,7 @@ export default defineConfig(() => {
   const isVitest = process.env.VITEST === "true";
 
   return {
+    base: "/views/",
     plugins: [
       tailwindcss(),
       vue({
@@ -52,7 +53,6 @@ export default defineConfig(() => {
         "/runner-api": {
           target: process.env.VITE_RUNNER_PROXY_TARGET ?? "http://127.0.0.1:3002",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/runner-api/, ""),
         },
       },
     },

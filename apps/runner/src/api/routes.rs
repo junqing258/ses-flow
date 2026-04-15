@@ -19,12 +19,19 @@ use crate::core::runtime::{RunEnvironment, WorkflowRunSummary};
 use crate::error::RunnerError;
 use crate::server::{ServerError, WorkflowRegistration, WorkflowServer};
 
+pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
+
 #[derive(Clone)]
 pub struct ApiState {
     pub server: Arc<WorkflowServer>,
 }
 
 pub fn build_router(state: ApiState) -> Router {
+    Router::new()
+        .nest(RUNNER_API_BASE_PATH, build_api_router(state))
+}
+
+fn build_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/workflows/events", get(subscribe_workflows_events))
@@ -302,7 +309,7 @@ async fn execute_workflow(
             workflow_id: Some(workflow_id),
             run_id: summary.run_id.clone(),
             status: "accepted",
-            status_url: format!("/runs/{}", summary.run_id),
+            status_url: format!("{RUNNER_API_BASE_PATH}/runs/{}", summary.run_id),
         }),
     ))
 }
@@ -321,7 +328,7 @@ async fn resume_workflow(
             workflow_id: None,
             run_id: summary.run_id.clone(),
             status: "accepted",
-            status_url: format!("/runs/{}", summary.run_id),
+            status_url: format!("{RUNNER_API_BASE_PATH}/runs/{}", summary.run_id),
         }),
     ))
 }

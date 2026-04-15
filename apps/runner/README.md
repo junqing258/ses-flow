@@ -71,7 +71,7 @@ Runner API 默认开启跨域支持，便于前端或本地工具直接访问。
 ```bash
 curl -i \
   --request POST \
-  --url http://127.0.0.1:3002/workflows \
+  --url http://127.0.0.1:3002/runner-api/workflows \
   --header 'content-type: application/json' \
   --data '{
     "workspaceId": "ws-demo",
@@ -101,7 +101,7 @@ curl -i \
 ### 关于 webhook 触发的当前实现
 
 - 当前 runner 还没有按 workflow `trigger.path` 自动注册真实的 HTTP webhook 路由。
-- 现在所有 workflow 都是通过统一入口 `POST /workflows/<workflow_id>/run` 启动。
+- 现在所有 workflow 都是通过统一入口 `POST /runner-api/workflows/<workflow_id>/run` 启动。
 - 请求里的 `trigger` 对象会作为整次运行的触发上下文传入引擎，后续节点再从中读取 `headers / body / ...`。
 - 因此，workflow 定义里的 `trigger.type = "webhook"`、`trigger.path`、`trigger.responseMode` 目前主要是定义层元数据，还没有在 API 路由层完成消费。
 
@@ -110,7 +110,7 @@ curl -i \
 ```bash
   curl -i \
   --request POST \
-  --url http://127.0.0.1:3002/workflows/<workflow_id>/run \
+  --url http://127.0.0.1:3002/runner-api/workflows/<workflow_id>/run \
   --header 'content-type: application/json' \
   --data '{
     "trigger": {
@@ -127,7 +127,7 @@ curl -i \
 ```bash
 curl -i \
   --request GET \
-  --url http://127.0.0.1:3002/runs/<run_id>
+  --url http://127.0.0.1:3002/runner-api/runs/<run_id>
 ```
 
 恢复 waiting run：
@@ -135,7 +135,7 @@ curl -i \
 ```bash
 curl -i \
   --request POST \
-  --url http://127.0.0.1:3002/runs/<run_id>/resume \
+  --url http://127.0.0.1:3002/runner-api/runs/<run_id>/resume \
   --header 'content-type: application/json' \
   --data '{
     "event": {
@@ -224,7 +224,7 @@ curl -i \
 需要特别说明的是：`webhook_trigger` 当前是“流程内的触发数据选择节点”，不是“自动暴露 HTTP webhook endpoint 的路由节点”。
 
 - runner 当前不会根据 workflow 的 `trigger.path` 自动生成类似 `/webhooks/...` 的 HTTP 入口。
-- 实际触发方式仍然是调用 `POST /workflows/<workflow_id>/run`，并在请求体中传入 `trigger`。
+- 实际触发方式仍然是调用 `POST /runner-api/workflows/<workflow_id>/run`，并在请求体中传入 `trigger`。
 - `trigger.type = "webhook"`、`trigger.path`、`trigger.responseMode` 当前主要用于表达 workflow 的触发意图与元数据。
 - `respond` 节点会产出 `webhook_response` signal，但当前 API 层还不会把它自动回写成某个真实 webhook 请求的同步 HTTP 响应。
 - 当 `trigger.type = "webhook"` 且 `trigger.responseMode = "sync"` 时，如果流程没有显式 `respond` 节点、而是直接运行到 `end`，runner 会在完成时自动补一个默认的 `webhook_response` signal，等价于返回 `200 + 最终输出 body`。
@@ -395,7 +395,7 @@ curl -i \
 
 - `config.event` 指定期望事件名，默认 `external_callback`
 - `inputMapping` 的结果会作为 waiting signal 的 `payload`
-- 恢复时 `/runs/<run_id>/resume` 传入的事件必须匹配 `event/type`
+- 恢复时 `/runner-api/runs/<run_id>/resume` 传入的事件必须匹配 `event/type`
 - 如果 waiting payload 中带了 `correlationKey`，恢复事件也必须带相同值
 
 ```json

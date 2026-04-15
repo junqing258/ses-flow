@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tower::ServiceExt;
 
-use crate::api::{ApiState, build_router};
+use crate::api::{ApiState, RUNNER_API_BASE_PATH, build_router};
 use crate::server::WorkflowServer;
 use crate::store::{InMemoryRunStore, WorkflowRunStore};
 
@@ -22,6 +22,10 @@ fn build_app() -> axum::Router {
 
 fn build_app_with_server(server: Arc<WorkflowServer>) -> axum::Router {
     build_router(ApiState { server })
+}
+
+fn api_path(path: &str) -> String {
+    format!("{RUNNER_API_BASE_PATH}{path}")
 }
 
 fn spawn_delayed_http_server(delay: Duration) -> String {
@@ -61,7 +65,7 @@ async fn adds_cors_headers_to_json_responses() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/health")
+                .uri(api_path("/health"))
                 .header(header::ORIGIN, "http://localhost:5173")
                 .body(Body::empty())
                 .expect("request should build"),
@@ -87,7 +91,7 @@ async fn handles_cors_preflight_requests() {
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
-                .uri("/workflows")
+                .uri(api_path("/workflows"))
                 .header(header::ORIGIN, "http://localhost:5173")
                 .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
                 .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type,x-request-id")
@@ -153,7 +157,7 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/workflows")
+                .uri(api_path("/workflows"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -186,7 +190,7 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/workflows/{workflow_id}/run"))
+                .uri(api_path(&format!("/workflows/{workflow_id}/run")))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -251,7 +255,7 @@ async fn creates_and_updates_edit_session_draft() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/edit-sessions")
+                .uri(api_path("/edit-sessions"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -287,7 +291,7 @@ async fn creates_and_updates_edit_session_draft() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri(format!("/edit-sessions/{session_id}/draft"))
+                .uri(api_path(&format!("/edit-sessions/{session_id}/draft")))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -333,7 +337,7 @@ async fn creates_and_updates_edit_session_draft() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/edit-sessions/{session_id}"))
+                .uri(api_path(&format!("/edit-sessions/{session_id}")))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -397,7 +401,7 @@ async fn terminates_waiting_run() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/runs/{run_id}/terminate"))
+                .uri(api_path(&format!("/runs/{run_id}/terminate")))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -472,7 +476,7 @@ async fn terminates_running_code_run_without_waiting_for_current_node() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/runs/{run_id}/terminate"))
+                .uri(api_path(&format!("/runs/{run_id}/terminate")))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -544,7 +548,7 @@ async fn terminates_running_fetch_run_without_waiting_for_response() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/runs/{run_id}/terminate"))
+                .uri(api_path(&format!("/runs/{run_id}/terminate")))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -592,7 +596,7 @@ async fn terminates_orphaned_running_run_immediately() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/runs/run-orphan-1/terminate")
+                .uri(api_path("/runs/run-orphan-1/terminate"))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -668,7 +672,7 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/workflows")
+                .uri(api_path("/workflows"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -692,7 +696,7 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/workflows")
+                .uri(api_path("/workflows"))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -715,7 +719,7 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/workflows/wf-editor")
+                .uri(api_path("/workflows/wf-editor"))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -763,7 +767,7 @@ async fn upload_workflow(app: axum::Router, workflow: Value) -> String {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/workflows")
+                .uri(api_path("/workflows"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -797,7 +801,7 @@ async fn start_run(app: axum::Router, workflow_id: &str, trigger: Value) -> Stri
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/workflows/{workflow_id}/run"))
+                .uri(api_path(&format!("/workflows/{workflow_id}/run")))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
@@ -829,7 +833,7 @@ async fn get_summary(app: axum::Router, run_id: &str) -> Value {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/runs/{run_id}"))
+                .uri(api_path(&format!("/runs/{run_id}")))
                 .body(Body::empty())
                 .expect("request should build"),
         )
