@@ -32,9 +32,11 @@ export interface WorkflowRunListItem {
 }
 
 export const RUNNER_BASE_URL = (
-  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || location.origin + "/runner-api"
+  import.meta.env.VITE_RUNNER_BASE_URL?.trim() ||
+  location.origin + "/runner-api"
 ).replace(/\/$/, "");
 
+const CATALOG_API_BASE_URL = RUNNER_BASE_URL + "/catalog";
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";
 
 const parseResponse = async <T>(
@@ -82,4 +84,9 @@ export const fetchWorkflowRuns = async (
     response,
     "获取工作流运行列表失败",
   );
+};
+
+export const refreshWorkflowCatalog = async (): Promise<void> => {
+  const response = await sendRequest(`${CATALOG_API_BASE_URL}/refresh`);
+  await parseResponse<{ status: string }>(response, "刷新工作流目录失败");
 };

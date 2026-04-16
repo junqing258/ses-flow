@@ -103,6 +103,21 @@
             </TabsList>
 
             <TabsContent value="drafts" class="mt-5">
+              <div class="mb-3 flex items-center justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                  :disabled="isRefreshingCatalog || isLoadingWorkflows"
+                  @click="handleRefreshCatalog"
+                >
+                  <LoaderCircle
+                    class="h-3.5 w-3.5"
+                    :class="{ 'animate-spin': isRefreshingCatalog }"
+                  />
+                  {{ isRefreshingCatalog ? "刷新中..." : "刷新目录" }}
+                </Button>
+              </div>
               <div
                 v-if="isLoadingWorkflows"
                 class="rounded-[24px] border border-slate-200/80 bg-white/92 px-6 py-12 text-center text-sm text-slate-500 shadow-[0_20px_45px_rgba(15,23,42,0.06)]"
@@ -287,6 +302,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { subscribeWorkflowsEvents } from "@/features/workflow/live";
 import {
   fetchWorkflowList,
+  refreshWorkflowCatalog,
   type WorkflowSummary,
 } from "@/features/workflow/api";
 import type { EventSourceSubscription } from "@/lib/sse";
@@ -319,6 +335,7 @@ const router = useRouter();
 const activeTab = ref<WorkflowTabId>("drafts");
 const workflowSummaries = ref<WorkflowSummary[]>([]);
 const isLoadingWorkflows = ref(false);
+const isRefreshingCatalog = ref(false);
 const isRunListOpen = ref(false);
 const selectedWorkflowForRuns = ref<WorkflowListItem | null>(null);
 let workflowsEventSubscription: EventSourceSubscription | null = null;
@@ -414,7 +431,9 @@ const loadWorkflowList = async (
     workflowSummaries.value = await fetchWorkflowList();
   } catch (error) {
     if (!options.silent) {
-      toast.error(error instanceof Error ? error.message : "加载工作流列表失败");
+      toast.error(
+        error instanceof Error ? error.message : "加载工作流列表失败",
+      );
     }
   } finally {
     isLoadingWorkflows.value = false;
@@ -441,6 +460,24 @@ const handleCreate = () => {
 
 const openHelp = () => {
   void router.push({ path: "/help" });
+};
+
+const handleRefreshCatalog = async () => {
+  if (isRefreshingCatalog.value || isLoadingWorkflows.value) {
+    return;
+  }
+
+  isRefreshingCatalog.value = true;
+
+  try {
+    await refreshWorkflowCatalog();
+    await loadWorkflowList({ silent: true });
+    toast.success("工作流目录已刷新");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "刷新工作流目录失败");
+  } finally {
+    isRefreshingCatalog.value = false;
+  }
 };
 
 const openWorkflow = (workflowId: string) => {

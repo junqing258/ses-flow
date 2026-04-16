@@ -8,10 +8,10 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "btn-brand shadow-sm",
-        destructive: "btn-danger shadow-sm",
-        outline: "btn-outline shadow-sm",
-        secondary: "btn-muted shadow-sm",
+        default: "btn-brand shadow-none",
+        destructive: "btn-danger shadow-none",
+        outline: "btn-outline shadow-none",
+        secondary: "btn-muted shadow-none",
         ghost: "btn-ghost",
         link: "text-[#2ec6d6] underline-offset-4 hover:underline",
       },
