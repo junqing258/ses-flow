@@ -69,6 +69,30 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - 更新会话：`PUT {runner_base_url}/edit-sessions/{session_id}/draft`
 - 读取预览：`GET {runner_base_url}/edit-sessions/{session_id}`
 
+## 数据与节点参考
+
+详细格式请放到 `references/` 中查阅：
+
+- [references/edit-session-api.md](references/edit-session-api.md)
+- [references/workflow-json-format.md](references/workflow-json-format.md)
+- [references/node-reference.md](references/node-reference.md)
+
+推荐分工：
+
+- `edit-session-api.md`
+  看接口路径、请求骨架、更新规则和快照读取方式。
+- `workflow-json-format.md`
+  看 `workflow`、`editorDocument`、`transitions`、映射表达式和 runner 校验规则。
+- `node-reference.md`
+  看节点类型、用途、关键字段、前端对齐情况和分支约定。
+
+最常用的记忆点：
+
+- `workflow` 必须始终发送完整定义，不要发局部 patch。
+- AI 预览最好始终同时发送 `editorDocument`。
+- `editor.pageMode` 在 AI 预览里保持为 `"ai"`。
+- 尽量保留工作流 id、版本和节点 id。
+- 如果修改了节点 id，要同步修复 `transitions`、`graph.nodes`、`graph.edges`、`graph.panels`。
 
 ## 默认建议
 
@@ -83,4 +107,3 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - 不要在缺少 `runner_base_url` 的情况下假定请求前缀。
 - 不要把 Web 状态视为高于 runner 会话状态的事实来源。
 - 不要从 `editorDocument` 中移除字段，除非这些字段确实已明确废弃。
-
