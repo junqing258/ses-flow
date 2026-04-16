@@ -127,6 +127,32 @@ async fn handles_cors_preflight_requests() {
 }
 
 #[tokio::test]
+async fn refreshes_catalog_via_get_endpoint() {
+    let app = build_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/catalog/refresh"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("response body should be valid json");
+    assert_eq!(payload["status"], json!("ok"));
+}
+
+#[tokio::test]
 async fn uploads_workflow_and_executes_run_to_completion() {
     let app = build_app();
     let workflow = json!({

@@ -2,13 +2,18 @@ use axum::Json;
 use axum::extract::{Path, State};
 use tracing::debug;
 
-use super::workflow_service::{self, UploadWorkflowRequest};
+use super::workflow_service::{self, RefreshCatalogResponse, UploadWorkflowRequest};
 use crate::server::{ApiError, ApiState, WorkflowEventStream, WorkflowRegistration};
 use crate::store::{WorkflowDetailRecord, WorkflowRunRecord, WorkflowSummaryRecord};
 
 pub async fn list_workflows(State(state): State<ApiState>) -> Result<Json<Vec<WorkflowSummaryRecord>>, ApiError> {
     debug!("listing workflows");
     Ok(Json(workflow_service::list_workflows(&state)?))
+}
+
+pub async fn refresh_catalog(State(state): State<ApiState>) -> Result<Json<RefreshCatalogResponse>, ApiError> {
+    debug!("refreshing workflow catalog");
+    Ok(Json(workflow_service::refresh_catalog(&state)?))
 }
 
 pub async fn subscribe_workflows_events(State(state): State<ApiState>) -> Result<WorkflowEventStream, ApiError> {

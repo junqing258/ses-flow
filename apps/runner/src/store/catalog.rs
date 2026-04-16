@@ -68,6 +68,7 @@ pub trait WorkflowCatalogStore: Send + Sync {
     fn load_all_workflows(&self) -> Result<Vec<StoredWorkflowDefinition>, RunnerError>;
     fn load_workflows_by_workspace(&self, workspace_id: &str) -> Result<Vec<StoredWorkflowDefinition>, RunnerError>;
     fn delete_workflow(&self, workflow_id: &str) -> Result<(), RunnerError>;
+    fn refresh(&self) -> Result<(), RunnerError>;
 }
 
 pub struct PostgresCatalogStore {
@@ -404,5 +405,9 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
                 Ok(())
             })
         })
+    }
+
+    fn refresh(&self) -> Result<(), RunnerError> {
+        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(self.refresh_cache()))
     }
 }

@@ -35,6 +35,7 @@ pub fn build_router(state: ApiState) -> Router {
 fn build_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(system::health))
+        .route("/catalog/refresh", get(workflow::refresh_catalog))
         .route("/workflows/events", get(workflow::subscribe_workflows_events))
         .route(
             "/workflows",

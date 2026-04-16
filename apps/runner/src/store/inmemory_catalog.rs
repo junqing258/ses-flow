@@ -120,4 +120,8 @@ impl WorkflowCatalogStore for InMemoryCatalogStore {
         state.workflows.remove(workflow_id);
         Ok(())
     }
+
+    fn refresh(&self) -> Result<(), RunnerError> {
+        Ok(())
+    }
 }

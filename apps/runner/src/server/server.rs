@@ -289,6 +289,11 @@ impl WorkflowServer {
         )
     }
 
+    pub fn refresh_catalog(&self) -> Result<(), ServerError> {
+        self.catalog.refresh()?;
+        Ok(())
+    }
+
     pub fn get_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, ServerError> {
         Ok(self.store.load_summary(run_id)?)
     }

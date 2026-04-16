@@ -6,6 +6,11 @@ use crate::core::definition::WorkflowDefinition;
 use crate::server::{ApiError, ApiState, WorkflowEventStream, WorkflowRegistration};
 use crate::store::{WorkflowDetailRecord, WorkflowRunRecord, WorkflowSummaryRecord};
 
+#[derive(Debug, serde::Serialize)]
+pub struct RefreshCatalogResponse {
+    pub status: &'static str,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UploadWorkflowRequest {
     #[serde(rename = "workspaceId", default)]
@@ -62,4 +67,9 @@ pub fn subscribe_workflow_events(state: &ApiState, workflow_id: &str) -> Result<
 
 pub fn list_workflow_runs(state: &ApiState, workflow_id: &str) -> Result<Vec<WorkflowRunRecord>, ApiError> {
     Ok(state.server.list_workflow_runs(workflow_id)?)
+}
+
+pub fn refresh_catalog(state: &ApiState) -> Result<RefreshCatalogResponse, ApiError> {
+    state.server.refresh_catalog()?;
+    Ok(RefreshCatalogResponse { status: "ok" })
 }
