@@ -9,14 +9,14 @@ use serde::Serialize;
 use serde_json::json;
 use tracing::{debug, error, info, warn};
 
-use super::{WorkflowEventStream, WorkflowEventStreams};
+use super::{WorkflowEventStream, WorkflowEventStreams, WorkflowRunner};
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::{WorkflowEngine, new_run_id};
 use crate::core::runtime::{
     RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
-use crate::services::{WorkflowRunner, WorkflowServices};
+use crate::services::WorkflowServices;
 use crate::store::{
     InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
     WorkflowDetailRecord, WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,

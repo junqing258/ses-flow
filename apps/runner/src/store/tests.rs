@@ -1,3 +1,4 @@
+use crate::app::WorkflowRunner;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
@@ -8,7 +9,6 @@ use serde_json::json;
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::WorkflowEngine;
 use crate::core::runtime::{RunEnvironment, WorkflowRunStatus};
-use crate::services::WorkflowRunner;
 use crate::store::{InMemoryRunStore, WorkflowRunStore};
 
 #[test]
