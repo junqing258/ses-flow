@@ -84,14 +84,3 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - 不要把 Web 状态视为高于 runner 会话状态的事实来源。
 - 不要从 `editorDocument` 中移除字段，除非这些字段确实已明确废弃。
 
-## 仓库定位
-
-在遇到问题需要排查时，可阅读以下代码文件：
-
-- `apps/frontend/src/views/WorkflowEditorPage.vue`
-- `apps/frontend/src/features/workflow/session.ts`
-- `apps/frontend/src/features/workflow/runner.ts`
-- `apps/frontend/src/features/workflow/persistence.ts`
-- `apps/runner/src/api/routes.rs`
-- `apps/runner/src/server/server.rs`
-- `apps/runner/src/store/session.rs`

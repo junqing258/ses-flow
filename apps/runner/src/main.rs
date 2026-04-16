@@ -2,8 +2,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use runner::api::{ApiState, build_router};
-use runner::server::WorkflowServer;
+use runner::server::{ApiState, WorkflowServer, build_router};
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
