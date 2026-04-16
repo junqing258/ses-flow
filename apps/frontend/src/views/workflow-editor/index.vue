@@ -947,6 +947,8 @@ import {
   onMounted,
   reactive,
   ref,
+  shallowRef,
+  triggerRef,
   watch,
 } from "vue";
 import {
@@ -1071,7 +1073,7 @@ const router = useRouter();
 const initialEditorState = createInitialWorkflowEditorState();
 const nodes = ref<WorkflowFlowNode[]>(initialEditorState.nodes);
 const edges = ref<Edge[]>(initialEditorState.edges);
-const panelByNodeId = ref<Record<string, WorkflowNodePanel>>(
+const panelByNodeId = shallowRef<Record<string, WorkflowNodePanel>>(
   initialEditorState.panelByNodeId,
 );
 const searchQuery = ref("");
@@ -2520,6 +2522,7 @@ const handleFieldUpdate = (
   }
 
   targetField.value = value;
+  triggerRef(panelByNodeId);
 
   if (fieldKey === "nodeName") {
     nodes.value = nodes.value.map((node) =>
@@ -2555,6 +2558,7 @@ const handleAddSwitchBranch = () => {
   };
 
   setSwitchBranches(selectedPanel.value, [...branches, nextBranch]);
+  triggerRef(panelByNodeId);
   syncBranchHandleNodes(selectedNodeId.value);
   toast.success(`已新增分支：${nextBranch.label}`);
 };
@@ -2579,6 +2583,7 @@ const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
         : branch,
     ),
   );
+  triggerRef(panelByNodeId);
   syncBranchHandleNodes(selectedNodeId.value);
 };
 
@@ -2592,6 +2597,7 @@ const handleSwitchFallbackUpdate = (branchId: string) => {
   }
 
   setSwitchFallbackHandle(selectedPanel.value, branchId);
+  triggerRef(panelByNodeId);
   syncBranchHandleNodes(selectedNodeId.value);
 };
 
@@ -2624,6 +2630,8 @@ const handleRemoveSwitchBranch = (branchId: string) => {
       nextBranches[nextBranches.length - 1]?.id ?? "",
     );
   }
+
+  triggerRef(panelByNodeId);
 
   edges.value = edges.value.filter(
     (edge) =>
