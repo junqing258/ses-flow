@@ -9,6 +9,7 @@ import {
   createWorkflowPanels,
   normalizeWorkflowEdges,
   type WorkflowFlowNode,
+  type WorkflowNodeData,
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
   type WorkflowTabId,
@@ -89,9 +90,9 @@ interface CloneNodeOptions {
 }
 
 const cloneNodeData = (
-  data: WorkflowFlowNode["data"],
+  data: WorkflowNodeData,
   options: CloneNodeOptions = {},
-): WorkflowFlowNode["data"] => ({
+): WorkflowNodeData => ({
   active: data.active,
   accent: data.accent,
   branchHandles: data.branchHandles?.map((branch) => ({

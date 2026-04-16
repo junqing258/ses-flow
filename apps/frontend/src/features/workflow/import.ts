@@ -13,6 +13,7 @@ import {
   setSwitchFallbackHandle,
   syncBranchHandlesForNode,
   type WorkflowFlowNode,
+  type WorkflowNodeKind,
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
 } from "./model";
@@ -91,7 +92,7 @@ const getNodeTitle = (nodeType: string) => {
   }
 };
 
-const getNodeKind = (nodeType: string): WorkflowFlowNode["data"]["kind"] => {
+const getNodeKind = (nodeType: string): WorkflowNodeKind => {
   switch (nodeType) {
     case "start":
       return "start";

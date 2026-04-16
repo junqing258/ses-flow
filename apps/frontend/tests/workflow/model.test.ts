@@ -90,5 +90,9 @@ describe("createWorkflowNodeDraft", () => {
     expect(node.data.title).toBe("Sub-Workflow");
     expect(workflowRefField).toBeDefined();
     expect(workflowRefField?.type).toBe("select");
+    expect(
+      panel.fieldsByTab.mapping?.find((field) => field.key === "payload")
+        ?.value,
+    ).toBe("{{input}}");
   });
 });

@@ -1,4 +1,4 @@
-import { Position, type Edge, type Node } from "@vue-flow/core";
+import { Position, type Edge, type Node, type XYPosition } from "@vue-flow/core";
 import {
   Activity,
   Code2,
@@ -119,6 +119,16 @@ export interface WorkflowNodeDraft {
   node: WorkflowFlowNode;
   panel: WorkflowNodePanel;
 }
+
+export type WorkflowNodePosition = XYPosition;
+export interface WorkflowExistingNode {
+  id: string;
+}
+export type CreateWorkflowNodeDraft = (
+  item: WorkflowPaletteItem,
+  position: WorkflowNodePosition,
+  existingNodes: readonly WorkflowExistingNode[],
+) => WorkflowNodeDraft;
 
 export type WorkflowFlowNode = Node<
   WorkflowNodeData,
@@ -755,7 +765,7 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           key: "payload",
           label: "子流程输入",
           type: "textarea",
-          value: "{\n  orderId: input.orderId\n}",
+          value: "{{input}}",
         },
       ],
       retry: [
@@ -1164,7 +1174,10 @@ const setFieldValue = (
   });
 };
 
-const getUniqueNodeId = (baseId: string, existingNodes: WorkflowFlowNode[]) => {
+const getUniqueNodeId = (
+  baseId: string,
+  existingNodes: readonly WorkflowExistingNode[],
+) => {
   const existingIds = new Set(existingNodes.map((node) => node.id));
 
   if (!existingIds.has(baseId)) {
@@ -1180,11 +1193,11 @@ const getUniqueNodeId = (baseId: string, existingNodes: WorkflowFlowNode[]) => {
   return `${baseId}_${counter}`;
 };
 
-export const createWorkflowNodeDraft = (
+export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
   item: WorkflowPaletteItem,
-  position: WorkflowFlowNode["position"],
-  existingNodes: WorkflowFlowNode[],
-): WorkflowNodeDraft => {
+  position,
+  existingNodes,
+) => {
   const baseNodeId = getPaletteBaseNodeId(item);
 
   switch (item.id) {

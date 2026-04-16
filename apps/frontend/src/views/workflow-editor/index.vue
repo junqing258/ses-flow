@@ -674,7 +674,7 @@ xxx
                 <textarea
                   v-else-if="field.type === 'textarea'"
                   :value="field.value"
-                  class="min-h-[80px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                  class="min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
                   @input="
                     handleFieldUpdate(
                       tab,
@@ -1112,14 +1112,12 @@ let assistantSessionEventSubscription: EventSourceSubscription | null = null;
 let workflowRunCountSubscription: EventSourceSubscription | null = null;
 let workflowRunCountRefreshInFlight = false;
 let workflowRunCountRefreshQueued = false;
-let pendingFlowRemovalSync:
-  | {
-      edgeIds: Set<string>;
-      nodeIds: Set<string>;
-      nodeLabels: string[];
-      selectedNodeRemoved: boolean;
-    }
-  | null = null;
+let pendingFlowRemovalSync: {
+  edgeIds: Set<string>;
+  nodeIds: Set<string>;
+  nodeLabels: string[];
+  selectedNodeRemoved: boolean;
+} | null = null;
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();

@@ -3,8 +3,12 @@ import type { Edge } from "@vue-flow/core";
 import {
   getBranchHandlesForNode,
   type WorkflowFlowNode,
+  type WorkflowNodeData,
+  type WorkflowNodeKind,
   type WorkflowNodePanel,
+  type WorkflowNodePosition,
   type WorkflowTabId,
+  type WorkflowNodeType,
 } from "./model";
 
 export interface WorkflowExportOptions {
@@ -22,12 +26,12 @@ export interface WorkflowExportFieldMap {
 export interface WorkflowExportNode {
   config: Partial<Record<WorkflowTabId, WorkflowExportFieldMap>>;
   id: string;
-  kind: WorkflowFlowNode["data"]["kind"];
-  position: WorkflowFlowNode["position"];
-  status?: WorkflowFlowNode["data"]["status"];
-  subtitle?: WorkflowFlowNode["data"]["subtitle"];
-  title: WorkflowFlowNode["data"]["title"];
-  type: WorkflowFlowNode["type"];
+  kind: WorkflowNodeKind;
+  position: WorkflowNodePosition;
+  status?: WorkflowNodeData["status"];
+  subtitle?: WorkflowNodeData["subtitle"];
+  title: WorkflowNodeData["title"];
+  type: WorkflowNodeType;
 }
 
 export interface WorkflowExportEdge {
@@ -42,7 +46,7 @@ export interface WorkflowExportEdge {
 export interface WorkflowExportAnnotation {
   id: string;
   kind: "branch-label";
-  position: WorkflowFlowNode["position"];
+  position: WorkflowNodePosition;
   text: string;
 }
 
