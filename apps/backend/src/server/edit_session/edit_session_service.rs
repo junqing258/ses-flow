@@ -1,9 +1,9 @@
+use runner::core::definition::WorkflowDefinition;
+use runner::store::WorkflowEditSessionRecord;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::core::definition::WorkflowDefinition;
-use crate::server::{ApiError, ApiState, WorkflowEventStream};
-use crate::store::WorkflowEditSessionRecord;
+use crate::server::{ApiError, ApiState, WorkflowEventStream, into_sse};
 
 #[derive(Debug, Deserialize)]
 pub struct EditSessionUpsertRequest {
@@ -20,7 +20,7 @@ pub fn create_edit_session(
     state: &ApiState,
     request: EditSessionUpsertRequest,
 ) -> Result<WorkflowEditSessionRecord, ApiError> {
-    Ok(state.server.create_edit_session(
+    Ok(state.app.create_edit_session(
         request.workspace_id,
         request.workflow_id,
         request.workflow,
@@ -29,12 +29,12 @@ pub fn create_edit_session(
 }
 
 pub fn get_edit_session(state: &ApiState, session_id: &str) -> Result<WorkflowEditSessionRecord, ApiError> {
-    Ok(state.server.get_edit_session(session_id)?)
+    Ok(state.app.get_edit_session(session_id)?)
 }
 
 pub fn subscribe_edit_session_events(state: &ApiState, session_id: &str) -> Result<WorkflowEventStream, ApiError> {
-    state.server.get_edit_session(session_id)?;
-    Ok(state.server.subscribe_edit_session_events(session_id))
+    state.app.get_edit_session(session_id)?;
+    Ok(into_sse(state.app.subscribe_edit_session_events(session_id)))
 }
 
 pub fn update_edit_session(
@@ -42,7 +42,7 @@ pub fn update_edit_session(
     session_id: &str,
     request: EditSessionUpsertRequest,
 ) -> Result<WorkflowEditSessionRecord, ApiError> {
-    Ok(state.server.update_edit_session(
+    Ok(state.app.update_edit_session(
         session_id,
         request.workflow_id,
         request.workflow,

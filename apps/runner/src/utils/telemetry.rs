@@ -29,10 +29,12 @@ pub fn init_tracing() {
 }
 
 fn default_filter() -> String {
-    env::var("RUNNER_LOG")
+    env::var("BACKEND_LOG")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "runner=info".to_string())
+        .or_else(|| env::var("RUNNER_LOG").ok().filter(|value| !value.trim().is_empty()))
+        .or_else(|| env::var("RUST_LOG").ok().filter(|value| !value.trim().is_empty()))
+        .unwrap_or_else(|| "backend=info,runner=info".to_string())
 }
 
 struct BracketedEventFormatter;

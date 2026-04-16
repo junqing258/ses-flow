@@ -2,20 +2,19 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use runner::server::{ApiState, WorkflowServer, build_router};
+use backend::server::{ApiState, build_router};
+use runner::app::WorkflowApp;
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
 
 #[tokio::main]
 async fn main() {
-    // Load .env file if it exists
     dotenv::dotenv().ok();
-
     init_tracing();
 
     if let Err(error) = run().await {
-        error!(error = %error, "runner failed");
+        error!(error = %error, "backend failed");
         std::process::exit(1);
     }
 }
@@ -35,14 +34,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let edit_session_store = Arc::new(PostgresEditSessionStore::new(run_store.get_pool()).await?);
 
     let router = build_router(ApiState {
-        server: Arc::new(WorkflowServer::with_store_catalog_and_sessions(
+        app: Arc::new(WorkflowApp::with_store_catalog_and_sessions(
             run_store,
             catalog_store,
             edit_session_store,
         )),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;
-    info!(address = %address, "runner api listening");
+    info!(address = %address, "backend listening");
     axum::serve(listener, router).await?;
     Ok(())
 }

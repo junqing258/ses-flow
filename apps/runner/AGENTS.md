@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-本仓库是一个基于 `pnpm` + Turborepo 的工作区，Rust runner 位于 `apps/runner`。
+本仓库是一个基于 `pnpm` + `just` 的工作区，Rust runner 位于 `apps/runner`。
 
 - `src/`：运行时、执行引擎、API、存储和服务模块，例如 `engine.rs`、`server.rs`、`runtime.rs`。
 - `src/*_tests.rs`：与模块同级的 Rust 测试文件，例如 `engine_tests.rs`、`template_tests.rs`。

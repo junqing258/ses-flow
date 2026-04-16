@@ -9,20 +9,21 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use runner::app::{AppError, WorkflowApp};
+use runner::error::RunnerError;
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info};
 
-use crate::error::RunnerError;
-use crate::server::{ServerError, WorkflowServer, edit_session, run, system, workflow};
+use crate::server::{edit_session, run, system, workflow};
 
 pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
 pub const RUNNER_VIEWS_BASE_PATH: &str = "/views";
 
 #[derive(Clone)]
 pub struct ApiState {
-    pub server: Arc<WorkflowServer>,
+    pub app: Arc<WorkflowApp>,
 }
 
 pub fn build_router(state: ApiState) -> Router {
@@ -68,8 +69,9 @@ fn build_api_router(state: ApiState) -> Router {
 }
 
 fn build_views_service() -> ServeDir<ServeFile> {
-    let static_dir = env::var("RUNNER_STATIC_DIR")
+    let static_dir = env::var("BACKEND_STATIC_DIR")
         .ok()
+        .or_else(|| env::var("RUNNER_STATIC_DIR").ok())
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "/app/views".to_string());
@@ -136,12 +138,12 @@ impl From<RunnerError> for ApiError {
     }
 }
 
-impl From<ServerError> for ApiError {
-    fn from(value: ServerError) -> Self {
+impl From<AppError> for ApiError {
+    fn from(value: AppError) -> Self {
         match value {
-            ServerError::BadRequest(message) => Self::BadRequest(message),
-            ServerError::NotFound(message) => Self::NotFound(message),
-            ServerError::Runner(error) => Self::Runner(error),
+            AppError::BadRequest(message) => Self::BadRequest(message),
+            AppError::NotFound(message) => Self::NotFound(message),
+            AppError::Runner(error) => Self::Runner(error),
         }
     }
 }

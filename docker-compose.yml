@@ -1,18 +1,18 @@
 services:
-  runner:
+  backend:
     build:
       context: .
-      dockerfile: apps/runner/Dockerfile
+      dockerfile: apps/backend/Dockerfile
       args:
         VITE_RUNNER_BASE_URL: /runner-api
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      RUNNER_LOG: ${RUNNER_LOG:-info}
+      BACKEND_LOG: ${BACKEND_LOG:-info}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${RUNNER_PORT:-6302}:6302"
+      - "${BACKEND_PORT:-6302}:6302"
     healthcheck:
       test:
         [

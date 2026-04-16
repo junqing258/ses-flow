@@ -10,17 +10,19 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tower::ServiceExt;
 
-use crate::server::{ApiState, RUNNER_API_BASE_PATH, WorkflowServer, build_router};
-use crate::store::{InMemoryRunStore, WorkflowRunStore};
+use runner::app::WorkflowApp;
+use runner::store::{InMemoryRunStore, WorkflowRunStore};
+
+use crate::server::{ApiState, RUNNER_API_BASE_PATH, build_router};
 
 fn build_app() -> axum::Router {
     build_router(ApiState {
-        server: Arc::new(WorkflowServer::new()),
+        app: Arc::new(WorkflowApp::new()),
     })
 }
 
-fn build_app_with_server(server: Arc<WorkflowServer>) -> axum::Router {
-    build_router(ApiState { server })
+fn build_app_with_server(app: Arc<WorkflowApp>) -> axum::Router {
+    build_router(ApiState { app })
 }
 
 fn api_path(path: &str) -> String {
@@ -79,6 +81,31 @@ async fn adds_cors_headers_to_json_responses() {
             .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
             .expect("cors header should be present"),
         "*"
+    );
+}
+
+#[tokio::test]
+async fn redirects_root_to_views() {
+    let app = build_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
+        Some("/views/")
     );
 }
 
@@ -614,7 +641,7 @@ async fn terminates_orphaned_running_run_immediately() {
         })))
         .expect("orphaned running summary should seed");
 
-    let app = build_app_with_server(Arc::new(WorkflowServer::with_store(store.clone())));
+    let app = build_app_with_server(Arc::new(WorkflowApp::with_store(store.clone())));
 
     let terminate_response = app
         .clone()
@@ -644,7 +671,7 @@ async fn terminates_orphaned_running_run_immediately() {
         .expect("summary should exist");
     assert!(matches!(
         terminated_summary.status,
-        crate::core::runtime::WorkflowRunStatus::Terminated
+        runner::core::runtime::WorkflowRunStatus::Terminated
     ));
 }
 
@@ -945,6 +972,6 @@ async fn get_summary(app: axum::Router, run_id: &str) -> Value {
     serde_json::from_slice(&body).expect("response body should be valid json")
 }
 
-fn json_to_summary(value: Value) -> crate::core::runtime::WorkflowRunSummary {
+fn json_to_summary(value: Value) -> runner::core::runtime::WorkflowRunSummary {
     serde_json::from_value(value).expect("summary json should deserialize")
 }

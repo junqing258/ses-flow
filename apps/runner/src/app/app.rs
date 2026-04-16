@@ -7,7 +7,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
-use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
 use super::{WorkflowEventStream, WorkflowEventStreams};
@@ -24,8 +23,8 @@ use crate::store::{
     WorkflowSummaryRecord, WorkspaceRecord,
 };
 
-#[derive(Debug, Error)]
-pub enum ServerError {
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
@@ -47,7 +46,7 @@ pub struct WorkflowRegistration {
 }
 
 #[derive(Clone)]
-pub struct WorkflowServer {
+pub struct WorkflowApp {
     store: Arc<dyn WorkflowRunStore>,
     catalog: Arc<dyn WorkflowCatalogStore>,
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
@@ -55,11 +54,10 @@ pub struct WorkflowServer {
     events: WorkflowEventStreams,
 }
 
-impl WorkflowServer {
+impl WorkflowApp {
     pub fn new() -> Self {
         // 默认构造方式主要面向测试和轻量本地使用，因此这里会装配内存版
-        // catalog。生产环境启动入口会在 main.rs 中显式注入
-        // PostgresCatalogStore。
+        // catalog。生产环境装配会显式注入 PostgresCatalogStore。
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
@@ -104,7 +102,7 @@ impl WorkflowServer {
         }
     }
 
-    fn build_workflow_services(&self) -> Result<WorkflowServices, ServerError> {
+    fn build_workflow_services(&self) -> Result<WorkflowServices, AppError> {
         let mut services = WorkflowServices::with_defaults();
 
         for workflow in self.catalog.load_all_workflows()? {
@@ -117,13 +115,13 @@ impl WorkflowServer {
         Ok(services)
     }
 
-    fn build_runner(&self) -> Result<WorkflowRunner, ServerError> {
+    fn build_runner(&self) -> Result<WorkflowRunner, AppError> {
         let observer = Arc::new(PersistingRunObserver {
             store: self.store.clone(),
             run_registry: self.run_registry.clone(),
             events: self.events.clone(),
         });
-        let controller = Arc::new(ServerRunController {
+        let controller = Arc::new(WorkflowAppRunController {
             run_registry: self.run_registry.clone(),
         });
 
@@ -144,7 +142,7 @@ impl WorkflowServer {
         workflow_id: Option<String>,
         definition: WorkflowDefinition,
         editor_document: Option<serde_json::Value>,
-    ) -> Result<WorkflowRegistration, ServerError> {
+    ) -> Result<WorkflowRegistration, AppError> {
         let requested_workspace_id = workspace_id.as_deref().unwrap_or("default");
         info!(
             workspace_id = requested_workspace_id,
@@ -203,7 +201,7 @@ impl WorkflowServer {
         workflow_id: Option<String>,
         definition: WorkflowDefinition,
         editor_document: Option<serde_json::Value>,
-    ) -> Result<WorkflowEditSessionRecord, ServerError> {
+    ) -> Result<WorkflowEditSessionRecord, AppError> {
         definition.validate()?;
 
         let now = Utc::now();
@@ -222,10 +220,10 @@ impl WorkflowServer {
         Ok(session)
     }
 
-    pub fn get_edit_session(&self, session_id: &str) -> Result<WorkflowEditSessionRecord, ServerError> {
+    pub fn get_edit_session(&self, session_id: &str) -> Result<WorkflowEditSessionRecord, AppError> {
         self.edit_sessions
             .load_session(session_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow edit session not found: {session_id}")))
+            .ok_or_else(|| AppError::NotFound(format!("workflow edit session not found: {session_id}")))
     }
 
     pub fn update_edit_session(
@@ -234,12 +232,12 @@ impl WorkflowServer {
         workflow_id: Option<String>,
         definition: WorkflowDefinition,
         editor_document: Option<serde_json::Value>,
-    ) -> Result<WorkflowEditSessionRecord, ServerError> {
+    ) -> Result<WorkflowEditSessionRecord, AppError> {
         definition.validate()?;
         let existing = self
             .edit_sessions
             .load_session(session_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow edit session not found: {session_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow edit session not found: {session_id}")))?;
 
         let session = WorkflowEditSessionRecord {
             session_id: existing.session_id,
@@ -256,7 +254,7 @@ impl WorkflowServer {
         Ok(session)
     }
 
-    pub fn list_workflows(&self) -> Result<Vec<WorkflowSummaryRecord>, ServerError> {
+    pub fn list_workflows(&self) -> Result<Vec<WorkflowSummaryRecord>, AppError> {
         let mut workflows = self
             .catalog
             .load_all_workflows()?
@@ -273,11 +271,11 @@ impl WorkflowServer {
         Ok(workflows)
     }
 
-    pub fn get_workflow(&self, workflow_id: &str) -> Result<WorkflowDetailRecord, ServerError> {
+    pub fn get_workflow(&self, workflow_id: &str) -> Result<WorkflowDetailRecord, AppError> {
         let stored_workflow = self
             .catalog
             .load_workflow(workflow_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
         let active_run_count = self
             .list_active_runs(
                 &stored_workflow.definition.meta.key,
@@ -292,11 +290,11 @@ impl WorkflowServer {
         })
     }
 
-    pub fn list_workflow_runs(&self, workflow_id: &str) -> Result<Vec<WorkflowRunRecord>, ServerError> {
+    pub fn list_workflow_runs(&self, workflow_id: &str) -> Result<Vec<WorkflowRunRecord>, AppError> {
         let stored_workflow = self
             .catalog
             .load_workflow(workflow_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
 
         self.list_active_runs(
             &stored_workflow.definition.meta.key,
@@ -304,12 +302,12 @@ impl WorkflowServer {
         )
     }
 
-    pub fn refresh_catalog(&self) -> Result<(), ServerError> {
+    pub fn refresh_catalog(&self) -> Result<(), AppError> {
         self.catalog.refresh()?;
         Ok(())
     }
 
-    pub fn get_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, ServerError> {
+    pub fn get_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, AppError> {
         Ok(self.store.load_summary(run_id)?)
     }
 
@@ -334,12 +332,12 @@ impl WorkflowServer {
         workflow_id: &str,
         trigger: serde_json::Value,
         env: RunEnvironment,
-    ) -> Result<WorkflowRunSummary, ServerError> {
+    ) -> Result<WorkflowRunSummary, AppError> {
         info!(workflow_id = %workflow_id, "preparing workflow run");
         let stored_workflow = self
             .catalog
             .load_workflow(workflow_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
         let run_id = new_run_id();
         let start_node = stored_workflow.definition.start_node()?.id.clone();
         info!(
@@ -400,16 +398,16 @@ impl WorkflowServer {
         &self,
         run_id: &str,
         event: serde_json::Value,
-    ) -> Result<WorkflowRunSummary, ServerError> {
+    ) -> Result<WorkflowRunSummary, AppError> {
         info!(run_id = %run_id, "preparing workflow resume");
         let workflow_id = self
             .run_registry
             .resolve(run_id)
-            .ok_or_else(|| ServerError::NotFound(format!("workflow run not found: {run_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow run not found: {run_id}")))?;
         let stored_workflow = self
             .catalog
             .load_workflow(&workflow_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow not found: {workflow_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
 
         let running_summary = WorkflowRunSummary {
             run_id: run_id.to_string(),
@@ -466,11 +464,11 @@ impl WorkflowServer {
         Ok(running_summary)
     }
 
-    pub fn terminate_workflow(&self, run_id: &str) -> Result<WorkflowRunSummary, ServerError> {
+    pub fn terminate_workflow(&self, run_id: &str) -> Result<WorkflowRunSummary, AppError> {
         let summary = self
             .store
             .load_summary(run_id)?
-            .ok_or_else(|| ServerError::NotFound(format!("workflow run not found: {run_id}")))?;
+            .ok_or_else(|| AppError::NotFound(format!("workflow run not found: {run_id}")))?;
 
         match summary.status {
             WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated => Ok(summary),
@@ -555,7 +553,7 @@ impl WorkflowServer {
         &self,
         workflow: StoredWorkflowDefinition,
         running_run_count: u32,
-    ) -> Result<WorkflowSummaryRecord, ServerError> {
+    ) -> Result<WorkflowSummaryRecord, AppError> {
         let workspace_name = self
             .catalog
             .load_workspace(&workflow.workspace_id)?
@@ -601,7 +599,7 @@ impl WorkflowServer {
         &self,
         workflow_key: &str,
         workflow_version: u32,
-    ) -> Result<Vec<WorkflowRunRecord>, ServerError> {
+    ) -> Result<Vec<WorkflowRunRecord>, AppError> {
         Ok(self
             .store
             .list_runs(workflow_key, workflow_version)?
@@ -662,11 +660,11 @@ impl RunRegistry {
     }
 }
 
-struct ServerRunController {
+struct WorkflowAppRunController {
     run_registry: RunRegistry,
 }
 
-impl WorkflowRunController for ServerRunController {
+impl WorkflowRunController for WorkflowAppRunController {
     fn should_terminate(&self, run_id: &str) -> bool {
         self.run_registry.should_terminate(run_id)
     }

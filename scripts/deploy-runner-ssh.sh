@@ -8,7 +8,7 @@ DEPLOY_SSH_TARGET="${DEPLOY_SSH_TARGET:-$DEFAULT_TARGET}"
 DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/ses-flow}"
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$ROOT_DIR/.env}"
 DEPLOY_COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-$ROOT_DIR/scripts/docker-compose.remote.yml}"
-DEPLOY_IMAGE_REPO="${DEPLOY_IMAGE_REPO:-ses-flow/runner}"
+DEPLOY_IMAGE_REPO="${DEPLOY_IMAGE_REPO:-ses-flow/backend}"
 DEPLOY_IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 DEPLOY_VITE_RUNNER_BASE_URL="${DEPLOY_VITE_RUNNER_BASE_URL:-/runner-api}"
 DEPLOY_IMAGE_REF="${DEPLOY_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
@@ -19,7 +19,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<EOF
 用法：scripts/deploy-runner-ssh.sh
 
-在本地构建 runner Docker 镜像，通过 SSH 传输到远端主机，
+在本地构建 backend Docker 镜像，通过 SSH 传输到远端主机，
 上传部署文件，并重启远端容器。
 
 首次使用前先执行（需要本地公钥）： ssh-copy-id ${DEFAULT_TARGET}
@@ -29,7 +29,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   DEPLOY_REMOTE_DIR            远端工作目录。默认：/opt/ses-flow
   DEPLOY_ENV_FILE              本地待上传的环境变量文件。默认：.env
   DEPLOY_COMPOSE_FILE          远端 compose 模板。默认：scripts/docker-compose.remote.yml
-  DEPLOY_IMAGE_REPO            Docker 镜像仓库名。默认：ses-flow/runner
+  DEPLOY_IMAGE_REPO            Docker 镜像仓库名。默认：ses-flow/backend
   DEPLOY_IMAGE_TAG             Docker 镜像标签。默认：当前 git 短 SHA
   DEPLOY_VITE_RUNNER_BASE_URL  前端构建参数。默认：/runner-api
   DEPLOY_PLATFORM              目标镜像平台。为空时自动从远端主机探测
@@ -104,8 +104,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-grep -v '^RUNNER_IMAGE=' "$DEPLOY_ENV_FILE" > "$tmp_env_file" || true
-printf '\nRUNNER_IMAGE=%s\n' "$DEPLOY_IMAGE_REF" >> "$tmp_env_file"
+grep -v '^BACKEND_IMAGE=' "$DEPLOY_ENV_FILE" > "$tmp_env_file" || true
+printf '\nBACKEND_IMAGE=%s\n' "$DEPLOY_IMAGE_REF" >> "$tmp_env_file"
 debug_log "使用环境变量文件：$DEPLOY_ENV_FILE"
 debug_log "临时环境变量文件：$tmp_env_file"
 debug_log "远端部署目录：$DEPLOY_REMOTE_DIR"
@@ -147,7 +147,7 @@ log_step "本地构建镜像：$DEPLOY_IMAGE_REF ($DEPLOY_PLATFORM)"
 docker buildx build \
   --load \
   --platform "$DEPLOY_PLATFORM" \
-  --file "$ROOT_DIR/apps/runner/Dockerfile" \
+  --file "$ROOT_DIR/apps/backend/Dockerfile" \
   --tag "$DEPLOY_IMAGE_REF" \
   --build-arg "VITE_RUNNER_BASE_URL=$DEPLOY_VITE_RUNNER_BASE_URL" \
   "$ROOT_DIR"

@@ -1,16 +1,16 @@
 services:
-  runner:
-    image: ${RUNNER_IMAGE:?RUNNER_IMAGE is required}
-    container_name: ses-flow-runner
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    container_name: ses-flow-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      RUNNER_LOG: ${RUNNER_LOG:-info}
-      RUNNER_STATIC_DIR: /app/views
+      BACKEND_LOG: ${BACKEND_LOG:-info}
+      BACKEND_STATIC_DIR: /app/views
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${RUNNER_PORT:-6302}:6302"
+      - "${BACKEND_PORT:-6302}:6302"
     healthcheck:
       test:
         [

@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 
 use super::edit_session_service::{self, EditSessionUpsertRequest};
 use crate::server::{ApiError, ApiState, WorkflowEventStream};
-use crate::store::WorkflowEditSessionRecord;
+use runner::store::WorkflowEditSessionRecord;
 
 pub async fn create_edit_session(
     State(state): State<ApiState>,

@@ -1,10 +1,8 @@
 use async_stream::stream;
-use axum::response::sse::{Event, Sse};
 use chrono::{DateTime, Utc};
 use futures_core::Stream;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -15,7 +13,7 @@ use crate::store::WorkflowEditSessionRecord;
 const EVENT_CHANNEL_CAPACITY: usize = 32;
 const ALL_WORKFLOWS_TOPIC: &str = "__all_workflows__";
 
-pub type WorkflowEventStream = Sse<Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>>;
+pub type WorkflowEventStream = Pin<Box<dyn Stream<Item = WorkflowStreamNotification> + Send>>;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowStreamNotification {
@@ -196,20 +194,20 @@ impl WorkflowEventStreams {
         let mut receiver = sender.subscribe();
         let reconnect_notification = initial_notification.clone();
         let stream = stream! {
-            yield Ok(Self::to_event(initial_notification));
+            yield initial_notification;
 
             loop {
                 match receiver.recv().await {
                     Ok(notification) => {
-                        yield Ok(Self::to_event(notification));
+                        yield notification;
                     }
                     Err(broadcast::error::RecvError::Lagged(missed_events)) => {
-                        yield Ok(Self::to_event(WorkflowStreamNotification::resync_required(
+                        yield WorkflowStreamNotification::resync_required(
                             reconnect_notification.workflow_id.clone(),
                             reconnect_notification.run_id.clone(),
                             reconnect_notification.session_id.clone(),
                             missed_events,
-                        )));
+                        );
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         break;
@@ -218,7 +216,7 @@ impl WorkflowEventStreams {
             }
         };
 
-        Sse::new(Box::pin(stream))
+        Box::pin(stream)
     }
 
     fn publish(&self, topics: &TopicMap, key: &str, notification: WorkflowStreamNotification) {
@@ -238,13 +236,4 @@ impl WorkflowEventStreams {
             .clone()
     }
 
-    fn to_event(notification: WorkflowStreamNotification) -> Event {
-        match Event::default()
-            .event(notification.event_type.as_str())
-            .json_data(&notification)
-        {
-            Ok(event) => event,
-            Err(_) => Event::default().event("stream.serialization-error"),
-        }
-    }
 }

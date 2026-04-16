@@ -1,10 +1,10 @@
 use axum::http::StatusCode;
+use runner::core::runtime::{RunEnvironment, WorkflowRunSummary};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tracing::info;
 
-use crate::core::runtime::{RunEnvironment, WorkflowRunSummary};
-use crate::server::{ApiError, ApiState, RUNNER_API_BASE_PATH, WorkflowEventStream};
+use crate::server::{ApiError, ApiState, RUNNER_API_BASE_PATH, WorkflowEventStream, into_sse};
 
 #[derive(Debug, Deserialize)]
 pub struct ExecuteWorkflowRequest {
@@ -38,7 +38,7 @@ pub async fn execute_workflow(
     info!(workflow_id = %workflow_id, "starting workflow run");
     let trigger = request.trigger.unwrap_or_else(default_trigger);
     let env = request.env.unwrap_or_default();
-    let summary = state.server.start_workflow(&workflow_id, trigger, env).await?;
+    let summary = state.app.start_workflow(&workflow_id, trigger, env).await?;
     info!(workflow_id = %workflow_id, run_id = %summary.run_id, "workflow run accepted");
 
     Ok((
@@ -58,7 +58,7 @@ pub async fn resume_workflow(
     request: ResumeWorkflowRequest,
 ) -> Result<(StatusCode, WorkflowExecutionAccepted), ApiError> {
     info!(run_id = %run_id, "resuming workflow run");
-    let summary = state.server.resume_workflow(&run_id, request.event).await?;
+    let summary = state.app.resume_workflow(&run_id, request.event).await?;
     info!(run_id = %summary.run_id, "workflow resume accepted");
 
     Ok((
@@ -74,21 +74,21 @@ pub async fn resume_workflow(
 
 pub fn get_run_summary(state: &ApiState, run_id: &str) -> Result<WorkflowRunSummary, ApiError> {
     state
-        .server
+        .app
         .get_summary(run_id)?
         .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))
 }
 
 pub fn subscribe_run_events(state: &ApiState, run_id: &str) -> Result<WorkflowEventStream, ApiError> {
     state
-        .server
+        .app
         .get_summary(run_id)?
         .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))?;
-    Ok(state.server.subscribe_run_events(run_id))
+    Ok(into_sse(state.app.subscribe_run_events(run_id)))
 }
 
 pub fn terminate_workflow(state: &ApiState, run_id: &str) -> Result<WorkflowRunSummary, ApiError> {
-    Ok(state.server.terminate_workflow(run_id)?)
+    Ok(state.app.terminate_workflow(run_id)?)
 }
 
 fn default_trigger() -> Value {

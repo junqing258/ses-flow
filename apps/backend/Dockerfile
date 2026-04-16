@@ -22,14 +22,17 @@ WORKDIR /workspace/apps/frontend
 
 RUN pnpm build
 
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.94-bookworm AS builder
 
-WORKDIR /workspace/apps/runner
+WORKDIR /workspace
 
-COPY apps/runner/Cargo.toml apps/runner/Cargo.lock ./
-COPY apps/runner/src ./src
+COPY Cargo.toml Cargo.lock ./
+COPY apps/backend/Cargo.toml apps/backend/Cargo.toml
+COPY apps/runner/Cargo.toml apps/runner/Cargo.toml
+COPY apps/backend/src apps/backend/src
+COPY apps/runner/src apps/runner/src
 
-RUN cargo build --release
+RUN cargo build --release -p backend
 
 FROM node:22-bookworm-slim AS runtime
 
@@ -39,13 +42,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /workspace/apps/runner/target/release/runner /usr/local/bin/runner
+COPY --from=builder /workspace/target/release/backend /usr/local/bin/backend
 COPY --from=frontend-builder /workspace/apps/frontend/dist /app/views
 
-ENV RUNNER_LOG=info
-ENV RUNNER_STATIC_DIR=/app/views
+ENV BACKEND_LOG=info
+ENV BACKEND_STATIC_DIR=/app/views
 
 EXPOSE 6302
 
-ENTRYPOINT ["runner"]
+ENTRYPOINT ["backend"]
 CMD ["--host", "0.0.0.0", "--port", "6302"]
