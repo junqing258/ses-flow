@@ -69,4 +69,26 @@ describe("createWorkflowNodeDraft", () => {
       { label: "B", value: "branch-b" },
     ]);
   });
+
+  it("creates dedicated workflow selection fields for sub-workflow nodes", () => {
+    const subWorkflowPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+      (category) => category.items,
+    ).find((item) => item.id === "palette-subflow");
+
+    expect(subWorkflowPaletteItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      subWorkflowPaletteItem!,
+      { x: 260, y: 240 },
+      [],
+    );
+    const workflowRefField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "workflowRef",
+    );
+
+    expect(node.data.kind).toBe("sub-workflow");
+    expect(node.data.title).toBe("Sub-Workflow");
+    expect(workflowRefField).toBeDefined();
+    expect(workflowRefField?.type).toBe("select");
+  });
 });

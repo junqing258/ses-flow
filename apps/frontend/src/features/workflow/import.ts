@@ -107,6 +107,8 @@ const getNodeKind = (nodeType: string): WorkflowFlowNode["data"]["kind"] => {
       return "wait";
     case "webhook_trigger":
       return "trigger";
+    case "sub_workflow":
+      return "sub-workflow";
     case "shell":
       return "shell";
     default:
@@ -292,8 +294,7 @@ const createImportedNode = (
   if (
     node.type === "shell" ||
     node.type === "task" ||
-    node.type === "respond" ||
-    node.type === "sub_workflow"
+    node.type === "respond"
   ) {
     setPanelFieldValue(
       nextPanel,
@@ -318,13 +319,24 @@ const createImportedNode = (
     );
   }
 
+  if (node.type === "sub_workflow") {
+    setPanelFieldValue(
+      nextPanel,
+      "workflowRef",
+      String(node.config?.ref ?? node.config?.workflowKey ?? ""),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "payload",
+      serializeMappingValue(node.inputMapping),
+    );
+  }
+
   if (node.type === "code") {
     setPanelFieldValue(
       nextPanel,
       "source",
-      String(
-        node.config?.source ?? node.config?.js ?? node.config?.code ?? "",
-      ),
+      String(node.config?.source ?? node.config?.js ?? node.config?.code ?? ""),
     );
     setPanelFieldValue(
       nextPanel,
@@ -448,14 +460,18 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
         setSwitchBranches(panel, annotatedBranches);
         setSwitchFallbackHandle(
           panel,
-          annotatedFallbackHandle || annotatedBranches[annotatedBranches.length - 1]?.id || "",
+          annotatedFallbackHandle ||
+            annotatedBranches[annotatedBranches.length - 1]?.id ||
+            "",
         );
         return;
       }
 
       const labels = labelledTransitions
         .map((transition) => transition.label?.trim() ?? "")
-        .filter((label, index, source) => label && source.indexOf(label) === index);
+        .filter(
+          (label, index, source) => label && source.indexOf(label) === index,
+        );
       const branches =
         labels.length > 0
           ? labels.map((label, index) => ({
@@ -465,8 +481,8 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
           : createDefaultSwitchBranches();
       const fallbackHandle = defaultTransition
         ? defaultTransition.label
-          ? branches.find((branch) => branch.label === defaultTransition.label)
-              ?.id ?? branches[branches.length - 1]?.id
+          ? (branches.find((branch) => branch.label === defaultTransition.label)
+              ?.id ?? branches[branches.length - 1]?.id)
           : branches[branches.length - 1]?.id
         : "";
 
@@ -485,11 +501,15 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
       sourceHandle = transition.label === "else" ? "branch-b" : "branch-a";
     } else if (sourceNode?.data.kind === "switch") {
       const switchBranches = getSwitchBranches(panelByNodeId[transition.from]);
-      const fallbackHandle = getSwitchFallbackHandle(panelByNodeId[transition.from]);
-      const usedHandles = usedSwitchHandlesBySource.get(transition.from) ?? new Set<string>();
+      const fallbackHandle = getSwitchFallbackHandle(
+        panelByNodeId[transition.from],
+      );
+      const usedHandles =
+        usedSwitchHandlesBySource.get(transition.from) ?? new Set<string>();
 
       if (transition.branchType === "default") {
-        sourceHandle = fallbackHandle ?? switchBranches[switchBranches.length - 1]?.id;
+        sourceHandle =
+          fallbackHandle ?? switchBranches[switchBranches.length - 1]?.id;
       } else if (transition.label) {
         sourceHandle = switchBranches.find(
           (branch) => branch.label === transition.label,

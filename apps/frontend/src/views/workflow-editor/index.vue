@@ -985,9 +985,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  fetchWorkflowList,
   fetchWorkflowRuns,
   fetchWorkflowDetail,
   type WorkflowDetail,
+  type WorkflowSummary,
 } from "@/features/workflow/api";
 import { createWorkflowExportDocument } from "@/features/workflow/export";
 import { createWorkflowEditorStateFromRunnerDefinition } from "@/features/workflow/import";
@@ -1093,6 +1095,7 @@ const activeRunSummary = ref<WorkflowRunSummary | null>(null);
 const activeRunId = ref("");
 const activeRunWorkflowId = ref("");
 const workflowRunCount = ref(0);
+const workflowSummaries = ref<WorkflowSummary[]>([]);
 const runErrorMessage = ref("");
 let runSummaryPollTimer: number | null = null;
 let assistantSessionPollTimer: number | null = null;
@@ -1181,6 +1184,24 @@ const selectedSwitchBranches = computed(() =>
 const selectedSwitchFallbackHandle = computed(
   () => getSwitchFallbackHandle(selectedPanel.value) ?? "",
 );
+const selectableSubWorkflowOptions = computed(() => {
+  const currentWorkflowId = workflowMeta.id.trim();
+  const options = workflowSummaries.value
+    .filter(
+      (workflow) =>
+        workflow.workflowId !== currentWorkflowId &&
+        workflow.workflowKey !== currentWorkflowId,
+    )
+    .map((workflow) => ({
+      label:
+        workflow.name === workflow.workflowKey
+          ? workflow.name
+          : `${workflow.name} · ${workflow.workflowKey}`,
+      value: workflow.workflowKey,
+    }));
+
+  return [{ label: "请选择子工作流", value: "" }, ...options];
+});
 const workflowStatusLabel = computed(() =>
   workflowMeta.status === "published" ? "Published" : "Draft",
 );
@@ -1356,8 +1377,21 @@ const getFieldsForTab = (tab: WorkflowTabId) => {
   });
 };
 
-const getFieldSelectOptions = (field: WorkflowField) =>
-  getWorkflowFieldSelectOptions(selectedPanel.value, field);
+const getFieldSelectOptions = (field: WorkflowField) => {
+  if (
+    (selectedNodeData.value.kind === "sub-workflow" ||
+      selectedNodeData.value.title === "Sub-Workflow") &&
+    field.key === "workflowRef"
+  ) {
+    return getWorkflowFieldSelectOptions(
+      selectedPanel.value,
+      field,
+      selectableSubWorkflowOptions.value,
+    );
+  }
+
+  return getWorkflowFieldSelectOptions(selectedPanel.value, field);
+};
 
 const syncBranchHandleNodes = (nodeId?: string) => {
   nodes.value = nodes.value.map((node) => {
@@ -1486,7 +1520,10 @@ const resetCanvasViewport = async () => {
     const leftPaddingPx = asideRect
       ? Math.min(
           Math.round(asideRect.right + CANVAS_LEFT_ASIDE_GAP_PX),
-          Math.max(80, Math.round(viewportWidth * CANVAS_LEFT_PADDING_MAX_RATIO)),
+          Math.max(
+            80,
+            Math.round(viewportWidth * CANVAS_LEFT_PADDING_MAX_RATIO),
+          ),
         )
       : 0;
 
@@ -1761,7 +1798,9 @@ const resetRunSession = () => {
 };
 
 const resetToInitialWorkflow = () => {
-  const nextState = clearWorkflowEditorSelection(createNewWorkflowEditorState());
+  const nextState = clearWorkflowEditorSelection(
+    createNewWorkflowEditorState(),
+  );
 
   workflowMeta.id = DEFAULT_WORKFLOW_ID;
   workflowMeta.name = DEFAULT_WORKFLOW_ID;
@@ -1870,7 +1909,9 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
         : clearWorkflowEditorSelection(
             workflow.document
               ? createWorkflowEditorStateFromDocument(workflow.document)
-              : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow),
+              : createWorkflowEditorStateFromRunnerDefinition(
+                  workflow.workflow,
+                ),
           );
 
     if (activeRunWorkflowId.value && activeRunWorkflowId.value !== workflowId) {
@@ -1909,6 +1950,18 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
     void router.replace({ name: "workflow-list" });
   } finally {
     isLoadingWorkflow.value = false;
+  }
+};
+
+const loadSelectableWorkflows = async (silent = true) => {
+  try {
+    workflowSummaries.value = await fetchWorkflowList();
+  } catch (error) {
+    if (!silent) {
+      toast.error(
+        error instanceof Error ? error.message : "获取工作流列表失败",
+      );
+    }
   }
 };
 
@@ -3063,6 +3116,7 @@ const handleWindowKeydown = (event: KeyboardEvent) => {
 
 onMounted(() => {
   window.addEventListener("keydown", handleWindowKeydown);
+  void loadSelectableWorkflows();
 });
 
 onPaneReady(() => {

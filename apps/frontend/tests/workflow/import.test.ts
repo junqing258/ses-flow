@@ -53,11 +53,72 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
     const webhookPanel = state.panelByNodeId.webhook_in;
 
     expect(
-      webhookPanel.fieldsByTab.base?.find((field) => field.key === "path")?.value,
+      webhookPanel.fieldsByTab.base?.find((field) => field.key === "path")
+        ?.value,
     ).toBe("/flows/coverage");
     expect(
-      webhookPanel.fieldsByTab.base?.find((field) => field.key === "responseMode")
-        ?.value,
+      webhookPanel.fieldsByTab.base?.find(
+        (field) => field.key === "responseMode",
+      )?.value,
     ).toBe("sync");
+  });
+
+  it("restores sub-workflow references into the workflow selector field", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "coverage-flow",
+        name: "Coverage Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: {
+        type: "manual",
+      },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "invoke_child",
+          type: "sub_workflow",
+          name: "Invoke Child",
+          config: {
+            ref: "child-flow",
+          },
+          inputMapping: {
+            orderId: "{{input.orderId}}",
+          },
+        },
+        {
+          id: "end_1",
+          type: "end",
+          name: "End",
+        },
+      ],
+      transitions: [
+        { from: "start_1", to: "invoke_child" },
+        { from: "invoke_child", to: "end_1" },
+      ],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition);
+    const subWorkflowPanel = state.panelByNodeId.invoke_child;
+
+    expect(
+      subWorkflowPanel.fieldsByTab.base?.find(
+        (field) => field.key === "workflowRef",
+      )?.value,
+    ).toBe("child-flow");
+    expect(
+      state.nodes.find((node) => node.id === "invoke_child")?.data.kind,
+    ).toBe("sub-workflow");
   });
 });

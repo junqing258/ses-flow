@@ -43,6 +43,7 @@ export type WorkflowIconKey = keyof typeof WORKFLOW_ICON_MAP;
 export type WorkflowNodeKind =
   | "start"
   | "trigger"
+  | "sub-workflow"
   | "fetch"
   | "if-else"
   | "switch"
@@ -226,20 +227,22 @@ export const getSwitchBranches = (
   panel: WorkflowNodePanel | undefined,
 ): WorkflowBranchHandle[] => {
   const mappingFields = panel?.fieldsByTab.mapping ?? [];
-  const dynamicBranches = mappingFields.flatMap<WorkflowBranchHandle>((field) => {
-    const match = field.key.match(SWITCH_BRANCH_FIELD_KEY_PATTERN);
+  const dynamicBranches = mappingFields.flatMap<WorkflowBranchHandle>(
+    (field) => {
+      const match = field.key.match(SWITCH_BRANCH_FIELD_KEY_PATTERN);
 
-    if (!match?.[1]) {
-      return [];
-    }
+      if (!match?.[1]) {
+        return [];
+      }
 
-    return [
-      {
-        id: match[1],
-        label: field.value.trim() || field.label || match[1],
-      },
-    ];
-  });
+      return [
+        {
+          id: match[1],
+          label: field.value.trim() || field.label || match[1],
+        },
+      ];
+    },
+  );
 
   if (dynamicBranches.length > 0) {
     return dynamicBranches;
@@ -259,7 +262,9 @@ export const setSwitchBranches = (
 
   panel.fieldsByTab.mapping = [
     ...preservedFields,
-    ...branches.map((branch) => createSwitchBranchField(branch.id, branch.label)),
+    ...branches.map((branch) =>
+      createSwitchBranchField(branch.id, branch.label),
+    ),
   ];
 };
 
@@ -299,9 +304,14 @@ const withCurrentFieldValue = (
 export const getWorkflowFieldSelectOptions = (
   panel: WorkflowNodePanel | undefined,
   field: WorkflowField,
+  overrideOptions?: WorkflowFieldOption[],
 ): WorkflowFieldOption[] => {
   if (field.type !== "select") {
     return [];
+  }
+
+  if (overrideOptions && overrideOptions.length > 0) {
+    return withCurrentFieldValue(overrideOptions, field.value);
   }
 
   if (field.options && field.options.length > 0) {
@@ -430,7 +440,7 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
       },
       {
         id: "palette-subflow",
-        kind: "trigger",
+        kind: "sub-workflow",
         label: "Sub-Workflow",
         icon: "webhook",
         accent: "#6366F1",
@@ -704,6 +714,66 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
       ],
     },
   },
+  sub_workflow: {
+    tabs: ["base", "mapping", "retry"],
+    fieldsByTab: {
+      base: [
+        {
+          key: "workflowRef",
+          label: "子工作流",
+          type: "select",
+          value: "",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "调用子工作流",
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: "5000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "sub_workflow",
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value:
+            "选择一个已注册 workflow 作为子流程执行，inputMapping 会作为子流程输入传入。",
+        },
+      ],
+      mapping: [
+        {
+          key: "payload",
+          label: "子流程输入",
+          type: "textarea",
+          value: "{\n  orderId: input.orderId\n}",
+        },
+      ],
+      retry: [
+        {
+          key: "retryPolicy",
+          label: "失败重试",
+          type: "select",
+          value: "exponential_backoff",
+        },
+        {
+          key: "maxAttempts",
+          label: "最大重试次数",
+          type: "input",
+          value: "3",
+        },
+      ],
+    },
+  },
   end_left: {
     tabs: ["base"],
     fieldsByTab: {
@@ -794,7 +864,8 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           key: "payload",
           label: "入参 / params",
           type: "textarea",
-          value: "{\n  orderId: input.orderId,\n  requestId: trigger.headers.requestId\n}",
+          value:
+            "{\n  orderId: input.orderId,\n  requestId: trigger.headers.requestId\n}",
         },
       ],
       retry: [
@@ -1336,6 +1407,33 @@ export const createWorkflowNodeDraft = (
         panel,
       };
     }
+    case "palette-subflow": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("sub_workflow");
+      const subtitle = "调用子工作流";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          data: {
+            accent: item.accent,
+            icon: item.icon,
+            kind: "sub-workflow",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Sub-Workflow",
+          },
+        },
+        panel,
+      };
+    }
     default: {
       const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
       const panel = clonePanel("assign_task");
@@ -1409,7 +1507,9 @@ export const normalizeWorkflowEdge = (edge: Edge): Edge => ({
   type: WORKFLOW_EDGE_TYPE,
   style: {
     ...WORKFLOW_EDGE_STYLE,
-    ...(edge.style && typeof edge.style === "object" && !Array.isArray(edge.style)
+    ...(edge.style &&
+    typeof edge.style === "object" &&
+    !Array.isArray(edge.style)
       ? edge.style
       : {}),
   },

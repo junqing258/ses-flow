@@ -355,8 +355,7 @@ const normalizeExpression = (rawValue: string, fallback = "default") => {
 const resolveSwitchBranch = (
   panel: WorkflowNodePanel | undefined,
   sourceHandle?: string | null,
-) =>
-  getSwitchBranches(panel).find((branch) => branch.id === sourceHandle);
+) => getSwitchBranches(panel).find((branch) => branch.id === sourceHandle);
 
 const getSwitchBranchPriority = (
   branches: WorkflowBranchHandle[],
@@ -394,6 +393,10 @@ const extractNodeType = (node: WorkflowFlowNode) => {
 
   if (node.data.kind === "if-else") {
     return "if_else";
+  }
+
+  if (node.data.kind === "sub-workflow") {
+    return "sub_workflow";
   }
 
   if (node.data.title === "Webhook Trigger") {
@@ -513,11 +516,9 @@ const buildNodeDefinition = (
 
   if (type === "code") {
     definition.config = {
-      language:
-        getFieldValue(panel, "base", "language") || "javascript",
+      language: getFieldValue(panel, "base", "language") || "javascript",
       source:
-        getFieldValue(panel, "base", "source") ||
-        "return { output: params };",
+        getFieldValue(panel, "base", "source") || "return { output: params };",
     };
     definition.inputMapping = parseMappingValue(
       getFieldValue(panel, "mapping", "payload"),
@@ -544,8 +545,12 @@ const buildNodeDefinition = (
   }
 
   if (type === "sub_workflow") {
+    const workflowRef =
+      getFieldValue(panel, "base", "workflowRef") ||
+      getFieldValue(panel, "base", "command");
     definition.config = {
-      workflowKey: getFieldValue(panel, "base", "command") || undefined,
+      ref: workflowRef || undefined,
+      workflowKey: workflowRef || undefined,
     };
     definition.inputMapping = parseMappingValue(
       getFieldValue(panel, "mapping", "payload"),

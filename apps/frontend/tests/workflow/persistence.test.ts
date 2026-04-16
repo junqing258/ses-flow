@@ -37,16 +37,21 @@ describe("workflow persistence", () => {
       triggerMode: "webhook" as const,
     };
 
-    const document = createPersistedWorkflowDocument(state.nodes, state.edges, state.panelByNodeId, {
-      activeTab: state.activeTab,
-      pageMode: "run",
-      runDraft,
-      selectedNodeId: state.selectedNodeId,
-      status: "draft",
-      version: "v3",
-      workflowId: "sorting-main-flow",
-      workflowName: "sorting-main-flow",
-    });
+    const document = createPersistedWorkflowDocument(
+      state.nodes,
+      state.edges,
+      state.panelByNodeId,
+      {
+        activeTab: state.activeTab,
+        pageMode: "run",
+        runDraft,
+        selectedNodeId: state.selectedNodeId,
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
 
     expect(document.editor.pageMode).toBe("run");
     expect(document.editor.runDraft).toEqual(runDraft);
@@ -59,14 +64,19 @@ describe("workflow persistence", () => {
 
   it("falls back to default run state for older documents", () => {
     const state = createNewWorkflowEditorState();
-    const document = createPersistedWorkflowDocument(state.nodes, state.edges, state.panelByNodeId, {
-      activeTab: state.activeTab,
-      selectedNodeId: state.selectedNodeId,
-      status: "draft",
-      version: "v3",
-      workflowId: "sorting-main-flow",
-      workflowName: "sorting-main-flow",
-    });
+    const document = createPersistedWorkflowDocument(
+      state.nodes,
+      state.edges,
+      state.panelByNodeId,
+      {
+        activeTab: state.activeTab,
+        selectedNodeId: state.selectedNodeId,
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
 
     delete document.editor.pageMode;
     delete document.editor.runDraft;
@@ -84,28 +94,38 @@ describe("workflow persistence", () => {
 
     state.nodes[0]!.data.executionStatus = "success";
 
-    const document = createPersistedWorkflowDocument(state.nodes, state.edges, state.panelByNodeId, {
-      activeTab: state.activeTab,
-      selectedNodeId: state.selectedNodeId,
-      status: "draft",
-      version: "v3",
-      workflowId: "sorting-main-flow",
-      workflowName: "sorting-main-flow",
-    });
+    const document = createPersistedWorkflowDocument(
+      state.nodes,
+      state.edges,
+      state.panelByNodeId,
+      {
+        activeTab: state.activeTab,
+        selectedNodeId: state.selectedNodeId,
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
 
     expect(document.graph.nodes[0]?.data.executionStatus).toBeUndefined();
   });
 
   it("clears historical execution status when restoring older documents", () => {
     const state = createNewWorkflowEditorState();
-    const document = createPersistedWorkflowDocument(state.nodes, state.edges, state.panelByNodeId, {
-      activeTab: state.activeTab,
-      selectedNodeId: state.selectedNodeId,
-      status: "draft",
-      version: "v3",
-      workflowId: "sorting-main-flow",
-      workflowName: "sorting-main-flow",
-    });
+    const document = createPersistedWorkflowDocument(
+      state.nodes,
+      state.edges,
+      state.panelByNodeId,
+      {
+        activeTab: state.activeTab,
+        selectedNodeId: state.selectedNodeId,
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
 
     document.graph.nodes[0]!.data.executionStatus = "success";
 
@@ -196,11 +216,93 @@ describe("workflow persistence", () => {
     );
 
     const restored = createWorkflowEditorStateFromDocument(document);
-    const responseModeField = restored.panelByNodeId.webhook_trigger.fieldsByTab.base?.find(
-      (field) => field.key === "responseMode",
-    );
+    const responseModeField =
+      restored.panelByNodeId.webhook_trigger.fieldsByTab.base?.find(
+        (field) => field.key === "responseMode",
+      );
 
     expect(responseModeField).toBeDefined();
     expect(responseModeField?.value).toBe("async_ack");
+  });
+
+  it("migrates legacy sub-workflow panels from command input to workflow selector", () => {
+    const state = createNewWorkflowEditorState();
+    const subWorkflowNode = {
+      id: "invoke_child",
+      type: "workflow-card" as const,
+      position: { x: 192, y: 176 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      data: {
+        accent: "#6366F1",
+        icon: "webhook" as const,
+        kind: "trigger" as const,
+        nodeKey: "invoke_child",
+        subtitle: "调用子工作流",
+        title: "Sub-Workflow",
+      },
+    };
+
+    const document = createPersistedWorkflowDocument(
+      [state.nodes[0]!, subWorkflowNode, state.nodes[1]!],
+      state.edges,
+      {
+        ...state.panelByNodeId,
+        invoke_child: {
+          tabs: ["base", "mapping", "retry"],
+          fieldsByTab: {
+            base: [
+              {
+                key: "command",
+                label: "命令名称",
+                type: "input",
+                value: "child-flow",
+              },
+              {
+                key: "nodeName",
+                label: "节点名称",
+                type: "input",
+                value: "调用子工作流",
+              },
+              {
+                key: "nodeId",
+                label: "节点 ID",
+                type: "readonly",
+                value: "invoke_child",
+              },
+            ],
+            mapping: [
+              {
+                key: "payload",
+                label: "载荷",
+                type: "textarea",
+                value: "{\n  orderId: input.orderId\n}",
+              },
+            ],
+            retry: [],
+          },
+        },
+      },
+      {
+        activeTab: state.activeTab,
+        selectedNodeId: "invoke_child",
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
+
+    const restored = createWorkflowEditorStateFromDocument(document);
+    const baseFields =
+      restored.panelByNodeId.invoke_child.fieldsByTab.base ?? [];
+
+    expect(baseFields.some((field) => field.key === "command")).toBe(false);
+    expect(baseFields.find((field) => field.key === "workflowRef")?.value).toBe(
+      "child-flow",
+    );
+    expect(baseFields.some((field) => field.key === "responseMode")).toBe(
+      false,
+    );
   });
 });

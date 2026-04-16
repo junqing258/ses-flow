@@ -226,7 +226,7 @@ const ensureWebhookResponseModeField = (
     Object.entries(panelByNodeId).map(([nodeId, panel]) => {
       const node = nodes.find((item) => item.id === nodeId);
 
-      if (node?.data.kind !== "trigger") {
+      if (node?.data.title !== "Webhook Trigger") {
         return [nodeId, panel] as const;
       }
 
@@ -252,6 +252,75 @@ const ensureWebhookResponseModeField = (
         type: defaultField.type,
         value: defaultField.value,
       });
+
+      return [
+        nodeId,
+        {
+          ...panel,
+          fieldsByTab: {
+            ...panel.fieldsByTab,
+            base: nextBaseFields,
+          },
+        },
+      ] as const;
+    }),
+  ) as Record<string, WorkflowNodePanel>;
+};
+
+const ensureSubWorkflowSelectionField = (
+  nodes: WorkflowFlowNode[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+): Record<string, WorkflowNodePanel> => {
+  const defaults = createWorkflowPanels();
+  const defaultField = defaults.sub_workflow.fieldsByTab.base?.find(
+    (field) => field.key === "workflowRef",
+  );
+
+  if (!defaultField) {
+    return panelByNodeId;
+  }
+
+  return Object.fromEntries(
+    Object.entries(panelByNodeId).map(([nodeId, panel]) => {
+      const node = nodes.find((item) => item.id === nodeId);
+
+      if (
+        node?.data.kind !== "sub-workflow" &&
+        node?.data.title !== "Sub-Workflow"
+      ) {
+        return [nodeId, panel] as const;
+      }
+
+      const baseFields = panel.fieldsByTab.base ?? [];
+      const existingWorkflowRef = baseFields.find(
+        (field) => field.key === "workflowRef",
+      );
+      const legacyCommandField = baseFields.find(
+        (field) => field.key === "command",
+      );
+      const workflowRefValue =
+        existingWorkflowRef?.value ?? legacyCommandField?.value ?? "";
+      const nextBaseFields = baseFields
+        .filter((field) => field.key !== "command")
+        .map((field) =>
+          field.key === "workflowRef"
+            ? {
+                ...field,
+                label: defaultField.label,
+                type: defaultField.type,
+                value: workflowRefValue,
+              }
+            : field,
+        );
+
+      if (!nextBaseFields.some((field) => field.key === "workflowRef")) {
+        nextBaseFields.unshift({
+          key: defaultField.key,
+          label: defaultField.label,
+          type: defaultField.type,
+          value: workflowRefValue,
+        });
+      }
 
       return [
         nodeId,
@@ -382,10 +451,20 @@ export const createWorkflowEditorStateFromDocument = (
   document: PersistedWorkflowDocument,
 ): WorkflowEditorState => {
   const fallbackState = createInitialWorkflowEditorState();
-  const nodes = cloneNodes(document.graph.nodes);
-  const panelByNodeId = ensureWebhookResponseModeField(
+  const nodes = cloneNodes(document.graph.nodes).map((node) =>
+    node.data.title === "Sub-Workflow" && node.data.kind === "trigger"
+      ? {
+          ...node,
+          data: {
+            ...node.data,
+            kind: "sub-workflow",
+          },
+        }
+      : node,
+  ) as WorkflowFlowNode[];
+  const panelByNodeId = ensureSubWorkflowSelectionField(
     nodes,
-    clonePanels(document.graph.panels),
+    ensureWebhookResponseModeField(nodes, clonePanels(document.graph.panels)),
   );
 
   return {

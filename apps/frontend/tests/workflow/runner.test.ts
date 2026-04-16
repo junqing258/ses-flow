@@ -429,7 +429,9 @@ describe("buildRunnerWorkflowDefinition", () => {
       },
     );
 
-    const codeDefinition = definition.nodes.find((node) => node.id === "run_code");
+    const codeDefinition = definition.nodes.find(
+      (node) => node.id === "run_code",
+    );
 
     expect(codeDefinition).toMatchObject({
       id: "run_code",
@@ -441,6 +443,88 @@ describe("buildRunnerWorkflowDefinition", () => {
       },
       inputMapping: {
         qty: "{{input.qty}}",
+      },
+    });
+  });
+
+  it("exports sub-workflow nodes with workflow references", () => {
+    const baseNodes = createExampleWorkflowNodes().filter(
+      (node) => node.id !== "assign_task",
+    );
+    const { node: subWorkflowNode, panel: subWorkflowPanel } =
+      createWorkflowNodeDraft(
+        {
+          id: "palette-subflow",
+          kind: "sub-workflow",
+          label: "Sub-Workflow",
+          icon: "webhook",
+          accent: "#6366F1",
+        },
+        { x: 1184, y: 88 },
+        baseNodes,
+      );
+
+    subWorkflowNode.id = "invoke_child_flow";
+    subWorkflowNode.data.nodeKey = "invoke_child_flow";
+
+    (subWorkflowPanel.fieldsByTab.base ?? []).forEach((field) => {
+      if (field.key === "nodeId") {
+        field.value = "invoke_child_flow";
+      }
+      if (field.key === "nodeName") {
+        field.value = "调用分拣子流程";
+      }
+      if (field.key === "workflowRef") {
+        field.value = "sorting-child-flow";
+      }
+    });
+
+    const payloadField = (subWorkflowPanel.fieldsByTab.mapping ?? []).find(
+      (field) => field.key === "payload",
+    );
+
+    if (!payloadField) {
+      throw new Error("sub-workflow payload field should exist");
+    }
+
+    payloadField.value = "{\n  orderId: input.orderId\n}";
+
+    const panels = createWorkflowPanels();
+    panels.invoke_child_flow = subWorkflowPanel;
+
+    const definition = buildRunnerWorkflowDefinition(
+      [...baseNodes, subWorkflowNode],
+      createWorkflowEdges().map((edge) =>
+        edge.id === "switch->assign"
+          ? {
+              ...edge,
+              id: "switch->sub-workflow",
+              target: "invoke_child_flow",
+            }
+          : edge,
+      ),
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
+
+    const subWorkflowDefinition = definition.nodes.find(
+      (node) => node.id === "invoke_child_flow",
+    );
+
+    expect(subWorkflowDefinition).toMatchObject({
+      id: "invoke_child_flow",
+      name: "调用分拣子流程",
+      type: "sub_workflow",
+      config: {
+        ref: "sorting-child-flow",
+        workflowKey: "sorting-child-flow",
+      },
+      inputMapping: {
+        orderId: "{{input.orderId}}",
       },
     });
   });
