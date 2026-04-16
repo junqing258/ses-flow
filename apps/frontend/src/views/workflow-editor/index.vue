@@ -275,7 +275,7 @@ xxx
     <aside
       v-if="isEditMode"
       ref="leftCanvasAsideRef"
-      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[240px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-60 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div class="min-h-0 flex-1 overflow-y-auto py-3 px-2">
         <div
@@ -328,7 +328,7 @@ xxx
       class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     >
       <div
-        class="flex h-[84px] shrink-0 items-center justify-between border-b border-slate-50 px-4"
+        class="flex h-21 shrink-0 items-center justify-between border-b border-slate-50 px-4"
       >
         <div>
           <p class="text-[14px] font-semibold text-slate-900">运行配置</p>
@@ -390,7 +390,7 @@ xxx
           >
           <textarea
             :value="runDraft.body"
-            class="min-h-[148px] w-full rounded-[16px] border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            class="min-h-37 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
             @input="
               handleRunDraftUpdate(
                 'body',
@@ -480,7 +480,7 @@ xxx
       :class="rightAsideVisibilityClass"
     >
       <div
-        class="flex h-[68px] shrink-0 items-center gap-3 px-4 border-b border-slate-50"
+        class="flex h-17 shrink-0 items-center gap-3 px-4 border-b border-slate-50"
       >
         <div
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm"
@@ -541,7 +541,7 @@ xxx
             >
               <div
                 v-if="isSelectedSwitchNode && tab === 'mapping'"
-                class="space-y-3 rounded-[16px] border border-slate-200 bg-slate-50/70 p-3"
+                class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
               >
                 <div class="flex items-center justify-between gap-3">
                   <div>
@@ -700,7 +700,7 @@ xxx
 
             <div
               v-else
-              class="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-6 text-center text-xs leading-5 text-slate-400"
+              class="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-6 text-center text-xs leading-5 text-slate-400"
             >
               {{ WORKFLOW_EMPTY_TAB_TEXT[tab] }}
             </div>
@@ -828,7 +828,7 @@ xxx
             <article
               v-for="(item, index) in runTimeline"
               :key="`${item.nodeId}-${index}`"
-              class="rounded-[16px] border border-slate-200/80 bg-slate-50/70 p-3"
+              class="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
@@ -869,7 +869,7 @@ xxx
 
           <div
             v-else
-            class="mt-4 flex min-h-[160px] items-center justify-center rounded-[16px] border border-dashed border-slate-200 bg-slate-50/60 px-6 text-center text-xs leading-5 text-slate-400"
+            class="mt-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 text-center text-xs leading-5 text-slate-400"
           >
             运行后会按顺序展示每个节点的执行结果和日志。
           </div>
@@ -880,7 +880,7 @@ xxx
             State Snapshot
           </p>
           <pre
-            class="mt-3 max-h-[180px] overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100"
+            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100"
             >{{ runStatePreview }}</pre
           >
         </div>
@@ -890,7 +890,7 @@ xxx
             Last Output
           </p>
           <pre
-            class="mt-3 max-h-[180px] overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100"
+            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100"
             >{{ runOutputPreview }}</pre
           >
         </div>
