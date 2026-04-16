@@ -763,6 +763,76 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
     assert_eq!(detail_payload["document"]["workflow"]["version"], json!("v3"));
 }
 
+#[tokio::test]
+async fn executes_sub_workflow_references_from_registered_workflow_ids() {
+    let app = build_app();
+    let child_workflow = json!({
+        "meta": {
+            "key": "child-flow",
+            "name": "Child Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+    let child_workflow_id = upload_workflow(app.clone(), child_workflow).await;
+
+    let parent_workflow = json!({
+        "meta": {
+            "key": "parent-flow",
+            "name": "Parent Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "nested_workflow",
+                "type": "sub_workflow",
+                "name": "Nested Workflow",
+                "config": {
+                    "ref": child_workflow_id
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "nested_workflow" },
+            { "from": "nested_workflow", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+    let parent_workflow_id = upload_workflow(app.clone(), parent_workflow).await;
+
+    let run_id = start_run(app.clone(), &parent_workflow_id, json!({})).await;
+    let summary = wait_for_terminal_status(app, &run_id).await;
+
+    assert_eq!(summary["status"], json!("completed"));
+    assert!(
+        summary["timeline"].as_array().is_some_and(|timeline| timeline
+            .iter()
+            .any(|item| { item["nodeId"] == json!("nested_workflow") && item["status"] == json!("success") })),
+        "parent run timeline should contain a successful sub-workflow node execution",
+    );
+}
+
 async fn wait_for_terminal_status(app: axum::Router, run_id: &str) -> Value {
     for _ in 0..40 {
         let summary = get_summary(app.clone(), run_id).await;

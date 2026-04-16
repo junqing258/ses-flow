@@ -49,7 +49,6 @@ pub struct WorkflowRegistration {
 #[derive(Clone)]
 pub struct WorkflowServer {
     store: Arc<dyn WorkflowRunStore>,
-    runner: Arc<WorkflowRunner>,
     catalog: Arc<dyn WorkflowCatalogStore>,
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     run_registry: RunRegistry,
@@ -95,31 +94,47 @@ impl WorkflowServer {
         debug!("initializing workflow server with custom store and catalog");
         let run_registry = RunRegistry::default();
         let events = WorkflowEventStreams::default();
-        let observer = Arc::new(PersistingRunObserver {
-            store: store.clone(),
-            run_registry: run_registry.clone(),
-            events: events.clone(),
-        });
-        let controller = Arc::new(ServerRunController {
-            run_registry: run_registry.clone(),
-        });
-        let runner = Arc::new(WorkflowRunner::new(
-            WorkflowEngine::with_services_observer_and_controller(
-                WorkflowServices::with_defaults(),
-                observer,
-                controller,
-            ),
-            store.clone(),
-        ));
 
         Self {
             store,
-            runner,
             catalog,
             edit_sessions,
             run_registry,
             events,
         }
+    }
+
+    fn build_workflow_services(&self) -> Result<WorkflowServices, ServerError> {
+        let mut services = WorkflowServices::with_defaults();
+
+        for workflow in self.catalog.load_all_workflows()? {
+            services
+                .workflow_definitions
+                .register(workflow.definition.meta.key.clone(), workflow.definition.clone());
+            services.workflow_definitions.register(workflow.id, workflow.definition);
+        }
+
+        Ok(services)
+    }
+
+    fn build_runner(&self) -> Result<WorkflowRunner, ServerError> {
+        let observer = Arc::new(PersistingRunObserver {
+            store: self.store.clone(),
+            run_registry: self.run_registry.clone(),
+            events: self.events.clone(),
+        });
+        let controller = Arc::new(ServerRunController {
+            run_registry: self.run_registry.clone(),
+        });
+
+        Ok(WorkflowRunner::new(
+            WorkflowEngine::with_services_observer_and_controller(
+                self.build_workflow_services()?,
+                observer,
+                controller,
+            ),
+            self.store.clone(),
+        ))
     }
 
     pub fn register_workflow(
@@ -351,7 +366,7 @@ impl WorkflowServer {
         };
         self.publish_summary(&summary);
 
-        let runner = self.runner.clone();
+        let runner = self.build_runner()?;
         let fallback = self.clone();
         tokio::task::spawn_blocking(move || {
             let run_result = runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
@@ -420,7 +435,7 @@ impl WorkflowServer {
         };
         self.publish_summary(&running_summary);
 
-        let runner = self.runner.clone();
+        let runner = self.build_runner()?;
         let fallback = self.clone();
         let run_id = run_id.to_string();
         tokio::task::spawn_blocking(move || {
