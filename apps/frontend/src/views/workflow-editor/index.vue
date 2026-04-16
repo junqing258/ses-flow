@@ -12,8 +12,8 @@
     >
       <VueFlow
         id="workflow-editor-flow"
-        :nodes="nodes"
-        :edges="edges"
+        v-model:nodes="nodes"
+        v-model:edges="edges"
         :delete-key-code="isAiMode ? null : undefined"
         :disable-keyboard-a11y="isAiMode"
         :edges-focusable="!isAiMode"
@@ -21,7 +21,9 @@
         :selection-key-code="isAiMode ? false : undefined"
         class="h-full w-full"
         @connect="handleConnect"
+        @edges-change="handleEdgesChange"
         @node-click="handleNodeClick"
+        @nodes-change="handleNodesChange"
         @pane-click="handlePaneClick"
       >
         <template #node-workflow-card="nodeProps">
@@ -950,6 +952,8 @@ import {
 import {
   type Connection,
   type Edge,
+  type EdgeChange,
+  type NodeChange,
   VueFlow,
   useVueFlow,
 } from "@vue-flow/core";
@@ -1108,6 +1112,14 @@ let assistantSessionEventSubscription: EventSourceSubscription | null = null;
 let workflowRunCountSubscription: EventSourceSubscription | null = null;
 let workflowRunCountRefreshInFlight = false;
 let workflowRunCountRefreshQueued = false;
+let pendingFlowRemovalSync:
+  | {
+      edgeIds: Set<string>;
+      nodeIds: Set<string>;
+      nodeLabels: string[];
+      selectedNodeRemoved: boolean;
+    }
+  | null = null;
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();
@@ -2226,36 +2238,110 @@ const handlePaneClick = () => {
   clearSelectedNode();
 };
 
-const deleteSelectedNode = () => {
-  if (!isEditMode.value) {
-    return;
-  }
-
-  const targetId = selectedNodeId.value;
-
-  if (!targetId) {
-    return;
-  }
-
-  const targetNode = nodes.value.find((node) => node.id === targetId);
-
-  if (!targetNode || targetNode.type === "branch-chip") {
-    return;
+const scheduleFlowRemovalSync = () => {
+  if (pendingFlowRemovalSync) {
+    return pendingFlowRemovalSync;
   }
 
   pushHistorySnapshot();
-  nodes.value = nodes.value.filter((node) => node.id !== targetId);
-  edges.value = edges.value.filter(
-    (edge) => edge.source !== targetId && edge.target !== targetId,
-  );
+  pendingFlowRemovalSync = {
+    edgeIds: new Set<string>(),
+    nodeIds: new Set<string>(),
+    nodeLabels: [],
+    selectedNodeRemoved: false,
+  };
 
-  const { [targetId]: _removedPanel, ...restPanels } = panelByNodeId.value;
-  panelByNodeId.value = restPanels;
+  void nextTick().then(() => {
+    const pendingRemoval = pendingFlowRemovalSync;
+    pendingFlowRemovalSync = null;
 
-  selectFallbackNode();
-  toast.success(
-    `已删除节点：${targetNode.data.subtitle ?? targetNode.data.title}`,
-  );
+    if (!pendingRemoval) {
+      return;
+    }
+
+    if (pendingRemoval.nodeIds.size > 0) {
+      panelByNodeId.value = Object.fromEntries(
+        Object.entries(panelByNodeId.value).filter(
+          ([nodeId]) => !pendingRemoval.nodeIds.has(nodeId),
+        ),
+      );
+    }
+
+    if (pendingRemoval.selectedNodeRemoved) {
+      selectFallbackNode();
+    } else {
+      syncSelectedNodeData();
+    }
+
+    if (pendingRemoval.nodeIds.size > 0) {
+      const removedLabel =
+        pendingRemoval.nodeLabels[0] ?? `${pendingRemoval.nodeIds.size} 个节点`;
+
+      toast.success(
+        pendingRemoval.nodeIds.size === 1
+          ? `已删除节点：${removedLabel}`
+          : `已删除 ${pendingRemoval.nodeIds.size} 个节点`,
+      );
+      return;
+    }
+
+    if (pendingRemoval.edgeIds.size > 0) {
+      toast.success(
+        pendingRemoval.edgeIds.size === 1
+          ? "已删除 1 条连线"
+          : `已删除 ${pendingRemoval.edgeIds.size} 条连线`,
+      );
+    }
+  });
+
+  return pendingFlowRemovalSync;
+};
+
+const handleNodesChange = (changes: NodeChange[]) => {
+  const removedNodeIds = changes
+    .filter((change) => change.type === "remove")
+    .map((change) => change.id);
+
+  if (!removedNodeIds.length || !isEditMode.value) {
+    return;
+  }
+
+  const pendingRemoval = scheduleFlowRemovalSync();
+
+  removedNodeIds.forEach((nodeId) => {
+    if (pendingRemoval.nodeIds.has(nodeId)) {
+      return;
+    }
+
+    pendingRemoval.nodeIds.add(nodeId);
+
+    const removedNode = nodes.value.find((node) => node.id === nodeId);
+    const label = removedNode?.data.subtitle ?? removedNode?.data.title;
+
+    if (label) {
+      pendingRemoval.nodeLabels.push(label);
+    }
+
+    if (nodeId === selectedNodeId.value) {
+      pendingRemoval.selectedNodeRemoved = true;
+    }
+  });
+};
+
+const handleEdgesChange = (changes: EdgeChange[]) => {
+  const removedEdgeIds = changes
+    .filter((change) => change.type === "remove")
+    .map((change) => change.id);
+
+  if (!removedEdgeIds.length || !isEditMode.value) {
+    return;
+  }
+
+  const pendingRemoval = scheduleFlowRemovalSync();
+
+  removedEdgeIds.forEach((edgeId) => {
+    pendingRemoval.edgeIds.add(edgeId);
+  });
 };
 
 const getEdgeId = (connection: Connection) => {
@@ -3061,61 +3147,7 @@ const handlePublish = async () => {
   }
 };
 
-const isEditableTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  const tagName = target.tagName.toLowerCase();
-
-  if (target.isContentEditable) {
-    return true;
-  }
-
-  return tagName === "input" || tagName === "textarea" || tagName === "select";
-};
-
-const handleWindowKeydown = (event: KeyboardEvent) => {
-  if (isEditableTarget(event.target)) {
-    return;
-  }
-
-  if (isAiMode.value) {
-    const normalizedKey = event.key.toLowerCase();
-
-    if (
-      event.key === "Delete" ||
-      event.key === "Backspace" ||
-      ((event.metaKey || event.ctrlKey) && normalizedKey === "z")
-    ) {
-      event.preventDefault();
-    }
-
-    return;
-  }
-
-  if (!isEditMode.value) {
-    return;
-  }
-
-  if (
-    (event.metaKey || event.ctrlKey) &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === "z"
-  ) {
-    event.preventDefault();
-    undoLastChange();
-    return;
-  }
-
-  if (event.key === "Delete" || event.key === "Backspace") {
-    event.preventDefault();
-    deleteSelectedNode();
-  }
-};
-
 onMounted(() => {
-  window.addEventListener("keydown", handleWindowKeydown);
   void loadSelectableWorkflows();
 });
 
@@ -3143,7 +3175,6 @@ onBeforeUnmount(() => {
   }
   clearAssistantSessionPolling();
   clearRunSummaryPolling();
-  window.removeEventListener("keydown", handleWindowKeydown);
 });
 
 setSelectedNode(selectedNodeId.value);
