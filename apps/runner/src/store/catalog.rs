@@ -383,26 +383,26 @@ impl WorkflowCatalogStore for PostgresCatalogStore {
         let workflow_id = workflow_id.to_string();
         let cache = self.cache.clone();
 
-        tokio::spawn(async move {
-            let result = sqlx::query(
-                r#"
-                DELETE FROM workflow_definitions WHERE id = $1
-                "#,
-            )
-            .bind(&workflow_id)
-            .execute(&pool)
-            .await;
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                sqlx::query(
+                    r#"
+                    DELETE FROM workflow_definitions WHERE id = $1
+                    "#,
+                )
+                .bind(&workflow_id)
+                .execute(&pool)
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to delete workflow: {}", e)))?;
 
-            if let Err(e) = result {
-                tracing::error!(error = %e, workflow_id = %workflow_id, "Failed to delete workflow from database");
-            } else {
-                // Update cache on success
+                // Remove the workflow from the in-memory cache only after the
+                // database delete has completed successfully.
                 if let Ok(mut cache) = cache.lock() {
                     cache.workflows.remove(&workflow_id);
                 }
-            }
-        });
 
-        Ok(())
+                Ok(())
+            })
+        })
     }
 }

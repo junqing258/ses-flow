@@ -7,6 +7,9 @@ use crate::error::RunnerError;
 
 use super::catalog::{StoredWorkflowDefinition, WorkflowCatalogStore, WorkspaceRecord};
 
+// 基于内存的 catalog 实现，主要用于测试场景，以及未提供数据库 catalog
+// 的轻量 server 装配方式。它和 PostgreSQL 版承担相同的工作流目录职责，
+// 区别只是所有状态都保存在当前进程内。
 pub struct InMemoryCatalogStore {
     state: Arc<Mutex<InMemoryCatalogState>>,
 }
@@ -20,7 +23,8 @@ struct InMemoryCatalogState {
 impl InMemoryCatalogStore {
     pub fn new() -> Self {
         let store = Self::default();
-        // Initialize default workspace
+        // 与 API 层默认 workspace 约定保持一致，这样本地和测试场景下无需
+        // 额外初始化，就可以直接注册 workflow。
         let _ = store.save_workspace(&WorkspaceRecord {
             id: "default".to_string(),
             name: "Default".to_string(),

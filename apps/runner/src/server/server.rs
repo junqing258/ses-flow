@@ -58,6 +58,9 @@ pub struct WorkflowServer {
 
 impl WorkflowServer {
     pub fn new() -> Self {
+        // 默认构造方式主要面向测试和轻量本地使用，因此这里会装配内存版
+        // catalog。生产环境启动入口会在 main.rs 中显式注入
+        // PostgresCatalogStore。
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
@@ -65,6 +68,8 @@ impl WorkflowServer {
     }
 
     pub fn with_store(store: Arc<dyn WorkflowRunStore>) -> Self {
+        // 这个构造函数会继续使用内存版 catalog，但允许调用方单独替换
+        // run store，适合做更聚焦的测试。
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
