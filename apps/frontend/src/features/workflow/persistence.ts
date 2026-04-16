@@ -132,6 +132,26 @@ const cloneNodes = (
       type: node.type,
     })) as WorkflowFlowNode[];
 
+const cloneEditorNodes = (
+  nodes: WorkflowFlowNode[],
+  options: CloneNodeOptions = {},
+): WorkflowFlowNode[] =>
+  nodes.map((node) => ({
+    data: cloneNodeData(node.data, options),
+    deletable: node.deletable,
+    draggable: node.draggable,
+    id: node.id,
+    parentNode: node.parentNode,
+    position: {
+      x: node.position.x,
+      y: node.position.y,
+    },
+    selectable: node.selectable,
+    sourcePosition: node.sourcePosition,
+    targetPosition: node.targetPosition,
+    type: node.type,
+  })) as WorkflowFlowNode[];
+
 const cloneEdgeStyle = (style: Edge["style"]) => {
   if (!style || typeof style !== "object" || Array.isArray(style)) {
     return undefined;
@@ -311,6 +331,26 @@ export const createNewWorkflowEditorState = (): WorkflowEditorState => {
 
 export const createInitialWorkflowEditorState = (): WorkflowEditorState =>
   createNewWorkflowEditorState();
+
+export const clearWorkflowEditorSelection = (
+  state: WorkflowEditorState,
+): WorkflowEditorState => ({
+  activeTab: state.activeTab,
+  edges: cloneEdges(state.edges),
+  nodes: cloneEditorNodes(state.nodes, { includeExecutionStatus: true }).map(
+    (node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        active: false,
+      },
+    }),
+  ) as WorkflowFlowNode[],
+  panelByNodeId: clonePanels(state.panelByNodeId),
+  pageMode: state.pageMode,
+  runDraft: cloneRunDraft(state.runDraft),
+  selectedNodeId: "",
+});
 
 export const createPersistedWorkflowDocument = (
   nodes: WorkflowFlowNode[],

@@ -997,6 +997,7 @@ import {
   subscribeWorkflowEvents,
 } from "@/features/workflow/live";
 import {
+  clearWorkflowEditorSelection,
   createInitialWorkflowEditorState,
   createNewWorkflowEditorState,
   createPersistedWorkflowDocument,
@@ -1760,7 +1761,7 @@ const resetRunSession = () => {
 };
 
 const resetToInitialWorkflow = () => {
-  const nextState = createNewWorkflowEditorState();
+  const nextState = clearWorkflowEditorSelection(createNewWorkflowEditorState());
 
   workflowMeta.id = DEFAULT_WORKFLOW_ID;
   workflowMeta.name = DEFAULT_WORKFLOW_ID;
@@ -1861,9 +1862,16 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
 
   try {
     const workflow = await fetchWorkflowDetail(workflowId);
-    const state = workflow.document
-      ? createWorkflowEditorStateFromDocument(workflow.document)
-      : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow);
+    const nextState =
+      requestedRunId.trim().length > 0
+        ? workflow.document
+          ? createWorkflowEditorStateFromDocument(workflow.document)
+          : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow)
+        : clearWorkflowEditorSelection(
+            workflow.document
+              ? createWorkflowEditorStateFromDocument(workflow.document)
+              : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow),
+          );
 
     if (activeRunWorkflowId.value && activeRunWorkflowId.value !== workflowId) {
       resetRunSession();
@@ -1876,7 +1884,7 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
     workflowRunCount.value = workflow.runningRunCount;
     closeWorkflowRunCountEventStream();
     ensureWorkflowRunCountEventStream(workflow.workflowId);
-    applyWorkflowEditorState(state);
+    applyWorkflowEditorState(nextState);
 
     if (requestedRunId) {
       await restoreWorkflowRunFromRoute(
@@ -1895,7 +1903,6 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
 
     if (activeRunSummary.value && activeRunWorkflowId.value === workflowId) {
       setNodeExecutionStatuses(activeRunSummary.value);
-      selectRunFocusedNode(activeRunSummary.value);
     }
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "加载工作流详情失败");

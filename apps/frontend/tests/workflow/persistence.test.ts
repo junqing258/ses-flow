@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Position } from "@vue-flow/core";
 
 import {
+  clearWorkflowEditorSelection,
   createNewWorkflowEditorState,
   createPersistedWorkflowDocument,
   createWorkflowEditorStateFromDocument,
@@ -13,6 +14,18 @@ describe("workflow persistence", () => {
 
     expect(state.runDraft.body).toBe("{}");
     expect(state.runDraft.env).toBe("{}");
+  });
+
+  it("clears the default node selection for edit-mode entry", () => {
+    const state = createNewWorkflowEditorState();
+
+    const clearedState = clearWorkflowEditorSelection(state);
+
+    expect(clearedState.selectedNodeId).toBe("");
+    expect(clearedState.nodes.every((node) => node.data.active === false)).toBe(
+      true,
+    );
+    expect(clearedState.runDraft).toEqual(state.runDraft);
   });
 
   it("persists run mode and run draft fields", () => {
