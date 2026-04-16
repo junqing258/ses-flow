@@ -42,12 +42,7 @@ where
     S: Subscriber + for<'a> LookupSpan<'a>,
     N: for<'a> FormatFields<'a> + 'static,
 {
-    fn format_event(
-        &self,
-        _ctx: &FmtContext<'_, S, N>,
-        mut writer: Writer<'_>,
-        event: &Event<'_>,
-    ) -> stdfmt::Result {
+    fn format_event(&self, _ctx: &FmtContext<'_, S, N>, mut writer: Writer<'_>, event: &Event<'_>) -> stdfmt::Result {
         let meta = event.metadata();
         let timestamp = format_timestamp(writer.has_ansi_escapes());
         let level = format_level(meta.level(), writer.has_ansi_escapes());
