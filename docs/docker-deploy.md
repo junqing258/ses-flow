@@ -52,7 +52,7 @@ scripts/deploy-runner-ssh.sh
 - 默认部署到 `root@192.168.110.45`
 - 自动探测远端 CPU 架构并构建对应镜像
 - 通过 SSH 将镜像传到远端并执行 `docker load`
-- 上传 [docker-compose.remote.yml](/Users/junqing/git-hy/ses-flow/scripts/docker-compose.remote.yml) 和本地 `.env`
+- 上传 [docker-compose.remote.yml](../scripts/docker-compose.remote.yml) 和本地 `.env`
 - 在远端执行 `docker compose up -d --force-recreate`
 
 ## 5. 实现说明
