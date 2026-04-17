@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tracing::info;
 
-use crate::server::{ApiError, ApiState, RUNNER_API_BASE_PATH, WorkflowEventStream, into_sse};
+use crate::modules::{ApiError, ApiState, RUNNER_API_BASE_PATH, WorkflowEventStream, into_sse};
 
 #[derive(Debug, Deserialize)]
 pub struct ExecuteWorkflowRequest {

@@ -16,7 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info};
 
-use crate::server::{edit_session, run, system, workflow};
+use crate::modules::{edit_session, run, system, workflow};
 
 pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
 pub const RUNNER_VIEWS_BASE_PATH: &str = "/views";

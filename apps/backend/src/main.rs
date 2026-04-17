@@ -2,7 +2,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use backend::server::{ApiState, build_router};
+use backend::modules::{ApiState, build_router};
 use runner::app::WorkflowApp;
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;

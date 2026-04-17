@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 use tracing::debug;
 
 use super::workflow_service::{self, RefreshCatalogResponse, UploadWorkflowRequest};
-use crate::server::{ApiError, ApiState, WorkflowEventStream};
+use crate::modules::{ApiError, ApiState, WorkflowEventStream};
 use runner::app::WorkflowRegistration;
 use runner::store::{WorkflowDetailRecord, WorkflowRunRecord, WorkflowSummaryRecord};
 

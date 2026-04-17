@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
-use crate::server::{ApiError, ApiState, WorkflowEventStream, into_sse};
+use crate::modules::{ApiError, ApiState, WorkflowEventStream, into_sse};
 
 #[derive(Debug, serde::Serialize)]
 pub struct RefreshCatalogResponse {

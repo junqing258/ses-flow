@@ -13,7 +13,7 @@ use tower::ServiceExt;
 use runner::app::WorkflowApp;
 use runner::store::{InMemoryRunStore, WorkflowRunStore};
 
-use crate::server::{ApiState, RUNNER_API_BASE_PATH, build_router};
+use crate::modules::{ApiState, RUNNER_API_BASE_PATH, build_router};
 
 fn build_app() -> axum::Router {
     build_router(ApiState {

@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use tracing::info;
 
 use super::run_service::{self, ExecuteWorkflowRequest, ResumeWorkflowRequest, WorkflowExecutionAccepted};
-use crate::server::{ApiError, ApiState, WorkflowEventStream};
+use crate::modules::{ApiError, ApiState, WorkflowEventStream};
 use runner::core::runtime::WorkflowRunSummary;
 
 pub async fn execute_workflow(

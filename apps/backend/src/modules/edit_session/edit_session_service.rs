@@ -3,7 +3,7 @@ use runner::store::WorkflowEditSessionRecord;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::server::{ApiError, ApiState, WorkflowEventStream, into_sse};
+use crate::modules::{ApiError, ApiState, WorkflowEventStream, into_sse};
 
 #[derive(Debug, Deserialize)]
 pub struct EditSessionUpsertRequest {
