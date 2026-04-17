@@ -33,14 +33,21 @@ export interface WorkflowRunListItem {
   workflowVersion: number;
 }
 
-const DEFAULT_RUNNER_BASE_URL =
-  typeof globalThis.location?.origin === "string"
-    ? `${globalThis.location.origin}/runner-api`
-    : "http://localhost/runner-api";
 
-export const RUNNER_BASE_URL = (
-  import.meta.env.VITE_RUNNER_BASE_URL?.trim() || DEFAULT_RUNNER_BASE_URL
-).replace(/\/$/, "");
+export const getRunnerBaseUrl = () => {
+  const baseUrl = import.meta.env.VITE_RUNNER_BASE_URL;
+  if (/^https?:\/\//.test(baseUrl)) {
+    return baseUrl.replace(/\/$/, "");
+  } else {
+    const origin =
+      typeof globalThis.location?.origin === "string"
+        ? globalThis.location.origin
+        : "http://localhost:6302";
+    return `${origin.replace(/\/$/, "")}/${baseUrl.replace(/^\//, "").replace(/\/$/, "")}`;
+  }
+}
+
+export const RUNNER_BASE_URL = getRunnerBaseUrl();
 
 const CATALOG_API_BASE_URL = RUNNER_BASE_URL + "/catalog";
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";

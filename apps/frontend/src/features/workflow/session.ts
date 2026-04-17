@@ -1,9 +1,9 @@
 import { request as sendRequest } from "@/lib/request";
-import { RUNNER_BASE_URL } from "./api";
+import { getRunnerBaseUrl } from "./api";
 import type { PersistedWorkflowDocument } from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 
-export const WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL = RUNNER_BASE_URL;
+export const WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL = getRunnerBaseUrl();
 
 const DEFAULT_WORKSPACE_ID = "ses-workflow-editor";
 
