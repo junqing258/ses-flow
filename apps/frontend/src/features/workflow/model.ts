@@ -1,4 +1,9 @@
-import { Position, type Edge, type Node, type XYPosition } from "@vue-flow/core";
+import {
+  Position,
+  type Edge,
+  type Node,
+  type XYPosition,
+} from "@vue-flow/core";
 import {
   Activity,
   Code2,
@@ -65,6 +70,11 @@ export type WorkflowExecutionStatus =
 export interface WorkflowFieldOption {
   label: string;
   value: string;
+}
+
+export interface WorkflowReferenceSummary {
+  workflowId: string;
+  workflowKey: string;
 }
 
 export interface WorkflowNodeData {
@@ -342,6 +352,29 @@ export const getWorkflowFieldSelectOptions = (
     DEFAULT_SELECT_FIELD_OPTIONS[field.key] ?? [],
     field.value,
   );
+};
+
+export const resolveWorkflowReferenceId = (
+  workflowRef: string,
+  workflows: WorkflowReferenceSummary[],
+): string | undefined => {
+  const normalizedRef = workflowRef.trim();
+
+  if (!normalizedRef) {
+    return undefined;
+  }
+
+  const exactIdMatch = workflows.find(
+    (workflow) => workflow.workflowId.trim() === normalizedRef,
+  );
+
+  if (exactIdMatch) {
+    return exactIdMatch.workflowId;
+  }
+
+  return workflows.find(
+    (workflow) => workflow.workflowKey.trim() === normalizedRef,
+  )?.workflowId;
 };
 
 export const setSwitchFallbackHandle = (

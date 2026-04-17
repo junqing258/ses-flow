@@ -625,9 +625,18 @@ xxx
                 class="space-y-1.5"
               >
                 <label
-                  class="block text-xs font-semibold tracking-wide text-slate-500"
+                  class="flex items-center justify-between gap-3 text-xs font-semibold tracking-wide text-slate-500"
                 >
-                  {{ field.label }}
+                  <span>{{ field.label }}</span>
+                  <a
+                    v-if="getSubWorkflowLinkHref(field)"
+                    :href="getSubWorkflowLinkHref(field)"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="shrink-0 text-xs font-medium tracking-normal text-sky-600 transition-colors hover:text-sky-700 hover:underline"
+                  >
+                    打开子工作流
+                  </a>
                 </label>
 
                 <Input
@@ -1037,6 +1046,7 @@ import {
   getWorkflowFieldSelectOptions,
   getSwitchBranches,
   getSwitchFallbackHandle,
+  resolveWorkflowReferenceId,
   setSwitchBranches,
   setSwitchFallbackHandle,
   syncBranchHandlesForNode,
@@ -1396,6 +1406,33 @@ const getFieldSelectOptions = (field: WorkflowField) => {
   }
 
   return getWorkflowFieldSelectOptions(selectedPanel.value, field);
+};
+
+const isSubWorkflowReferenceField = (field: WorkflowField) =>
+  selectedNodeData.value.kind === "sub-workflow" &&
+  field.type === "select" &&
+  field.key === "workflowRef";
+
+const getSubWorkflowLinkHref = (field: WorkflowField) => {
+  if (!isSubWorkflowReferenceField(field)) {
+    return "";
+  }
+
+  const workflowId = resolveWorkflowReferenceId(
+    field.value,
+    workflowSummaries.value,
+  );
+
+  if (!workflowId) {
+    return "";
+  }
+
+  return router.resolve({
+    name: "workflow-editor",
+    params: {
+      id: workflowId,
+    },
+  }).href;
 };
 
 const syncBranchHandleNodes = (nodeId?: string) => {

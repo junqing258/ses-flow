@@ -4,6 +4,7 @@ import {
   WORKFLOW_PALETTE_CATEGORIES,
   createWorkflowNodeDraft,
   getWorkflowFieldSelectOptions,
+  resolveWorkflowReferenceId,
 } from "@/features/workflow/model";
 
 describe("createWorkflowNodeDraft", () => {
@@ -94,5 +95,31 @@ describe("createWorkflowNodeDraft", () => {
       panel.fieldsByTab.mapping?.find((field) => field.key === "payload")
         ?.value,
     ).toBe("{{input}}");
+  });
+
+  it("resolves sub-workflow references to workflow ids", () => {
+    expect(
+      resolveWorkflowReferenceId("child-flow", [
+        {
+          workflowId: "wf-child-1",
+          workflowKey: "child-flow",
+        },
+      ]),
+    ).toBe("wf-child-1");
+  });
+
+  it("prefers an exact workflow id match over a workflow key match", () => {
+    expect(
+      resolveWorkflowReferenceId("child-flow", [
+        {
+          workflowId: "wf-child-1",
+          workflowKey: "child-flow",
+        },
+        {
+          workflowId: "child-flow",
+          workflowKey: "legacy-child-flow",
+        },
+      ]),
+    ).toBe("child-flow");
   });
 });

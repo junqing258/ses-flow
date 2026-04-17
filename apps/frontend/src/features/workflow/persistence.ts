@@ -4,7 +4,6 @@ import {
   WORKFLOW_EDGE_STYLE,
   WORKFLOW_EDGE_TYPE,
   WORKFLOW_PALETTE_CATEGORIES,
-  createWorkflowEdges,
   createWorkflowNodeDraft,
   createWorkflowPanels,
   normalizeWorkflowEdges,
