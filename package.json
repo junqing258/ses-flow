@@ -1,0 +1,15 @@
+{
+  "name": "ses-flow",
+  "private": true,
+  "packageManager": "pnpm@10.21.0",
+  "scripts": {
+    "dev": "moon run :dev",
+    "build": "moon run :build",
+    "start": "moon run :start",
+    "test": "moon run :test",
+    "lint": "moon run :lint",
+    "format": "moon run :format",
+    "format:check": "moon run :formatCheck"
+  },
+  "devDependencies": {}
+}
