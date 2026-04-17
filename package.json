@@ -3,13 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.21.0",
   "scripts": {
-    "dev": "moon run :dev",
-    "build": "moon run :build",
-    "start": "moon run :start",
-    "test": "moon run :test",
-    "lint": "moon run :lint",
-    "format": "moon run :format",
-    "format:check": "moon run :formatCheck"
+    "dev": "just dev",
+    "build": "just build",
+    "start": "just start",
+    "test": "just test",
+    "lint": "just lint",
+    "format": "just format",
+    "format:check": "just formatCheck"
   },
   "devDependencies": {}
 }

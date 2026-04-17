@@ -1,24 +1,17 @@
 FROM node:22-bookworm-slim AS frontend-builder
 
-WORKDIR /workspace
+WORKDIR /workspace/apps/frontend
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="${PNPM_HOME}:${PATH}"
 
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/frontend/package.json apps/frontend/package.json
-COPY packages/scheme/package.json packages/scheme/package.json
-
-RUN pnpm install --frozen-lockfile --filter frontend...
-
-COPY apps/frontend apps/frontend
+COPY apps/frontend ./
+RUN pnpm install --no-frozen-lockfile
 
 ARG VITE_RUNNER_BASE_URL=/runner-api
 ENV VITE_RUNNER_BASE_URL=${VITE_RUNNER_BASE_URL}
-
-WORKDIR /workspace/apps/frontend
 
 RUN pnpm build
 
