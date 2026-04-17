@@ -31,7 +31,7 @@
 
 ### 3.1 推荐方案
 
-`Vue Flow + JSON DSL + Node.js Runner + 受控扩展点`
+`Vue Flow + JSON DSL + Rust Runner + 受控扩展点`
 
 优点：
 
