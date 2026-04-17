@@ -169,3 +169,5 @@ log_step "查看远端服务状态"
 remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env ps"
 
 printf '%s\n' "部署完成：$DEPLOY_IMAGE_REF -> $DEPLOY_SSH_TARGET"
+# http://192.168.110.45:6302/views
+printf '%s\n' "访问地址：http://$(echo "$DEPLOY_SSH_TARGET" | cut -d '@' -f 2):6302/views"
