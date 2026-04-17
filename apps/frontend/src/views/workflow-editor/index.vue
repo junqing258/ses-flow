@@ -586,13 +586,6 @@ xxx
                           )
                         "
                       />
-                      <p
-                        class="text-[11px] leading-5 text-slate-400 text-nowrap"
-                      >
-                        {{
-                          `${selectedPanel?.fieldsByTab.base?.find((field) => field.key === "expression")?.value || "value"} === '${branch.label || branch.id}'`
-                        }}
-                      </p>
                     </div>
 
                     <button

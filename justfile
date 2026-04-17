@@ -12,7 +12,13 @@ dev:
   wait
 
 dev-backend:
-  cargo watch -x "run -p backend -- --host 127.0.0.1 --port 6302"
+  cargo watch \
+    -w Cargo.toml \
+    -w Cargo.lock \
+    -w .env \
+    -w apps/backend \
+    -w apps/runner \
+    -x "run -p backend -- --host 127.0.0.1 --port 6302"
 
 dev-frontend:
   pnpm --filter frontend dev
