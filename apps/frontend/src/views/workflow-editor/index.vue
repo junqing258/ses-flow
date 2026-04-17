@@ -518,6 +518,7 @@ xxx
               v-for="tab in visibleTabs"
               :key="tab"
               :value="tab"
+              :data-tab-visible="`${tab}`"
               class="rounded-md px-3 text-xs font-medium data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
             >
               {{ WORKFLOW_TAB_LABELS[tab] }}
@@ -622,6 +623,7 @@ xxx
               <div
                 v-for="field in getFieldsForTab(tab)"
                 :key="`${tab}-${field.key}`"
+                :data-filed-tab="`${tab}-${field.key}`"
                 class="space-y-1.5"
               >
                 <label
@@ -1194,10 +1196,11 @@ const isSelectedSwitchNode = computed(
   () => selectedNodeData.value.kind === "switch",
 );
 const selectedSwitchBranches = computed(() =>
-  getSwitchBranches(selectedPanel.value),
+  getSwitchBranches(panelByNodeId.value[selectedNodeId.value]),
 );
 const selectedSwitchFallbackHandle = computed(
-  () => getSwitchFallbackHandle(selectedPanel.value) ?? "",
+  () =>
+    getSwitchFallbackHandle(panelByNodeId.value[selectedNodeId.value]) ?? "",
 );
 const selectableSubWorkflowOptions = computed(() => {
   const currentWorkflowId = workflowMeta.id.trim();
@@ -1210,9 +1213,9 @@ const selectableSubWorkflowOptions = computed(() => {
     .map((workflow) => ({
       label:
         workflow.name === workflow.workflowKey
-          ? workflow.name
-          : `${workflow.name} · ${workflow.workflowKey}`,
-      value: workflow.workflowKey,
+          ? `${workflow.name} · ${workflow.version}`
+          : `${workflow.name} · ${workflow.workflowKey} · ${workflow.version}`,
+      value: workflow.workflowId,
     }));
 
   return [{ label: "请选择子工作流", value: "" }, ...options];
@@ -1373,7 +1376,8 @@ const isSwitchBranchField = (fieldKey: string) =>
   fieldKey.startsWith("branch:");
 
 const getFieldsForTab = (tab: WorkflowTabId) => {
-  const fields = selectedPanel.value?.fieldsByTab[tab] ?? [];
+  const fields =
+    panelByNodeId.value[selectedNodeId.value]?.fieldsByTab[tab] ?? [];
 
   if (!isSelectedSwitchNode.value) {
     return fields;

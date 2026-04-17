@@ -33,13 +33,6 @@ const branchHandles = computed<WorkflowBranchHandle[]>(() => {
     ];
   }
 
-  if (props.data.kind === "switch") {
-    return [
-      { id: "branch-a", label: "A" },
-      { id: "branch-b", isDefault: true, label: "B" },
-    ];
-  }
-
   return [];
 });
 const branchNodeHeight = computed(() =>
