@@ -5,6 +5,8 @@
     "**/node_modules": true
   },
   "rust-analyzer.linkedProjects": [
-    "Cargo.toml"
+    "Cargo.toml",
+    "apps/runner/Cargo.toml",
+    "apps/backend/Cargo.toml"
   ]
 }
