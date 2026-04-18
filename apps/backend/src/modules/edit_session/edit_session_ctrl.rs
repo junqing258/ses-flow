@@ -9,14 +9,19 @@ pub async fn create_edit_session(
     State(state): State<ApiState>,
     Json(request): Json<EditSessionUpsertRequest>,
 ) -> Result<Json<WorkflowEditSessionRecord>, ApiError> {
-    Ok(Json(edit_session_service::create_edit_session(&state, request)?))
+    Ok(Json(edit_session_service::create_edit_session(
+        &state, request,
+    )?))
 }
 
 pub async fn get_edit_session(
     State(state): State<ApiState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<WorkflowEditSessionRecord>, ApiError> {
-    Ok(Json(edit_session_service::get_edit_session(&state, &session_id)?))
+    Ok(Json(edit_session_service::get_edit_session(
+        &state,
+        &session_id,
+    )?))
 }
 
 pub async fn subscribe_edit_session_events(

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -16,13 +17,23 @@ use runner::store::{InMemoryRunStore, WorkflowRunStore};
 use crate::modules::{ApiState, RUNNER_API_BASE_PATH, build_router};
 
 fn build_app() -> axum::Router {
+    build_app_with_ai_gateway_target("http://127.0.0.1:6307")
+}
+
+fn build_app_with_ai_gateway_target(target: &str) -> axum::Router {
     build_router(ApiState {
         app: Arc::new(WorkflowApp::new()),
+        ai_gateway_base_url: target.to_string(),
+        ai_gateway_client: reqwest::Client::new(),
     })
 }
 
 fn build_app_with_server(app: Arc<WorkflowApp>) -> axum::Router {
-    build_router(ApiState { app })
+    build_router(ApiState {
+        app,
+        ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
+        ai_gateway_client: reqwest::Client::new(),
+    })
 }
 
 fn api_path(path: &str) -> String {
@@ -30,7 +41,8 @@ fn api_path(path: &str) -> String {
 }
 
 fn spawn_delayed_http_server(delay: Duration) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("delayed test server should bind to a random port");
+    let listener =
+        TcpListener::bind("127.0.0.1:0").expect("delayed test server should bind to a random port");
     let address = listener
         .local_addr()
         .expect("delayed test server should expose local address");
@@ -56,6 +68,102 @@ fn spawn_delayed_http_server(delay: Duration) -> String {
     });
 
     format!("http://{address}")
+}
+
+struct CapturedHttpRequest {
+    request_line: String,
+    raw_headers: String,
+    body: Vec<u8>,
+}
+
+fn spawn_single_response_http_server(
+    response: String,
+) -> (String, mpsc::Receiver<CapturedHttpRequest>) {
+    let listener =
+        TcpListener::bind("127.0.0.1:0").expect("proxy test server should bind to a random port");
+    let address = listener
+        .local_addr()
+        .expect("proxy test server should expose local address");
+    let (sender, receiver) = mpsc::channel();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener
+            .accept()
+            .expect("proxy test server should accept a request");
+
+        let request = read_http_request(&mut stream);
+        sender
+            .send(request)
+            .expect("captured proxy request should be sent");
+        stream
+            .write_all(response.as_bytes())
+            .expect("proxy test server should write response");
+    });
+
+    (format!("http://{address}"), receiver)
+}
+
+fn read_http_request(stream: &mut std::net::TcpStream) -> CapturedHttpRequest {
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 1024];
+    let mut headers_end = None;
+    let mut content_length = 0usize;
+
+    loop {
+        let bytes_read = stream
+            .read(&mut chunk)
+            .expect("proxy test server should read request");
+        if bytes_read == 0 {
+            break;
+        }
+
+        buffer.extend_from_slice(&chunk[..bytes_read]);
+
+        if headers_end.is_none() {
+            headers_end = find_header_end(&buffer);
+            if let Some(position) = headers_end {
+                content_length = parse_content_length(&buffer[..position]);
+            }
+        }
+
+        if let Some(position) = headers_end {
+            if buffer.len() >= position + content_length {
+                break;
+            }
+        }
+    }
+
+    let headers_end = headers_end.expect("proxy request should include headers");
+    let request_head = String::from_utf8_lossy(&buffer[..headers_end]).to_string();
+    let mut lines = request_head.lines();
+    let request_line = lines.next().unwrap_or_default().to_string();
+    let raw_headers = lines.collect::<Vec<_>>().join("\n");
+
+    CapturedHttpRequest {
+        request_line,
+        raw_headers,
+        body: buffer[headers_end..].to_vec(),
+    }
+}
+
+fn find_header_end(buffer: &[u8]) -> Option<usize> {
+    buffer
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|position| position + 4)
+}
+
+fn parse_content_length(headers: &[u8]) -> usize {
+    String::from_utf8_lossy(headers)
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            if name.eq_ignore_ascii_case("content-length") {
+                return value.trim().parse::<usize>().ok();
+            }
+            None
+        })
+        .unwrap_or(0)
 }
 
 #[tokio::test]
@@ -120,7 +228,10 @@ async fn handles_cors_preflight_requests() {
                 .uri(api_path("/workflows"))
                 .header(header::ORIGIN, "http://localhost:5173")
                 .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type,x-request-id")
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    "content-type,x-request-id",
+                )
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -148,8 +259,150 @@ async fn handles_cors_preflight_requests() {
             .headers()
             .get(header::ACCESS_CONTROL_ALLOW_HEADERS)
             .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value == "*" || value.to_ascii_lowercase().contains("content-type")),
+            .is_some_and(
+                |value| value == "*" || value.to_ascii_lowercase().contains("content-type")
+            ),
         "preflight should allow requested headers"
+    );
+}
+
+#[tokio::test]
+async fn proxies_ai_gateway_json_requests() {
+    let response_body = json!({
+        "status": "accepted",
+        "source": "ai-gateway"
+    })
+    .to_string();
+    let upstream_response = format!(
+        "HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\nX-Upstream: ai-gateway\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        response_body.len(),
+        response_body
+    );
+    let (server_url, captured_request_receiver) =
+        spawn_single_response_http_server(upstream_response);
+    let app = build_app_with_ai_gateway_target(&server_url);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/ai/threads/session-1/messages?draft=1")
+                .header("content-type", "application/json")
+                .header("accept", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "message": "hello proxy"
+                    }))
+                    .expect("request body should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("proxy request should succeed");
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        response
+            .headers()
+            .get("x-upstream")
+            .and_then(|value| value.to_str().ok()),
+        Some("ai-gateway")
+    );
+
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("proxy response body should collect")
+        .to_bytes();
+    let payload: Value =
+        serde_json::from_slice(&body).expect("proxy response should be valid json");
+    assert_eq!(payload["status"], json!("accepted"));
+
+    let captured = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("upstream server should capture the proxied request");
+    assert_eq!(
+        captured.request_line,
+        "POST /api/ai/threads/session-1/messages?draft=1 HTTP/1.1"
+    );
+    assert!(
+        captured
+            .raw_headers
+            .to_ascii_lowercase()
+            .contains("content-type: application/json"),
+        "proxy should preserve content-type for upstream"
+    );
+    assert_eq!(
+        String::from_utf8(captured.body).expect("request body should be valid utf-8"),
+        r#"{"message":"hello proxy"}"#
+    );
+}
+
+#[tokio::test]
+async fn proxies_ai_gateway_sse_responses() {
+    let sse_payload = "event: thread.snapshot\ndata: {\"status\":\"idle\"}\n\n";
+    let upstream_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        sse_payload.len(),
+        sse_payload
+    );
+    let (server_url, captured_request_receiver) =
+        spawn_single_response_http_server(upstream_response);
+    let app = build_app_with_ai_gateway_target(&server_url);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/ai/threads/session-1/events")
+                .header("accept", "text/event-stream")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("proxy request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("text/event-stream")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-cache")
+    );
+
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("sse response body should collect")
+        .to_bytes();
+    assert_eq!(
+        String::from_utf8(body.to_vec()).expect("sse body should be valid utf-8"),
+        sse_payload
+    );
+
+    let captured = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("upstream server should capture the proxied sse request");
+    assert_eq!(
+        captured.request_line,
+        "GET /api/ai/threads/session-1/events HTTP/1.1"
+    );
+    assert!(
+        captured
+            .raw_headers
+            .to_ascii_lowercase()
+            .contains("accept: text/event-stream"),
+        "proxy should preserve sse accept header for upstream"
     );
 }
 
@@ -231,7 +484,8 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let upload_payload: Value = serde_json::from_slice(&upload_body).expect("response body should be valid json");
+    let upload_payload: Value =
+        serde_json::from_slice(&upload_body).expect("response body should be valid json");
     let workflow_id = upload_payload["workflowId"]
         .as_str()
         .expect("workflow id should be present")
@@ -266,7 +520,8 @@ async fn uploads_workflow_and_executes_run_to_completion() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let execute_payload: Value = serde_json::from_slice(&execute_body).expect("response body should be valid json");
+    let execute_payload: Value =
+        serde_json::from_slice(&execute_body).expect("response body should be valid json");
     let run_id = execute_payload["runId"]
         .as_str()
         .expect("run id should be present")
@@ -332,7 +587,8 @@ async fn creates_and_updates_edit_session_draft() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let create_payload: Value = serde_json::from_slice(&create_body).expect("response body should be valid json");
+    let create_payload: Value =
+        serde_json::from_slice(&create_body).expect("response body should be valid json");
     let session_id = create_payload["sessionId"]
         .as_str()
         .expect("session id should be present")
@@ -403,11 +659,15 @@ async fn creates_and_updates_edit_session_draft() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let get_payload: Value = serde_json::from_slice(&get_body).expect("response body should be valid json");
+    let get_payload: Value =
+        serde_json::from_slice(&get_body).expect("response body should be valid json");
 
     assert_eq!(get_payload["sessionId"], json!(session_id));
     assert_eq!(get_payload["workflowId"], json!("wf-ai-1"));
-    assert_eq!(get_payload["workflow"]["meta"]["name"], json!("Updated Flow"));
+    assert_eq!(
+        get_payload["workflow"]["meta"]["name"],
+        json!("Updated Flow")
+    );
 }
 
 #[tokio::test]
@@ -467,7 +727,8 @@ async fn terminates_waiting_run() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let terminate_payload: Value = serde_json::from_slice(&terminate_body).expect("response body should be valid json");
+    let terminate_payload: Value =
+        serde_json::from_slice(&terminate_body).expect("response body should be valid json");
     assert_eq!(terminate_payload["status"], json!("terminated"));
 
     let terminated_summary = get_summary(app, &run_id).await;
@@ -662,7 +923,8 @@ async fn terminates_orphaned_running_run_immediately() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let terminate_payload: Value = serde_json::from_slice(&terminate_body).expect("response body should be valid json");
+    let terminate_payload: Value =
+        serde_json::from_slice(&terminate_body).expect("response body should be valid json");
     assert_eq!(terminate_payload["status"], json!("terminated"));
 
     let terminated_summary = store
@@ -762,7 +1024,8 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let list_payload: Value = serde_json::from_slice(&list_body).expect("response body should be valid json");
+    let list_payload: Value =
+        serde_json::from_slice(&list_body).expect("response body should be valid json");
     assert_eq!(list_payload[0]["workflowId"], json!("wf-editor"));
     assert_eq!(list_payload[0]["name"], json!("Editor Backed Flow"));
     assert_eq!(list_payload[0]["status"], json!("published"));
@@ -785,9 +1048,13 @@ async fn lists_workflows_and_returns_editor_document_for_detail() {
         .await
         .expect("body should collect")
         .to_bytes();
-    let detail_payload: Value = serde_json::from_slice(&detail_body).expect("response body should be valid json");
+    let detail_payload: Value =
+        serde_json::from_slice(&detail_body).expect("response body should be valid json");
     assert_eq!(detail_payload["workflowId"], json!("wf-editor"));
-    assert_eq!(detail_payload["document"]["workflow"]["version"], json!("v3"));
+    assert_eq!(
+        detail_payload["document"]["workflow"]["version"],
+        json!("v3")
+    );
 }
 
 #[tokio::test]
@@ -853,9 +1120,11 @@ async fn executes_sub_workflow_references_from_registered_workflow_ids() {
 
     assert_eq!(summary["status"], json!("completed"));
     assert!(
-        summary["timeline"].as_array().is_some_and(|timeline| timeline
-            .iter()
-            .any(|item| { item["nodeId"] == json!("nested_workflow") && item["status"] == json!("success") })),
+        summary["timeline"]
+            .as_array()
+            .is_some_and(|timeline| timeline.iter().any(|item| {
+                item["nodeId"] == json!("nested_workflow") && item["status"] == json!("success")
+            })),
         "parent run timeline should contain a successful sub-workflow node execution",
     );
 }
@@ -911,7 +1180,8 @@ async fn upload_workflow(app: axum::Router, workflow: Value) -> String {
         .await
         .expect("body should collect")
         .to_bytes();
-    let upload_payload: Value = serde_json::from_slice(&upload_body).expect("response body should be valid json");
+    let upload_payload: Value =
+        serde_json::from_slice(&upload_body).expect("response body should be valid json");
     upload_payload["workflowId"]
         .as_str()
         .expect("workflow id should be present")
@@ -943,7 +1213,8 @@ async fn start_run(app: axum::Router, workflow_id: &str, trigger: Value) -> Stri
         .await
         .expect("body should collect")
         .to_bytes();
-    let execute_payload: Value = serde_json::from_slice(&execute_body).expect("response body should be valid json");
+    let execute_payload: Value =
+        serde_json::from_slice(&execute_body).expect("response body should be valid json");
     execute_payload["runId"]
         .as_str()
         .expect("run id should be present")

@@ -32,21 +32,27 @@ just dev-ai-gateway
 ## 本地访问
 
 - `pnpm dev` 启动后：
-  - AI Gateway：`http://127.0.0.1:3000`
+  - AI Gateway：`http://127.0.0.1:6307`
   - 前端开发服务：`http://127.0.0.1:5173/views/`
+  - Backend：`http://127.0.0.1:6302`
   - Workflow API：`http://127.0.0.1:6302/runner-api`
+  - AI 协作代理入口：`http://127.0.0.1:6302/api/ai/*`
 - `pnpm start` 或容器部署后：
-  - AI Gateway：`http://127.0.0.1:3000`
+  - AI Gateway：`http://127.0.0.1:6307`
   - 前端静态页面：`http://127.0.0.1:6302/views/`
   - Workflow API：`http://127.0.0.1:6302/runner-api`
+  - AI 协作代理入口：`http://127.0.0.1:6302/api/ai/*`
 
 ## AI 协作环境变量
 
-- `ANTHROPIC_API_KEY`：页面内 Claude Agent SDK 会话所需。
 - `AI_GATEWAY_HOST`：可选，默认 `127.0.0.1`。
-- `AI_GATEWAY_PORT`：可选，默认 `3000`。
+- `AI_GATEWAY_PORT`：可选，默认 `6307`。
+- `AI_GATEWAY_PROXY_TARGET`：可选。若设置，backend 会优先把 `/api/ai/*` 转发到这个完整地址。
+- `CLAUDE_CODE_EXECUTABLE`：可选。指定本地 Claude Code 可执行文件路径。
 
-`apps/ai-gateway` 会在启动时读取仓库根目录 `.env`。
+AI 供应商信息不再从 `.env` 读取。页面内每次发起 AI 请求时，都必须由用户在前端配置 `baseUrl`、`authToken`、`model` 并随请求一起发送。
+
+前端开发模式下，Vite 会把 `/runner-api/*` 和 `/api/ai/*` 都代理到 backend，保持和生产环境一致。
 
 ## 部署
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express, { type Response } from "express";
 
 import { ClaudeCodeSdkAdapter, type ClaudeAdapter } from "./claude.js";
+import { buildCorsHeaders, isPreflightRequest } from "./cors.js";
 import { logger } from "./logger.js";
 import { AiThreadStore } from "./state.js";
 import { AiGatewayServiceError, createAiGatewayService } from "./service.js";
@@ -34,6 +35,23 @@ export const createAiGatewayApp = (
     claudeAdapter,
     repoRoot,
     store,
+  });
+
+  app.use((request, response, next) => {
+    const corsHeaders = buildCorsHeaders(
+      request.header("Access-Control-Request-Headers"),
+    );
+
+    for (const [headerName, headerValue] of Object.entries(corsHeaders)) {
+      response.setHeader(headerName, headerValue);
+    }
+
+    if (isPreflightRequest(request.method)) {
+      response.status(204).end();
+      return;
+    }
+
+    next();
   });
 
   app.use(express.json({ limit: "1mb" }));

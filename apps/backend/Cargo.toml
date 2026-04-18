@@ -11,6 +11,7 @@ axum = { version = "0.8", features = ["ws"] }
 dotenv = "0.15"
 futures-core = "0.3"
 futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 runner = { path = "../runner" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

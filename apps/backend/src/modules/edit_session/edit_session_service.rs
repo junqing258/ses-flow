@@ -28,13 +28,21 @@ pub fn create_edit_session(
     )?)
 }
 
-pub fn get_edit_session(state: &ApiState, session_id: &str) -> Result<WorkflowEditSessionRecord, ApiError> {
+pub fn get_edit_session(
+    state: &ApiState,
+    session_id: &str,
+) -> Result<WorkflowEditSessionRecord, ApiError> {
     Ok(state.app.get_edit_session(session_id)?)
 }
 
-pub fn subscribe_edit_session_events(state: &ApiState, session_id: &str) -> Result<WorkflowEventStream, ApiError> {
+pub fn subscribe_edit_session_events(
+    state: &ApiState,
+    session_id: &str,
+) -> Result<WorkflowEventStream, ApiError> {
     state.app.get_edit_session(session_id)?;
-    Ok(into_sse(state.app.subscribe_edit_session_events(session_id)))
+    Ok(into_sse(
+        state.app.subscribe_edit_session_events(session_id),
+    ))
 }
 
 pub fn update_edit_session(

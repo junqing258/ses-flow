@@ -8,6 +8,8 @@ import Pages from "vite-plugin-pages";
 
 export default defineConfig(() => {
   const isVitest = process.env.VITEST === "true";
+  const backendProxyTarget =
+    process.env.VITE_BACKEND_PROXY_TARGET ?? "http://127.0.0.1:6302";
 
   return {
     base: "/views/",
@@ -46,12 +48,12 @@ export default defineConfig(() => {
     server: {
       host: "0.0.0.0",
       proxy: {
-        "/api": {
-          target: process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:3000",
+        "/api/ai": {
+          target: backendProxyTarget,
           changeOrigin: true,
         },
         "/runner-api": {
-          target: process.env.VITE_RUNNER_PROXY_TARGET ?? "http://127.0.0.1:6302",
+          target: backendProxyTarget,
           changeOrigin: true,
         },
       },

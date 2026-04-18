@@ -13,7 +13,7 @@ dotenv.config({
   path: resolve(__dirname, "../../../.env"),
 });
 
-const port = Number(process.env.AI_GATEWAY_PORT ?? "3000");
+const port = Number(process.env.AI_GATEWAY_PORT ?? "6307");
 const host = process.env.AI_GATEWAY_HOST ?? "127.0.0.1";
 
 const app = createAiGatewayApp();

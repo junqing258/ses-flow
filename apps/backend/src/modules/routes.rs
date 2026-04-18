@@ -7,7 +7,7 @@ use axum::extract::MatchedPath;
 use axum::http::{Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{any, get, post, put};
 use axum::{Json, Router};
 use runner::app::{AppError, WorkflowApp};
 use runner::error::RunnerError;
@@ -16,7 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info};
 
-use crate::modules::{edit_session, run, system, workflow};
+use crate::modules::{ai_gateway, edit_session, run, system, workflow};
 
 pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
 pub const RUNNER_VIEWS_BASE_PATH: &str = "/views";
@@ -24,12 +24,15 @@ pub const RUNNER_VIEWS_BASE_PATH: &str = "/views";
 #[derive(Clone)]
 pub struct ApiState {
     pub app: Arc<WorkflowApp>,
+    pub ai_gateway_base_url: String,
+    pub ai_gateway_client: reqwest::Client,
 }
 
 pub fn build_router(state: ApiState) -> Router {
     Router::new()
         .route("/", get(redirect_to_views))
         .nest_service(RUNNER_VIEWS_BASE_PATH, build_views_service())
+        .nest("/api/ai", build_ai_gateway_router(state.clone()))
         .nest(RUNNER_API_BASE_PATH, build_api_router(state))
 }
 
@@ -37,7 +40,10 @@ fn build_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(system::health))
         .route("/catalog/refresh", get(workflow::refresh_catalog))
-        .route("/workflows/events", get(workflow::subscribe_workflows_events))
+        .route(
+            "/workflows/events",
+            get(workflow::subscribe_workflows_events),
+        )
         .route(
             "/workflows",
             get(workflow::list_workflows).post(workflow::upload_workflow),
@@ -47,10 +53,16 @@ fn build_api_router(state: ApiState) -> Router {
             "/workflows/{workflow_id}/events",
             get(workflow::subscribe_workflow_events),
         )
-        .route("/workflows/{workflow_id}/runs", get(workflow::list_workflow_runs))
+        .route(
+            "/workflows/{workflow_id}/runs",
+            get(workflow::list_workflow_runs),
+        )
         .route("/workflows/{workflow_id}/run", post(run::execute_workflow))
         .route("/edit-sessions", post(edit_session::create_edit_session))
-        .route("/edit-sessions/{session_id}", get(edit_session::get_edit_session))
+        .route(
+            "/edit-sessions/{session_id}",
+            get(edit_session::get_edit_session),
+        )
         .route(
             "/edit-sessions/{session_id}/events",
             get(edit_session::subscribe_edit_session_events),
@@ -63,6 +75,15 @@ fn build_api_router(state: ApiState) -> Router {
         .route("/runs/{run_id}/events", get(run::subscribe_run_events))
         .route("/runs/{run_id}/resume", post(run::resume_workflow))
         .route("/runs/{run_id}/terminate", post(run::terminate_workflow))
+        .layer(middleware::from_fn(log_http_requests))
+        .layer(build_cors_layer())
+        .with_state(state)
+}
+
+fn build_ai_gateway_router(state: ApiState) -> Router {
+    Router::new()
+        .route("/", any(ai_gateway::proxy_root))
+        .route("/{*path}", any(ai_gateway::proxy_path))
         .layer(middleware::from_fn(log_http_requests))
         .layer(build_cors_layer())
         .with_state(state)
@@ -153,7 +174,9 @@ impl IntoResponse for ApiError {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
-            Self::Runner(RunnerError::MissingRunSnapshot(message)) => (StatusCode::NOT_FOUND, message),
+            Self::Runner(RunnerError::MissingRunSnapshot(message)) => {
+                (StatusCode::NOT_FOUND, message)
+            }
             Self::Runner(RunnerError::Validation(message))
             | Self::Runner(RunnerError::ResumeValidation(message))
             | Self::Runner(RunnerError::Transition(message))

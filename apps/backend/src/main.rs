@@ -2,7 +2,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use backend::modules::{ApiState, build_router};
+use backend::modules::{ApiState, ai_gateway, build_router};
 use runner::app::WorkflowApp;
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
@@ -39,6 +39,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             catalog_store,
             edit_session_store,
         )),
+        ai_gateway_base_url: ai_gateway::resolve_ai_gateway_base_url(),
+        ai_gateway_client: reqwest::Client::new(),
     });
     let listener = tokio::net::TcpListener::bind(address).await?;
     info!(address = %address, "backend listening");

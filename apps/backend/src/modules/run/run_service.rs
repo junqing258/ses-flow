@@ -79,7 +79,10 @@ pub fn get_run_summary(state: &ApiState, run_id: &str) -> Result<WorkflowRunSumm
         .ok_or_else(|| ApiError::NotFound(format!("workflow run not found: {run_id}")))
 }
 
-pub fn subscribe_run_events(state: &ApiState, run_id: &str) -> Result<WorkflowEventStream, ApiError> {
+pub fn subscribe_run_events(
+    state: &ApiState,
+    run_id: &str,
+) -> Result<WorkflowEventStream, ApiError> {
     state
         .app
         .get_summary(run_id)?

@@ -3,7 +3,9 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use tracing::info;
 
-use super::run_service::{self, ExecuteWorkflowRequest, ResumeWorkflowRequest, WorkflowExecutionAccepted};
+use super::run_service::{
+    self, ExecuteWorkflowRequest, ResumeWorkflowRequest, WorkflowExecutionAccepted,
+};
 use crate::modules::{ApiError, ApiState, WorkflowEventStream};
 use runner::core::runtime::WorkflowRunSummary;
 
