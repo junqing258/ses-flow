@@ -197,7 +197,7 @@ let threadEventSubscription: EventSourceSubscription | null = null;
 
 const messageRoleLabelMap: Record<AiChatMessageRole, string> = {
   user: "需求",
-  assistant: "Claude",
+  assistant: "Agent",
   "tool-status": "工具",
   error: "错误",
 };

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express, { type Response } from "express";
 
 import { ClaudeCodeSdkAdapter, type ClaudeAdapter } from "./claude.js";
+import { logger } from "./logger.js";
 import { AiThreadStore } from "./state.js";
 import { AiGatewayServiceError, createAiGatewayService } from "./service.js";
 import type { AiThreadEvent } from "./types.js";
@@ -38,10 +39,16 @@ export const createAiGatewayApp = (
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/api/ai/threads/:editSessionId", (request, response) => {
+    logger.info("http.thread.snapshot", {
+      editSessionId: request.params.editSessionId,
+    });
     response.json(service.getSnapshot(request.params.editSessionId));
   });
 
   app.get("/api/ai/threads/:editSessionId/events", (request, response) => {
+    logger.info("http.thread.events.connected", {
+      editSessionId: request.params.editSessionId,
+    });
     response.setHeader("Content-Type", "text/event-stream");
     response.setHeader("Cache-Control", "no-cache");
     response.setHeader("Connection", "keep-alive");
@@ -54,11 +61,17 @@ export const createAiGatewayApp = (
 
     request.on("close", () => {
       unsubscribe();
+      logger.info("http.thread.events.closed", {
+        editSessionId: request.params.editSessionId,
+      });
       response.end();
     });
   });
 
   app.post("/api/ai/threads/:editSessionId/messages", async (request, response) => {
+    logger.info("http.thread.messages.post", {
+      editSessionId: request.params.editSessionId,
+    });
     try {
       const snapshot = await service.sendMessage(
         request.params.editSessionId,
@@ -66,6 +79,11 @@ export const createAiGatewayApp = (
       );
       response.status(202).json(snapshot);
     } catch (error) {
+      logger.error("http.thread.messages.post.failed", {
+        editSessionId: request.params.editSessionId,
+        statusCode: error instanceof AiGatewayServiceError ? error.statusCode : 500,
+        error: error instanceof Error ? error.message : "发送 AI 消息失败",
+      });
       response.status(
         error instanceof AiGatewayServiceError ? error.statusCode : 500,
       ).json({
@@ -75,6 +93,9 @@ export const createAiGatewayApp = (
   });
 
   app.post("/api/ai/threads/:editSessionId/cancel", (request, response) => {
+    logger.info("http.thread.cancel.post", {
+      editSessionId: request.params.editSessionId,
+    });
     response.json(service.cancelTurn(request.params.editSessionId));
   });
 

@@ -1,4 +1,5 @@
 import type { ClaudeAdapter } from "./claude.js";
+import { logger, summarizeText } from "./logger.js";
 import { AiThreadStore } from "./state.js";
 import type { AiThreadEvent, AiThreadSnapshot, SendAiThreadMessageRequest } from "./types.js";
 
@@ -57,6 +58,9 @@ export const createAiGatewayService = (
       return store.subscribe(editSessionId, listener);
     },
     cancelTurn(editSessionId: string) {
+      logger.info("thread.turn.cancel.requested", {
+        editSessionId,
+      });
       return store.cancelTurn(editSessionId);
     },
     async sendMessage(editSessionId: string, body: unknown): Promise<AiThreadSnapshot> {
@@ -69,12 +73,25 @@ export const createAiGatewayService = (
         );
       }
 
+      logger.info("thread.turn.requested", {
+        editSessionId,
+        workflowId: payload.workflowId,
+        runnerBaseUrl: payload.runnerBaseUrl,
+        promptPreview: summarizeText(payload.message),
+      });
+
       store.addUserMessage(editSessionId, payload.message);
       const abortController = new AbortController();
       store.startTurn(editSessionId, abortController);
       const snapshot = store.getSnapshot(editSessionId);
+      const turnStartedAt = Date.now();
 
       void (async () => {
+        const toolStartedAt = new Map<string, number>();
+        let assistantStartedAt: number | null = null;
+        let assistantChars = 0;
+        let toolCallCount = 0;
+
         try {
           await options.claudeAdapter.runTurn({
             abortController,
@@ -85,35 +102,91 @@ export const createAiGatewayService = (
             runnerBaseUrl: payload.runnerBaseUrl,
             workflowId: payload.workflowId,
             onAssistantDelta: (delta) => {
+              if (assistantStartedAt == null) {
+                assistantStartedAt = Date.now();
+                logger.info("thread.assistant.started", {
+                  editSessionId,
+                });
+              }
+              assistantChars += delta.length;
               store.appendAssistantDelta(editSessionId, delta);
             },
             onAssistantCompleted: () => {
               store.completeAssistantMessage(editSessionId);
+              logger.info("thread.assistant.completed", {
+                editSessionId,
+                durationMs:
+                  assistantStartedAt == null ? 0 : Date.now() - assistantStartedAt,
+                chars: assistantChars,
+              });
             },
             onClaudeSessionId: (claudeSessionId) => {
               store.setClaudeSessionId(editSessionId, claudeSessionId);
+              logger.info("thread.claude_session.bound", {
+                editSessionId,
+                claudeSessionId,
+              });
             },
             onPreviewUpdated: () => {
               store.markPreviewUpdated(editSessionId);
+              logger.info("thread.preview.updated", {
+                editSessionId,
+              });
             },
             onToolStarted: (toolCallId, toolName, content) => {
+              toolCallCount += 1;
+              toolStartedAt.set(toolCallId, Date.now());
               store.startToolCall(editSessionId, toolCallId, toolName, content);
+              logger.info("thread.tool.started", {
+                editSessionId,
+                toolCallId,
+                toolName,
+                content: summarizeText(content),
+              });
             },
             onToolCompleted: (toolCallId, content) => {
               store.completeToolCall(editSessionId, toolCallId, content);
+              logger.info("thread.tool.completed", {
+                editSessionId,
+                toolCallId,
+                durationMs: toolStartedAt.has(toolCallId)
+                  ? Date.now() - (toolStartedAt.get(toolCallId) ?? Date.now())
+                  : undefined,
+                content: content ? summarizeText(content) : undefined,
+              });
+              toolStartedAt.delete(toolCallId);
             },
           });
           store.completeAssistantMessage(editSessionId);
           store.finishTurn(editSessionId);
+          logger.info("thread.turn.completed", {
+            editSessionId,
+            durationMs: Date.now() - turnStartedAt,
+            toolCallCount,
+            assistantChars,
+          });
         } catch (error) {
           if (abortController.signal.aborted) {
+            logger.warn("thread.turn.aborted", {
+              editSessionId,
+              durationMs: Date.now() - turnStartedAt,
+            });
             return;
           }
 
+          const errorMessage =
+            error instanceof Error ? error.message : "Claude 协作执行失败";
           store.failTurn(
             editSessionId,
-            error instanceof Error ? error.message : "Claude 协作执行失败",
+            errorMessage,
           );
+          logger.error("thread.turn.failed", {
+            editSessionId,
+            durationMs: Date.now() - turnStartedAt,
+            toolCallCount,
+            assistantChars,
+            error: errorMessage,
+          });
         }
       })();
 

@@ -98,3 +98,13 @@ AI Gateway 对 Claude Agent SDK 的工具使用进行了严格限制：
 - 禁止修改仓库文件、提交代码或运行写文件命令
 - 所有工作流修改必须通过 Runner API 完成
 - Runner 工具请求默认 10 秒超时，避免工具调用长时间挂起
+
+## 过程日志
+
+AI Gateway 会输出 JSON 格式过程日志到 stdout/stderr，便于按 `editSessionId` 排查问题。关键事件包括：
+
+- `http.thread.messages.post` / `http.thread.cancel.post`
+- `thread.turn.requested` / `thread.turn.completed` / `thread.turn.failed` / `thread.turn.aborted`
+- `thread.tool.started` / `thread.tool.completed`
+- `thread.assistant.started` / `thread.assistant.completed`
+- `thread.preview.updated`

@@ -177,8 +177,8 @@ export class AiThreadStore {
     const thread = this.getOrCreate(editSessionId);
     thread.status = "idle";
     thread.activeAbortController = undefined;
-    thread.activeAssistantMessageId = undefined;
-    thread.activeToolMessageIds.clear();
+    this.resetActiveAssistantMessage(thread);
+    this.finalizeActiveToolMessages(thread, "completed");
     this.emit(thread, "turn.completed");
     return this.serialize(thread);
   }
@@ -187,8 +187,8 @@ export class AiThreadStore {
     const thread = this.getOrCreate(editSessionId);
     thread.status = "error";
     thread.activeAbortController = undefined;
-    thread.activeAssistantMessageId = undefined;
-    thread.activeToolMessageIds.clear();
+    this.resetActiveAssistantMessage(thread);
+    this.finalizeActiveToolMessages(thread, "error");
     const message = buildMessage("error", error, "error");
     thread.messages.push(message);
     this.emit(thread, "turn.failed", {
@@ -203,8 +203,8 @@ export class AiThreadStore {
     thread.activeAbortController?.abort();
     thread.status = "idle";
     thread.activeAbortController = undefined;
-    thread.activeAssistantMessageId = undefined;
-    thread.activeToolMessageIds.clear();
+    this.resetActiveAssistantMessage(thread);
+    this.finalizeActiveToolMessages(thread, "completed");
     this.emit(thread, "turn.cancelled");
     return this.serialize(thread);
   }
@@ -258,6 +258,19 @@ export class AiThreadStore {
       message.status = "completed";
     }
     thread.activeAssistantMessageId = undefined;
+  }
+
+  private finalizeActiveToolMessages(
+    thread: ThreadState,
+    status: AiChatMessageStatus,
+  ) {
+    thread.activeToolMessageIds.forEach((messageId) => {
+      const message = thread.messages.find((entry) => entry.id === messageId);
+      if (message && message.status === "streaming") {
+        message.status = status;
+      }
+    });
+    thread.activeToolMessageIds.clear();
   }
 
   private serialize(thread: ThreadState): AiThreadSnapshot {
