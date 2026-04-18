@@ -69,7 +69,7 @@
           <div
             class="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-cyan-50/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-700"
           >
-            Workflow Studio
+            HyperLeap Workflow Studio
           </div>
           <h2
             class="max-w-xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-[42px] sm:leading-[1.05]"

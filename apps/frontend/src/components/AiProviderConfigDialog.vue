@@ -12,17 +12,17 @@
             <DialogTitle class="text-xl font-semibold tracking-tight text-slate-950">
               AI 供应商配置
             </DialogTitle>
-            <DialogDescription class="text-sm leading-6 text-slate-600">
+            <!-- <DialogDescription class="text-sm leading-6 text-slate-600">
               页面内每一次 AI 协作请求都会直接使用这里保存的用户配置。
-            </DialogDescription>
+            </DialogDescription> -->
           </DialogHeader>
         </div>
 
         <div class="space-y-5 px-6 py-6">
-          <div class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900">
+          <!-- <div class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900">
             当前配置只保存在本浏览器，不再回退 `.env`。请完整填写后再使用
             AI 编辑能力。
-          </div>
+          </div> -->
 
           <div class="space-y-2">
             <Label for="ai-provider-base-url" class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
