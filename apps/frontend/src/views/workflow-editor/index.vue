@@ -175,101 +175,17 @@
       @select-run="handleOpenWorkflowRunFromList"
     />
 
-    <aside
+    <WorkflowAiChatPanel
       v-if="isAiMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
-      :class="rightAsideVisibilityClass"
-    >
-      <div class="border-b border-slate-100 px-4 py-4">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="text-[14px] font-semibold text-slate-900">
-              AI 工作流编辑助手
-            </p>
-            <!-- <p class="mt-1 text-[11px] leading-5 text-slate-500">
-              Web 端只负责展示 `runner_base_url`、`session_id` 和预览结果。
-              会话编辑动作在 Claude Code 中完成，并由它通过 `ses-flow-skill`
-              推送预览。
-            </p> -->
-          </div>
-          <span
-            class="rounded-full px-2.5 py-1 text-[11px] font-semibold text-nowrap"
-            :class="
-              assistantConnectionState === 'live'
-                ? 'bg-sky-50 text-sky-700'
-                : assistantConnectionState === 'reconnecting'
-                  ? 'bg-amber-50 text-amber-700'
-                  : 'bg-slate-100 text-slate-600'
-            "
-            >{{ assistantConnectionLabel }}</span
-          >
-        </div>
-      </div>
-
-      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <div
-          class="rounded-[18px] border border-slate-200/80 bg-slate-50/70 p-3"
-        >
-          <p class="text-xs font-semibold tracking-wide text-slate-500">
-            会话状态
-          </p>
-          <p class="mt-2 text-sm font-medium text-slate-900">
-            {{
-              isCreatingAssistantSession
-                ? "正在创建 AI 会话"
-                : hasAssistantSession
-                  ? "会话已就绪"
-                  : "等待创建会话"
-            }}
-          </p>
-          <p class="mt-1 text-[11px] leading-5 text-slate-500">
-            最近同步：{{ assistantSessionUpdatedLabel }}
-          </p>
-        </div>
-
-        <div
-          class="rounded-[14px] border border-slate-200/80 bg-white px-3 py-2"
-        >
-          <div
-            class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500"
-          >
-            runner_base_url: {{ assistantRunnerBaseUrl }}
-          </div>
-          <div
-            class="shrink-0 pt-0.5 text-xs font-semibold tracking-wide text-slate-500"
-          >
-            session_id: {{ assistantSessionId || "(创建中)" }}
-          </div>
-        </div>
-        <!-- Agent 提示词示例 -->
-        <div class="space-y-2">
-          <p class="text-xs font-semibold tracking-wide text-slate-500">
-            Agent 提示词示例
-          </p>
-          <pre
-            class="overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100 whitespace-pre-wrap break-all"
-          >
-请作为 SES Flow 工作流 Agent，使用 ses-flow-skill 协助我编辑当前流程。
-
-runner_base_url: {{ assistantRunnerBaseUrl }}
-session_id: {{ assistantSessionId || "(创建中)" }}
-
-先读取当前会话里的最新工作流草稿，再根据我的需求修改，并推送最新预览给 Web 端。
-
-这次的需求是：
-xxx
-帮我调整当前工作流，并给出你实际做了哪些改动。</pre
-          >
-        </div>
-
-        <div
-          v-if="assistantSessionError"
-          class="rounded-[18px] border border-rose-100 bg-rose-50 px-3 py-3 text-[12px] leading-5 text-rose-700"
-        >
-          {{ assistantSessionError }}
-        </div>
-      </div>
-    </aside>
+      :runner-base-url="assistantRunnerBaseUrl"
+      :runner-connection-label="assistantConnectionLabel"
+      :runner-connection-state="assistantConnectionState"
+      :runner-preview-updated-at="assistantSession?.updatedAt"
+      :session-error="assistantSessionError"
+      :session-id="assistantSessionId"
+      :visibility-class="rightAsideVisibilityClass"
+      :workflow-id="persistedWorkflowId"
+    />
 
     <!-- Floating Left Panel -->
     <aside
@@ -987,6 +903,7 @@ import {
 import { type LocationQueryValue, useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
+import WorkflowAiChatPanel from "@/components/workflow/WorkflowAiChatPanel.vue";
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
@@ -1245,7 +1162,6 @@ const persistedWorkflowId = computed(() =>
     : undefined,
 );
 const workflowTitle = computed(() => workflowMeta.name || "New workflow");
-const hasAssistantSession = computed(() => Boolean(assistantSession.value));
 const assistantRunnerBaseUrl = WORKFLOW_EDIT_SESSION_RUNNER_BASE_URL;
 const assistantSessionId = computed(
   () => assistantSession.value?.sessionId ?? "",
@@ -1261,13 +1177,6 @@ const assistantConnectionLabel = computed(() => {
     default:
       return "未启动";
   }
-});
-const assistantSessionUpdatedLabel = computed(() => {
-  if (!assistantSession.value?.updatedAt) {
-    return "尚未同步";
-  }
-
-  return new Date(assistantSession.value.updatedAt).toLocaleString("zh-CN");
 });
 const workflowNodeNameMap = computed<Record<string, string>>(() =>
   nodes.value.reduce<Record<string, string>>((accumulator, node) => {

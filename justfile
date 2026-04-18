@@ -7,9 +7,13 @@ dev:
   #!/usr/bin/env bash
   set -euo pipefail
   trap 'kill 0' EXIT INT TERM
+  just dev-ai-gateway &
   just dev-backend &
   just dev-frontend &
   wait
+
+dev-ai-gateway:
+  pnpm --filter ai-gateway dev
 
 dev-backend:
   cargo watch \
@@ -25,15 +29,20 @@ dev-frontend:
 
 build:
   cargo build --workspace
+  pnpm --filter ai-gateway build
   pnpm --filter frontend build
 
 start:
   #!/usr/bin/env bash
   set -euo pipefail
   trap 'kill 0' EXIT INT TERM
+  just start-ai-gateway &
   just start-backend &
   just start-frontend &
   wait
+
+start-ai-gateway:
+  pnpm --filter ai-gateway start
 
 start-backend:
   cargo run --release -p backend -- --host 127.0.0.1 --port 6302
@@ -43,6 +52,7 @@ start-frontend:
 
 test:
   cargo test --workspace
+  pnpm --filter ai-gateway test
   pnpm --filter frontend test
 
 lint:

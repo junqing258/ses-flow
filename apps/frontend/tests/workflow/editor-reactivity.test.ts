@@ -6,6 +6,7 @@ import {
   createWorkflowNodeDraft,
   getSwitchBranches,
   setSwitchBranches,
+  type WorkflowNodePanel,
 } from "@/features/workflow/model";
 
 describe("workflow editor switch branch reactivity", () => {
@@ -21,7 +22,7 @@ describe("workflow editor switch branch reactivity", () => {
       { x: 220, y: 240 },
       [],
     );
-    const panelByNodeId = shallowRef({
+    const panelByNodeId = shallowRef<Record<string, WorkflowNodePanel>>({
       switch_biz_type: panel,
     });
     const selectedNodeId = ref("switch_biz_type");

@@ -35,7 +35,7 @@ export interface WorkflowRunListItem {
 
 
 export const getRunnerBaseUrl = () => {
-  const baseUrl = import.meta.env.VITE_RUNNER_BASE_URL;
+  const baseUrl = import.meta.env.VITE_RUNNER_BASE_URL ?? "/runner-api";
   if (/^https?:\/\//.test(baseUrl)) {
     return baseUrl.replace(/\/$/, "");
   } else {

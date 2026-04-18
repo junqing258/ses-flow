@@ -12,7 +12,8 @@
     "lint": "eslint . --ext .ts,.vue,.js,.mjs,.cjs",
     "lint:fix": "eslint . --ext .ts,.vue,.js,.mjs,.cjs --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "up": "npx taze major -I"
   },
   "dependencies": {
     "@vee-validate/zod": "^4.15.1",

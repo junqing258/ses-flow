@@ -2,6 +2,7 @@
 
 SES Flow 是一个包含前端、后端和工作流运行内核的多应用仓库：
 
+- `apps/ai-gateway`：Node + Express AI 网关，承接页面内 Claude Agent SDK 会话
 - `apps/backend`：Rust + Axum Web 服务，对外提供 `/runner-api` 与 `/views`
 - `apps/frontend`：Vue 3 + Vite 工作流编辑与预览界面
 - `apps/runner`：Rust 工作流执行内核库，由 `backend` 直接依赖
@@ -23,6 +24,7 @@ cargo test --workspace
 cargo build --workspace
 just dev-backend
 just dev-frontend
+just dev-ai-gateway
 ```
 
 根目录脚本通过 `just` 编排，请先在本机安装 `just`。
@@ -30,11 +32,21 @@ just dev-frontend
 ## 本地访问
 
 - `pnpm dev` 启动后：
+  - AI Gateway：`http://127.0.0.1:3000`
   - 前端开发服务：`http://127.0.0.1:5173/views/`
   - Workflow API：`http://127.0.0.1:6302/runner-api`
 - `pnpm start` 或容器部署后：
+  - AI Gateway：`http://127.0.0.1:3000`
   - 前端静态页面：`http://127.0.0.1:6302/views/`
   - Workflow API：`http://127.0.0.1:6302/runner-api`
+
+## AI 协作环境变量
+
+- `ANTHROPIC_API_KEY`：页面内 Claude Agent SDK 会话所需。
+- `AI_GATEWAY_HOST`：可选，默认 `127.0.0.1`。
+- `AI_GATEWAY_PORT`：可选，默认 `3000`。
+
+`apps/ai-gateway` 会在启动时读取仓库根目录 `.env`。
 
 ## 部署
 
