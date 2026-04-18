@@ -38,6 +38,8 @@ const getPaletteIdForRunnerNodeType = (nodeType: string) => {
       return "palette-end";
     case "fetch":
       return "palette-fetch";
+    case "set_state":
+      return "palette-set-state";
     case "switch":
       return "palette-switch";
     case "if_else":
@@ -69,6 +71,8 @@ const getNodeTitle = (nodeType: string) => {
       return "End";
     case "fetch":
       return "Fetch";
+    case "set_state":
+      return "Set State";
     case "switch":
       return "Switch";
     case "if_else":
@@ -100,6 +104,8 @@ const getNodeKind = (nodeType: string): WorkflowNodeKind => {
       return "end";
     case "fetch":
       return "fetch";
+    case "set_state":
+      return "set-state";
     case "switch":
       return "switch";
     case "if_else":
@@ -174,6 +180,21 @@ const serializeMappingValue = (value: unknown) => {
 
 const clonePanel = (panel: WorkflowNodePanel): WorkflowNodePanel =>
   structuredClone(panel);
+
+const readSetStateValue = (
+  inputMapping: RunnerWorkflowDefinition["nodes"][number]["inputMapping"],
+) => {
+  if (
+    inputMapping &&
+    typeof inputMapping === "object" &&
+    !Array.isArray(inputMapping) &&
+    "value" in inputMapping
+  ) {
+    return inputMapping.value;
+  }
+
+  return inputMapping;
+};
 
 const readAnnotatedSwitchBranches = (
   node: RunnerWorkflowDefinition["nodes"][number] | undefined,
@@ -281,6 +302,15 @@ const createImportedNode = (
       nextPanel,
       "outputTo",
       serializeMappingValue(node.outputMapping),
+    );
+  }
+
+  if (node.type === "set_state") {
+    setPanelFieldValue(nextPanel, "statePath", String(node.config?.path ?? ""));
+    setPanelFieldValue(
+      nextPanel,
+      "value",
+      serializeMappingValue(readSetStateValue(node.inputMapping)),
     );
   }
 

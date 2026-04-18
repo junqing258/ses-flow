@@ -50,6 +50,7 @@ export type WorkflowNodeKind =
   | "trigger"
   | "sub-workflow"
   | "fetch"
+  | "set-state"
   | "if-else"
   | "switch"
   | "shell"
@@ -473,7 +474,13 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
         icon: "shield",
         accent: "#EF4444",
       },
-      // { id: "palette-if-else", kind: "if-else", label: "If / Else", icon: "gitBranch", accent: "#F97316" },
+      {
+        id: "palette-if-else",
+        kind: "if-else",
+        label: "If / Else",
+        icon: "gitBranch",
+        accent: "#F97316",
+      },
       {
         id: "palette-switch",
         kind: "switch",
@@ -502,6 +509,13 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
         label: "Fetch",
         icon: "database",
         accent: "#3B82F6",
+      },
+      {
+        id: "palette-set-state",
+        kind: "set-state",
+        label: "Set State",
+        icon: "database",
+        accent: "#14B8A6",
       },
     ],
   },
@@ -1010,6 +1024,46 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
       ],
     },
   },
+  set_state: {
+    tabs: ["base", "mapping"],
+    fieldsByTab: {
+      base: [
+        {
+          key: "statePath",
+          label: "状态路径",
+          type: "input",
+          value: "statePatch",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "设置状态",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "set_state",
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value:
+            "将输入值写入 workflow state 的指定路径，后续节点可通过 state.* 继续引用。",
+        },
+      ],
+      mapping: [
+        {
+          key: "value",
+          label: "写入值",
+          type: "textarea",
+          value: "{\n  handledBy: input.route\n}",
+        },
+      ],
+    },
+  },
   start: {
     tabs: ["base"],
     fieldsByTab: {
@@ -1332,6 +1386,33 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
             nodeKey: nodeId,
             subtitle,
             title: "Fetch",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-set-state": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("set_state");
+      const subtitle = "设置工作流状态";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          data: {
+            accent: item.accent,
+            icon: item.icon,
+            kind: "set-state",
+            nodeKey: nodeId,
+            subtitle,
+            title: "Set State",
           },
         },
         panel,

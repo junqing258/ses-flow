@@ -41,9 +41,11 @@ Runner README 当前列出的节点包括：
 - End
 - Webhook Trigger
 - Respond
+- If / Else
 - Switch
 - Sub-Workflow
 - Fetch
+- Set State
 - Shell
 - Code
 - Wait
@@ -57,6 +59,7 @@ Runner README 当前列出的节点包括：
 | --- | --- | --- |
 | Start | 流程入口 | 默认输出 `trigger.body`，如果没有 `body` 则输出整个 `trigger` |
 | End | 流程结束 | 标记流程结束，通常用于正常完成 |
+| If / Else | 双分支条件判断 | 根据布尔表达式在 `then` 和 `else` 分支之间路由 |
 | Switch | 多分支路由 | 根据表达式结果选择不同分支，可设置默认分支 |
 | Sub-Workflow | 调用子工作流 | 将当前输入传递给下游子流程 |
 
@@ -72,6 +75,7 @@ Runner README 当前列出的节点包括：
 | 节点 | 作用 | 当前说明 |
 | --- | --- | --- |
 | Fetch | 发起 HTTP 请求 | 支持 `GET` / `POST`，返回结构中可读取 `data` 和 `response.status` |
+| Set State | 写入流程状态 | 将指定值写入 `state` 路径，便于后续节点通过 `state.*` 引用 |
 | Code | 执行内联代码 | 当前以 JavaScript / TypeScript 为主，可读 `trigger / input / state / env / params` |
 | Shell | 调用本机命令 | `inputMapping` 会被序列化为输入参数，适合本地脚本处理 |
 | Task | 发出任务并等待完成事件 | 默认以 `task.completed` 作为完成事件 |
@@ -138,8 +142,6 @@ Runner README 中有几个很重要的通用约定：
 
 下面这些差异建议在后续产品迭代中持续关注：
 
-- `set_state` 已经在 Runner 侧支持，但当前前端调色板还没有直接暴露。
-- `if / else` 数据结构在前端里有准备，但当前调色板未开放为正式节点。
 - 某些字段在前端里已经有配置入口，但还没有和运行时能力完全一一映射。
 
 ## 建议后续补充

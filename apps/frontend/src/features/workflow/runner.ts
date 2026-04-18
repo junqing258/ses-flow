@@ -383,6 +383,10 @@ const extractNodeType = (node: WorkflowFlowNode) => {
     return "fetch";
   }
 
+  if (node.data.kind === "set-state") {
+    return "set_state";
+  }
+
   if (node.data.kind === "wait") {
     return "wait";
   }
@@ -471,6 +475,15 @@ const buildNodeDefinition = (
     definition.inputMapping = parseMappingValue(
       getFieldValue(panel, "mapping", "inputFrom"),
     );
+  }
+
+  if (type === "set_state") {
+    definition.config = {
+      path: getFieldValue(panel, "base", "statePath") || "statePatch",
+    };
+    definition.inputMapping = {
+      value: parseMappingValue(getFieldValue(panel, "mapping", "value")),
+    };
   }
 
   if (type === "switch" || type === "if_else") {

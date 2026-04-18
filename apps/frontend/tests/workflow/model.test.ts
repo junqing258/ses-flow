@@ -48,6 +48,31 @@ describe("createWorkflowNodeDraft", () => {
     ]);
   });
 
+  it("creates set-state nodes with a writable state path and value", () => {
+    const setStatePaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+      (category) => category.items,
+    ).find((item) => item.id === "palette-set-state");
+
+    expect(setStatePaletteItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      setStatePaletteItem!,
+      { x: 180, y: 240 },
+      [],
+    );
+    const statePathField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "statePath",
+    );
+    const valueField = panel.fieldsByTab.mapping?.find(
+      (field) => field.key === "value",
+    );
+
+    expect(node.data.kind).toBe("set-state");
+    expect(node.data.title).toBe("Set State");
+    expect(statePathField?.value).toBe("statePatch");
+    expect(valueField?.value).toContain("handledBy");
+  });
+
   it("maps switch fallback select options from current branches", () => {
     const switchPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
       (category) => category.items,
@@ -69,6 +94,35 @@ describe("createWorkflowNodeDraft", () => {
       { label: "A", value: "branch-a" },
       { label: "B", value: "branch-b" },
     ]);
+  });
+
+  it("creates if-else nodes with default then and else branches", () => {
+    const ifElsePaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+      (category) => category.items,
+    ).find((item) => item.id === "palette-if-else");
+
+    expect(ifElsePaletteItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      ifElsePaletteItem!,
+      { x: 220, y: 240 },
+      [],
+    );
+    const expressionField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "expression",
+    );
+    const fallbackField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "fallback",
+    );
+
+    expect(node.data.kind).toBe("if-else");
+    expect(node.data.title).toBe("If / Else");
+    expect(node.data.branchHandles).toEqual([
+      { id: "branch-a", label: "then" },
+      { id: "branch-b", label: "else", isDefault: true },
+    ]);
+    expect(expressionField?.value).toBe("payload.condition === true");
+    expect(fallbackField?.value).toBe("else");
   });
 
   it("creates dedicated workflow selection fields for sub-workflow nodes", () => {

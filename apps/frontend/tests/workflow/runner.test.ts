@@ -447,6 +447,88 @@ describe("buildRunnerWorkflowDefinition", () => {
     });
   });
 
+  it("exports set-state nodes with state path and value mapping", () => {
+    const baseNodes = createExampleWorkflowNodes().filter(
+      (node) => node.id !== "assign_task",
+    );
+    const { node: setStateNode, panel: setStatePanel } = createWorkflowNodeDraft(
+      {
+        id: "palette-set-state",
+        kind: "set-state",
+        label: "Set State",
+        icon: "database",
+        accent: "#14B8A6",
+      },
+      { x: 1184, y: 88 },
+      baseNodes,
+    );
+
+    setStateNode.id = "mark_decision";
+    setStateNode.data.nodeKey = "mark_decision";
+
+    (setStatePanel.fieldsByTab.base ?? []).forEach((field) => {
+      if (field.key === "nodeId") {
+        field.value = "mark_decision";
+      }
+      if (field.key === "nodeName") {
+        field.value = "记录分流结果";
+      }
+      if (field.key === "statePath") {
+        field.value = "decision";
+      }
+    });
+
+    const valueField = (setStatePanel.fieldsByTab.mapping ?? []).find(
+      (field) => field.key === "value",
+    );
+
+    if (!valueField) {
+      throw new Error("set-state value field should exist");
+    }
+
+    valueField.value = "{\n  handledBy: input.route\n}";
+
+    const panels = createWorkflowPanels();
+    panels.mark_decision = setStatePanel;
+
+    const definition = buildRunnerWorkflowDefinition(
+      [...baseNodes, setStateNode],
+      createWorkflowEdges().map((edge) =>
+        edge.id === "switch->assign"
+          ? {
+              ...edge,
+              id: "switch->set-state",
+              target: "mark_decision",
+            }
+          : edge,
+      ),
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
+
+    const setStateDefinition = definition.nodes.find(
+      (node) => node.id === "mark_decision",
+    );
+
+    expect(setStateDefinition).toMatchObject({
+      id: "mark_decision",
+      name: "记录分流结果",
+      type: "set_state",
+      config: {
+        path: "decision",
+      },
+      inputMapping: {
+        value: {
+          handledBy: "{{input.route}}",
+        },
+      },
+    });
+  });
+
   it("exports sub-workflow nodes with workflow references", () => {
     const baseNodes = createExampleWorkflowNodes().filter(
       (node) => node.id !== "assign_task",

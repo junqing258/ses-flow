@@ -121,4 +121,68 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
       state.nodes.find((node) => node.id === "invoke_child")?.data.kind,
     ).toBe("sub-workflow");
   });
+
+  it("restores set-state config into editor fields", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "coverage-flow",
+        name: "Coverage Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: {
+        type: "manual",
+      },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "mark_decision",
+          type: "set_state",
+          name: "Mark Decision",
+          config: {
+            path: "decision",
+          },
+          inputMapping: {
+            value: {
+              handledBy: "{{input.route}}",
+            },
+          },
+        },
+        {
+          id: "end_1",
+          type: "end",
+          name: "End",
+        },
+      ],
+      transitions: [
+        { from: "start_1", to: "mark_decision" },
+        { from: "mark_decision", to: "end_1" },
+      ],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition);
+    const setStatePanel = state.panelByNodeId.mark_decision;
+
+    expect(
+      setStatePanel.fieldsByTab.base?.find((field) => field.key === "statePath")
+        ?.value,
+    ).toBe("decision");
+    expect(
+      setStatePanel.fieldsByTab.mapping?.find((field) => field.key === "value")
+        ?.value,
+    ).toBe('{\n  "handledBy": "{{input.route}}"\n}');
+    expect(
+      state.nodes.find((node) => node.id === "mark_decision")?.data.kind,
+    ).toBe("set-state");
+  });
 });
