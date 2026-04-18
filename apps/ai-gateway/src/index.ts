@@ -1,12 +1,16 @@
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 
 import { createAiGatewayApp } from "./server.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// 加载项目根目录的 .env 文件
 dotenv.config({
-  path: resolve(process.cwd(), ".env"),
+  path: resolve(__dirname, "../../../.env"),
 });
 
 const port = Number(process.env.AI_GATEWAY_PORT ?? "3000");
