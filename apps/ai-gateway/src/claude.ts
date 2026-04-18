@@ -4,8 +4,15 @@ import {
   type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
-import { commandTouchesPreview, isAllowedToolUse } from "./permissions.js";
+import { isAllowedToolUse } from "./permissions.js";
 import { getAiProviderConfig } from "./config.js";
+import {
+  createRunnerEditSessionMcpServer,
+  GET_CURRENT_EDIT_SESSION_TOOL_NAME,
+  isPreviewMutationToolName,
+  RUNNER_MCP_SERVER_NAME,
+  UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+} from "./runner-tools.js";
 
 export interface ClaudeTurnCallbacks {
   onAssistantDelta: (delta: string) => void;
@@ -37,7 +44,7 @@ const SYSTEM_PROMPT = `你是 SES Flow 页面内 AI 协作助手。
 2. runner edit session 是唯一事实来源。
 3. 只能读取并更新当前 edit session 对应的草稿。
 4. 不允许修改仓库文件、提交代码或运行任何写文件命令。
-5. 若要修改工作流，只能通过 runner_base_url 上的 edit-sessions API 完成。
+5. 若要读取或修改工作流，只能使用提供的 ses-flow-runner MCP 工具。
 6. 回复末尾必须给出“本次改动摘要”。`;
 
 const getText = (value: unknown): string => {
@@ -99,8 +106,18 @@ const getToolUseSummary = (
   toolName: string,
   input: Record<string, unknown>,
 ) => {
-  if (toolName === "Bash" && typeof input.command === "string") {
-    return `Bash: ${input.command}`;
+  if (
+    toolName === GET_CURRENT_EDIT_SESSION_TOOL_NAME ||
+    toolName.endsWith(`__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`)
+  ) {
+    return "读取当前 edit session";
+  }
+
+  if (
+    toolName === UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
+    toolName.endsWith(`__${UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`)
+  ) {
+    return "更新当前 edit session draft";
   }
 
   return `${toolName}: ${getText(input) || "执行中"}`;
@@ -140,11 +157,18 @@ ${params.prompt}`.trim();
       options: {
         cwd: params.repoRoot,
         permissionMode: "dontAsk",
-        tools: ["Read", "Glob", "Grep", "LS", "Bash"],
+        tools: ["Read", "Glob", "Grep", "LS"],
+        mcpServers: {
+          [RUNNER_MCP_SERVER_NAME]: createRunnerEditSessionMcpServer({
+            editSessionId: params.editSessionId,
+            runnerBaseUrl: params.runnerBaseUrl,
+          }),
+        },
         settingSources: ["project", "local"],
         includePartialMessages: true,
         resume: params.claudeSessionId || undefined,
         abortController: params.abortController,
+        pathToClaudeCodeExecutable: config.claudeCodeExecutable,
         systemPrompt: {
           type: "preset",
           preset: "claude_code",
@@ -162,7 +186,7 @@ ${params.prompt}`.trim();
           }
 
           return denyToolUse(
-            `禁止使用 ${toolName} 执行当前操作。只能读取仓库内容，或通过受限 curl 访问当前 runner edit session。`,
+            `禁止使用 ${toolName} 执行当前操作。只能读取仓库内容，或使用 ses-flow-runner MCP 工具访问当前 runner edit session。`,
           );
         },
       },
@@ -224,19 +248,8 @@ ${params.prompt}`.trim();
 
       if (item.type === "user" && item.parent_tool_use_id) {
         const toolCall = toolUseInputs.get(item.parent_tool_use_id);
-        if (toolCall?.toolName === "Bash") {
-          const command =
-            typeof toolCall.input.command === "string" ? toolCall.input.command : "";
-          if (
-            command &&
-            commandTouchesPreview(
-              command,
-              params.editSessionId,
-              params.runnerBaseUrl,
-            )
-          ) {
-            params.onPreviewUpdated();
-          }
+        if (toolCall && isPreviewMutationToolName(toolCall.toolName)) {
+          params.onPreviewUpdated();
         }
 
         const resultText = getToolResultText(item);

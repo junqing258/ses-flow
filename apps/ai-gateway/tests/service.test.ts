@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ClaudeAdapter, RunClaudeTurnParams } from "../src/claude.js";
-import { isAllowedBashCommand, isAllowedToolUse } from "../src/permissions.js";
+import { isAllowedToolUse } from "../src/permissions.js";
+import {
+  GET_CURRENT_EDIT_SESSION_TOOL_NAME,
+  RUNNER_MCP_SERVER_NAME,
+  UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+} from "../src/runner-tools.js";
 import {
   AiGatewayServiceError,
   createAiGatewayService,
@@ -16,20 +21,32 @@ class MockClaudeAdapter implements ClaudeAdapter {
 }
 
 describe("ai gateway permissions", () => {
-  it("allows only whitelisted tools and commands", () => {
+  it("allows only whitelisted tools and runner MCP tools", () => {
     expect(
       isAllowedToolUse("Read", {}, "http://127.0.0.1:6302/runner-api"),
     ).toBe(true);
     expect(
       isAllowedToolUse(
-        "Bash",
-        { command: "curl http://127.0.0.1:6302/runner-api/edit-sessions/abc" },
+        `mcp__${RUNNER_MCP_SERVER_NAME}__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`,
+        {},
         "http://127.0.0.1:6302/runner-api",
       ),
     ).toBe(true);
     expect(
-      isAllowedBashCommand(
-        "git status",
+      isAllowedToolUse(
+        UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+        {
+          workflow: {
+            nodes: [],
+          },
+        },
+        "http://127.0.0.1:6302/runner-api",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedToolUse(
+        "Bash",
+        { command: "curl http://127.0.0.1:6302/runner-api/edit-sessions/abc" },
         "http://127.0.0.1:6302/runner-api",
       ),
     ).toBe(false);
@@ -110,7 +127,11 @@ describe("ai gateway service", () => {
     const service = createAiGatewayService({
       claudeAdapter: new MockClaudeAdapter(async (params) => {
         params.onClaudeSessionId("claude-session-1");
-        params.onToolStarted("tool-1", "Bash", "curl update");
+        params.onToolStarted(
+          "tool-1",
+          UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+          "更新当前 edit session draft",
+        );
         params.onPreviewUpdated();
         params.onToolCompleted("tool-1", "tool done");
         params.onAssistantDelta("partial");

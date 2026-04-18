@@ -94,6 +94,7 @@ pnpm start
 AI Gateway 对 Claude Agent SDK 的工具使用进行了严格限制：
 
 - 只允许读取仓库内容（Read、Glob、Grep、LS）
-- 只允许通过受限的 curl 命令访问 Runner Edit Session API
+- 只允许通过 `ses-flow-runner` MCP 工具访问当前 Runner Edit Session API
 - 禁止修改仓库文件、提交代码或运行写文件命令
 - 所有工作流修改必须通过 Runner API 完成
+- Runner 工具请求默认 10 秒超时，避免工具调用长时间挂起

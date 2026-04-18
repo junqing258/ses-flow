@@ -1,6 +1,7 @@
 export interface AiProviderConfig {
   baseUrl?: string;
   authToken: string;
+  claudeCodeExecutable?: string;
   model?: string;
 }
 
@@ -13,6 +14,7 @@ export const getAiProviderConfig = (): AiProviderConfig => {
   return {
     baseUrl: process.env.ANTHROPIC_BASE_URL,
     authToken,
+    claudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE,
     model: process.env.ANTHROPIC_MODEL,
   };
 };
