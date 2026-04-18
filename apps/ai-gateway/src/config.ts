@@ -1,20 +1,22 @@
-export interface AiProviderConfig {
-  baseUrl?: string;
-  authToken: string;
+import type { AiProviderConfig as RequestAiProviderConfig } from "./types.js";
+
+export interface AiProviderConfig extends RequestAiProviderConfig {
   claudeCodeExecutable?: string;
-  model?: string;
 }
 
-export const getAiProviderConfig = (): AiProviderConfig => {
-  const authToken = process.env.ANTHROPIC_AUTH_TOKEN;
-  if (!authToken) {
-    throw new Error("ANTHROPIC_AUTH_TOKEN is required in .env");
+const requireConfigValue = (fieldName: keyof RequestAiProviderConfig, value: unknown) => {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${fieldName} is required in request aiProvider config`);
   }
 
-  return {
-    baseUrl: process.env.ANTHROPIC_BASE_URL,
-    authToken,
-    claudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE,
-    model: process.env.ANTHROPIC_MODEL,
-  };
+  return value.trim();
 };
+
+export const resolveAiProviderConfig = (
+  config: Partial<RequestAiProviderConfig>,
+): AiProviderConfig => ({
+  baseUrl: requireConfigValue("baseUrl", config.baseUrl),
+  authToken: requireConfigValue("authToken", config.authToken),
+  model: requireConfigValue("model", config.model),
+  claudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE,
+});

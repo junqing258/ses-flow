@@ -1,6 +1,6 @@
 <template>
   <aside
-    class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex max-h-[calc(100vh-7.5rem)] w-[360px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     :class="visibilityClass"
   >
     <div class="border-b border-slate-100 px-4 py-4">
@@ -101,7 +101,7 @@
                 </p>
               </div>
               <p
-                class="whitespace-pre-wrap break-words"
+                class="whitespace-pre-wrap wrap-break-word"
                 :class="messageContentClassMap[message.role]"
               >
                 {{ message.content || "..." }}
@@ -113,7 +113,7 @@
 
       <div
         v-else
-        class="rounded-[16px] border border-dashed border-slate-200 bg-white/85 px-4 py-5 text-[13px] leading-6 text-slate-500"
+        class="rounded-2xl border border-dashed border-slate-200 bg-white/85 px-4 py-5 text-[13px] leading-6 text-slate-500"
       >
         先描述你的改动需求，例如“新增一个审核分支，并把失败结果汇总到 respond 节点”。
       </div>
@@ -122,7 +122,7 @@
     <div class="border-t border-slate-100 bg-white px-4 py-4">
       <textarea
         v-model="draftMessage"
-        class="min-h-[92px] w-full resize-none rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] leading-6 text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
+        class="min-h-23 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] leading-6 text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
         :disabled="isComposerDisabled"
         placeholder="描述你希望 Claude 帮你调整的工作流内容"
         @keydown.enter.exact.prevent="handleSend"
@@ -170,6 +170,11 @@ import {
   type AiChatMessageStatus,
   type AiThreadSnapshot,
 } from "@/features/workflow/ai-chat";
+import {
+  isAiProviderConfigComplete,
+  readPersistedAiProviderConfig,
+  resolveAiProviderConfigStorage,
+} from "@/features/workflow/ai-provider";
 import type { EventSourceSubscription } from "@/lib/sse";
 
 const props = defineProps<{
@@ -184,6 +189,7 @@ const props = defineProps<{
 }>();
 
 const storage = resolveAiChatStorage();
+const aiProviderStorage = resolveAiProviderConfigStorage();
 const messageContainerRef = ref<HTMLElement | null>(null);
 const draftMessage = ref("");
 const gatewayError = ref("");
@@ -380,7 +386,16 @@ const handleSend = async () => {
 
   try {
     gatewayError.value = "";
+    const aiProviderConfig = readPersistedAiProviderConfig(aiProviderStorage);
+    if (!aiProviderConfig || !isAiProviderConfigComplete(aiProviderConfig)) {
+      gatewayError.value =
+        "请先在右上角设置中完整配置 AI 供应商信息";
+      toast.error(gatewayError.value);
+      return;
+    }
+
     const snapshot = await sendAiThreadMessage(props.sessionId, {
+      aiProvider: aiProviderConfig,
       message,
       runnerBaseUrl: props.runnerBaseUrl,
       workflowId: props.workflowId,

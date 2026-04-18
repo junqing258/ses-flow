@@ -1,4 +1,5 @@
 import { request as sendRequest } from "@/lib/request";
+import type { AiProviderConfig } from "@/features/workflow/ai-provider";
 import {
   createJsonEventSource,
   type EventSourceSubscription,
@@ -47,6 +48,7 @@ export interface AiThreadEvent {
 }
 
 export interface SendAiMessageRequest {
+  aiProvider?: AiProviderConfig;
   message: string;
   runnerBaseUrl: string;
   workflowId?: string;

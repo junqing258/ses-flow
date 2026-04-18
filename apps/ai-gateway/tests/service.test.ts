@@ -68,12 +68,22 @@ describe("ai gateway service", () => {
     });
 
     await service.sendMessage("session-1", {
+      aiProvider: {
+        authToken: "sk-test-token",
+        baseUrl: "https://api.example.com",
+        model: "claude-sonnet-4-6",
+      },
       message: "first",
       runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
     });
 
     await expect(
       service.sendMessage("session-1", {
+        aiProvider: {
+          authToken: "sk-test-token",
+          baseUrl: "https://api.example.com",
+          model: "claude-sonnet-4-6",
+        },
         message: "second",
         runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
       }),
@@ -104,6 +114,11 @@ describe("ai gateway service", () => {
     });
 
     await service.sendMessage("session-1", {
+      aiProvider: {
+        authToken: "sk-test-token",
+        baseUrl: "https://api.example.com",
+        model: "claude-sonnet-4-6",
+      },
       message: "first",
       runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
     });
@@ -112,6 +127,11 @@ describe("ai gateway service", () => {
     });
 
     await service.sendMessage("session-1", {
+      aiProvider: {
+        authToken: "sk-test-token",
+        baseUrl: "https://api.example.com",
+        model: "claude-sonnet-4-6",
+      },
       message: "second",
       runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
     });
@@ -139,6 +159,11 @@ describe("ai gateway service", () => {
     });
 
     await service.sendMessage("session-1", {
+      aiProvider: {
+        authToken: "sk-test-token",
+        baseUrl: "https://api.example.com",
+        model: "claude-sonnet-4-6",
+      },
       message: "update the draft",
       runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
     });
@@ -188,6 +213,11 @@ describe("ai gateway service", () => {
     });
 
     await service.sendMessage("session-1", {
+      aiProvider: {
+        authToken: "sk-test-token",
+        baseUrl: "https://api.example.com",
+        model: "claude-sonnet-4-6",
+      },
       message: "inspect the draft",
       runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
     });
@@ -203,6 +233,56 @@ describe("ai gateway service", () => {
           }),
         ]),
       );
+    });
+  });
+
+  it("requires ai provider config in each request", async () => {
+    const service = createAiGatewayService({
+      claudeAdapter: new MockClaudeAdapter(async () => {}),
+      repoRoot: process.cwd(),
+    });
+
+    await expect(
+      service.sendMessage("session-1", {
+        message: "inspect the draft",
+        runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
+      }),
+    ).rejects.toMatchObject<AiGatewayServiceError>({
+      message: "aiProvider 必须是对象",
+      statusCode: 400,
+    });
+  });
+
+  it("passes request ai provider config to the adapter", async () => {
+    const runTurn = vi
+      .fn<(params: RunClaudeTurnParams) => Promise<void>>()
+      .mockImplementation(async (params) => {
+        expect(params.aiProvider).toEqual({
+          authToken: "sk-user-token",
+          baseUrl: "https://provider.example.com",
+          model: "claude-custom-model",
+        });
+        params.onAssistantDelta("configured");
+        params.onAssistantCompleted();
+      });
+
+    const service = createAiGatewayService({
+      claudeAdapter: new MockClaudeAdapter(runTurn),
+      repoRoot: process.cwd(),
+    });
+
+    await service.sendMessage("session-1", {
+      aiProvider: {
+        authToken: "sk-user-token",
+        baseUrl: "https://provider.example.com",
+        model: "claude-custom-model",
+      },
+      message: "inspect the draft",
+      runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
+    });
+
+    await vi.waitFor(() => {
+      expect(runTurn).toHaveBeenCalledTimes(1);
     });
   });
 });

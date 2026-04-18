@@ -1,7 +1,12 @@
 import type { ClaudeAdapter } from "./claude.js";
 import { logger, summarizeText } from "./logger.js";
 import { AiThreadStore } from "./state.js";
-import type { AiThreadEvent, AiThreadSnapshot, SendAiThreadMessageRequest } from "./types.js";
+import type {
+  AiProviderConfig,
+  AiThreadEvent,
+  AiThreadSnapshot,
+  SendAiThreadMessageRequest,
+} from "./types.js";
 
 export class AiGatewayServiceError extends Error {
   constructor(
@@ -24,7 +29,10 @@ const validateMessagePayload = (body: unknown): SendAiThreadMessageRequest => {
     throw new AiGatewayServiceError(400, "请求体必须是 JSON 对象");
   }
 
-  const { message, runnerBaseUrl, workflowId } = body as Record<string, unknown>;
+  const { aiProvider, message, runnerBaseUrl, workflowId } = body as Record<
+    string,
+    unknown
+  >;
 
   if (typeof message !== "string" || !message.trim()) {
     throw new AiGatewayServiceError(400, "message 不能为空");
@@ -38,7 +46,34 @@ const validateMessagePayload = (body: unknown): SendAiThreadMessageRequest => {
     throw new AiGatewayServiceError(400, "workflowId 必须是字符串");
   }
 
+  if (typeof aiProvider !== "object" || aiProvider === null) {
+    throw new AiGatewayServiceError(400, "aiProvider 必须是对象");
+  }
+
+  const {
+    authToken,
+    baseUrl,
+    model,
+  } = aiProvider as Partial<AiProviderConfig>;
+
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+    throw new AiGatewayServiceError(400, "aiProvider.baseUrl 不能为空");
+  }
+
+  if (typeof authToken !== "string" || !authToken.trim()) {
+    throw new AiGatewayServiceError(400, "aiProvider.authToken 不能为空");
+  }
+
+  if (typeof model !== "string" || !model.trim()) {
+    throw new AiGatewayServiceError(400, "aiProvider.model 不能为空");
+  }
+
   return {
+    aiProvider: {
+      authToken: authToken.trim(),
+      baseUrl: baseUrl.trim(),
+      model: model.trim(),
+    },
     message: message.trim(),
     runnerBaseUrl: runnerBaseUrl.trim().replace(/\/$/, ""),
     workflowId: typeof workflowId === "string" ? workflowId : undefined,
@@ -75,6 +110,8 @@ export const createAiGatewayService = (
 
       logger.info("thread.turn.requested", {
         editSessionId,
+        aiProviderBaseUrl: payload.aiProvider.baseUrl,
+        aiProviderModel: payload.aiProvider.model,
         workflowId: payload.workflowId,
         runnerBaseUrl: payload.runnerBaseUrl,
         promptPreview: summarizeText(payload.message),
@@ -97,6 +134,7 @@ export const createAiGatewayService = (
             abortController,
             claudeSessionId: snapshot.claudeSessionId,
             editSessionId,
+            aiProvider: payload.aiProvider,
             prompt: payload.message,
             repoRoot: options.repoRoot,
             runnerBaseUrl: payload.runnerBaseUrl,

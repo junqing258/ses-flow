@@ -5,7 +5,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { isAllowedToolUse } from "./permissions.js";
-import { getAiProviderConfig } from "./config.js";
+import { resolveAiProviderConfig } from "./config.js";
 import {
   createRunnerEditSessionMcpServer,
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
@@ -13,6 +13,7 @@ import {
   RUNNER_MCP_SERVER_NAME,
   UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
 } from "./runner-tools.js";
+import type { AiProviderConfig } from "./types.js";
 
 export interface ClaudeTurnCallbacks {
   onAssistantDelta: (delta: string) => void;
@@ -25,6 +26,7 @@ export interface ClaudeTurnCallbacks {
 
 export interface RunClaudeTurnParams extends ClaudeTurnCallbacks {
   abortController: AbortController;
+  aiProvider: AiProviderConfig;
   claudeSessionId?: string;
   editSessionId: string;
   prompt: string;
@@ -202,7 +204,7 @@ const denyToolUse = (message: string): PermissionResult => ({
 
 export class ClaudeCodeSdkAdapter implements ClaudeAdapter {
   async runTurn(params: RunClaudeTurnParams) {
-    const config = getAiProviderConfig();
+    const config = resolveAiProviderConfig(params.aiProvider);
 
     const prompt = `${SYSTEM_PROMPT}
 

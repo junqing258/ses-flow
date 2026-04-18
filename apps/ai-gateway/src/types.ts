@@ -46,7 +46,14 @@ export interface AiThreadEvent {
   message?: AiChatMessage;
 }
 
+export interface AiProviderConfig {
+  baseUrl: string;
+  authToken: string;
+  model: string;
+}
+
 export interface SendAiThreadMessageRequest {
+  aiProvider: AiProviderConfig;
   message: string;
   runnerBaseUrl: string;
   workflowId?: string;

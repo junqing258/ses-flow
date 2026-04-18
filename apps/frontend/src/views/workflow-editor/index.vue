@@ -139,6 +139,7 @@
           variant="ghost"
           size="icon"
           class="h-8 w-8 text-slate-500 rounded-full hover:bg-slate-200"
+          @click="openAiProviderConfigDialog"
         >
           <Settings class="h-4 w-4" />
         </Button>
@@ -903,6 +904,7 @@ import {
 import { type LocationQueryValue, useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
+import { useAiProviderConfigDialog } from "@/composables/useAiProviderConfigDialog";
 import WorkflowAiChatPanel from "@/components/workflow/WorkflowAiChatPanel.vue";
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
@@ -992,6 +994,7 @@ const CANVAS_LEFT_PADDING_MAX_RATIO = 0.45;
 
 const route = useRoute();
 const router = useRouter();
+const { openAiProviderConfigDialog } = useAiProviderConfigDialog();
 const initialEditorState = createInitialWorkflowEditorState();
 const nodes = ref<WorkflowFlowNode[]>(initialEditorState.nodes);
 const edges = ref<Edge[]>(initialEditorState.edges);

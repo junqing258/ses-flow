@@ -40,6 +40,14 @@
           <Button
             variant="outline"
             class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+            @click="openAiProviderConfigDialog"
+          >
+            <Wand2 class="h-4 w-4" />
+            AI 供应商
+          </Button>
+          <Button
+            variant="outline"
+            class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
             @click="openHelp"
           >
             <BookOpen class="h-4 w-4" />
@@ -296,6 +304,7 @@ import {
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
+import { useAiProviderConfigDialog } from "@/composables/useAiProviderConfigDialog";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -332,6 +341,7 @@ interface WorkflowTemplateItem {
 }
 
 const router = useRouter();
+const { openAiProviderConfigDialog } = useAiProviderConfigDialog();
 const activeTab = ref<WorkflowTabId>("drafts");
 const workflowSummaries = ref<WorkflowSummary[]>([]);
 const isLoadingWorkflows = ref(false);
