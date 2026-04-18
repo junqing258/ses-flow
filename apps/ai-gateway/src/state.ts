@@ -126,6 +126,7 @@ export class AiThreadStore {
     content: string,
   ): AiThreadSnapshot {
     const thread = this.getOrCreate(editSessionId);
+    this.resetActiveAssistantMessage(thread);
     const message = buildMessage("tool-status", content, "streaming", {
       toolName,
     });
@@ -243,6 +244,20 @@ export class AiThreadStore {
     thread.messages.push(message);
     thread.activeAssistantMessageId = message.id;
     return message;
+  }
+
+  private resetActiveAssistantMessage(thread: ThreadState) {
+    if (!thread.activeAssistantMessageId) {
+      return;
+    }
+
+    const message = thread.messages.find(
+      (entry) => entry.id === thread.activeAssistantMessageId,
+    );
+    if (message && message.status === "streaming") {
+      message.status = "completed";
+    }
+    thread.activeAssistantMessageId = undefined;
   }
 
   private serialize(thread: ThreadState): AiThreadSnapshot {

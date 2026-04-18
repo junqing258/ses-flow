@@ -63,27 +63,52 @@
 
     <div
       ref="messageContainerRef"
-      class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50/50 px-4 py-4"
+      class="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 px-4 py-4"
     >
       <template v-if="threadSnapshot.messages.length > 0">
-        <article
-          v-for="message in threadSnapshot.messages"
-          :key="message.id"
-          class="rounded-[16px] px-3 py-3 text-[13px] leading-6 shadow-sm"
-          :class="messageClassMap[message.role]"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.22em]">
-              {{ messageRoleLabelMap[message.role] }}
-            </p>
-            <p class="text-[11px] opacity-70">
-              {{ formatMessageTime(message.createdAt) }}
-            </p>
-          </div>
-          <p class="mt-2 whitespace-pre-wrap break-words">
-            {{ message.content || "..." }}
-          </p>
-        </article>
+        <div class="space-y-4">
+          <article
+            v-for="message in threadSnapshot.messages"
+            :key="message.id"
+            class="border-b border-slate-200/70 pb-4 last:border-b-0 last:pb-0"
+          >
+            <div
+              class="text-[13px]"
+              :class="messageClassMap[message.role]"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <p class="text-[11px] font-semibold uppercase tracking-[0.22em]">
+                      {{ messageRoleLabelMap[message.role] }}
+                    </p>
+                    <span
+                      class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      :class="messageStatusClassMap[message.status]"
+                    >
+                      {{ getMessageStatusLabel(message.status) }}
+                    </span>
+                  </div>
+                  <p
+                    v-if="message.toolName"
+                    class="mt-1 text-[11px] font-medium opacity-70"
+                  >
+                    {{ message.toolName }}
+                  </p>
+                </div>
+                <p class="shrink-0 text-[11px] opacity-70">
+                  {{ formatMessageTime(message.createdAt) }}
+                </p>
+              </div>
+              <p
+                class="whitespace-pre-wrap break-words"
+                :class="messageContentClassMap[message.role]"
+              >
+                {{ message.content || "..." }}
+              </p>
+            </div>
+          </article>
+        </div>
       </template>
 
       <div
@@ -142,6 +167,7 @@ import {
   sendAiThreadMessage,
   subscribeAiThreadEvents,
   type AiChatMessageRole,
+  type AiChatMessageStatus,
   type AiThreadSnapshot,
 } from "@/features/workflow/ai-chat";
 import type { EventSourceSubscription } from "@/lib/sse";
@@ -177,10 +203,23 @@ const messageRoleLabelMap: Record<AiChatMessageRole, string> = {
 };
 
 const messageClassMap: Record<AiChatMessageRole, string> = {
-  user: "bg-slate-900 text-white",
-  assistant: "bg-white text-slate-800 ring-1 ring-slate-100",
-  "tool-status": "bg-amber-50 text-amber-900 ring-1 ring-amber-100",
-  error: "bg-rose-50 text-rose-800 ring-1 ring-rose-100",
+  user: "text-slate-900",
+  assistant: "text-slate-800",
+  "tool-status": "py-1 text-[12px] leading-5 text-amber-900",
+  error: "text-rose-800",
+};
+
+const messageContentClassMap: Record<AiChatMessageRole, string> = {
+  user: "mt-2",
+  assistant: "mt-2",
+  "tool-status": "mt-1",
+  error: "mt-2",
+};
+
+const messageStatusClassMap: Record<AiChatMessageStatus, string> = {
+  streaming: "bg-sky-100 text-sky-700",
+  completed: "bg-slate-100 text-slate-600",
+  error: "bg-rose-100 text-rose-700",
 };
 
 const isRunning = computed(() => threadSnapshot.value.status === "running");
@@ -245,6 +284,18 @@ const formatMessageTime = (value: string) =>
     minute: "2-digit",
     second: "2-digit",
   });
+
+const getMessageStatusLabel = (status: AiChatMessageStatus) => {
+  if (status === "streaming") {
+    return "进行中";
+  }
+
+  if (status === "error") {
+    return "失败";
+  }
+
+  return "已完成";
+};
 
 const persistSnapshot = (snapshot: AiThreadSnapshot) => {
   if (!snapshot.editSessionId) {
