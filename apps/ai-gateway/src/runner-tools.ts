@@ -20,6 +20,23 @@ interface CreateRunnerEditSessionMcpServerParams {
   runnerBaseUrl: string;
 }
 
+export const normalizeJsonLikeInput = (value: unknown) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
 const normalizeRunnerBaseUrl = (runnerBaseUrl: string) =>
   runnerBaseUrl.trim().replace(/\/$/, "");
 
@@ -181,8 +198,8 @@ export const createRunnerEditSessionMcpServer = ({
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                editorDocument,
-                workflow,
+                editorDocument: normalizeJsonLikeInput(editorDocument),
+                workflow: normalizeJsonLikeInput(workflow),
                 workflowId,
               }),
             },

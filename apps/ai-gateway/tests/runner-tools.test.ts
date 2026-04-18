@@ -4,6 +4,7 @@ import {
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
   isPreviewMutationToolName,
   isRunnerMcpToolName,
+  normalizeJsonLikeInput,
   RUNNER_MCP_SERVER_NAME,
   RUNNER_TOOL_REQUEST_TIMEOUT_MS,
   UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
@@ -39,5 +40,11 @@ describe("runner MCP tools", () => {
 
   it("uses a 10 second timeout for runner tool requests", () => {
     expect(RUNNER_TOOL_REQUEST_TIMEOUT_MS).toBe(10_000);
+  });
+
+  it("parses stringified JSON tool inputs before sending to runner", () => {
+    expect(normalizeJsonLikeInput("{\"nodes\":[]}")).toEqual({ nodes: [] });
+    expect(normalizeJsonLikeInput("plain-text")).toBe("plain-text");
+    expect(normalizeJsonLikeInput({ nodes: [] })).toEqual({ nodes: [] });
   });
 });

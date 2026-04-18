@@ -37,15 +37,25 @@ export interface ClaudeAdapter {
   runTurn(params: RunClaudeTurnParams): Promise<void>;
 }
 
+const RUNNER_MCP_ALLOWED_TOOL_NAMES = [
+  GET_CURRENT_EDIT_SESSION_TOOL_NAME,
+  UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+  `mcp__${RUNNER_MCP_SERVER_NAME}__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`,
+  `mcp__${RUNNER_MCP_SERVER_NAME}__${UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`,
+];
+
 const SYSTEM_PROMPT = `你是 SES Flow 页面内 AI 协作助手。
 
 必须遵守以下规则：
 1. 必须使用 ses-flow-skill。
 2. runner edit session 是唯一事实来源。
 3. 只能读取并更新当前 edit session 对应的草稿。
-4. 不允许修改仓库文件、提交代码或运行任何写文件命令。
-5. 若要读取或修改工作流，只能使用提供的 ses-flow-runner MCP 工具。
-6. 回复末尾必须给出“本次改动摘要”。`;
+4. 不允许读取仓库源码、搜索仓库文件、修改仓库文件、提交代码或运行任何写文件命令。
+5. 不要为当前任务分析或排查 MCP/SDK/后端实现细节；若工具报错，应根据错误直接重试或向用户简要说明失败原因。
+6. 若要读取或修改工作流，只能使用提供的 ses-flow-runner MCP 工具。
+6. ses-flow-runner MCP 工具已经预授权，不需要向用户申请额外权限。
+7. 对于“删除节点/改连线/改配置”等直接编辑需求，优先在 1 次读取后直接更新草稿，不要进行额外探索。
+8. 回复末尾必须给出“本次改动摘要”。`;
 
 const getText = (value: unknown): string => {
   if (typeof value === "string") {
@@ -102,6 +112,21 @@ const getToolResultText = (message: SDKMessage) => {
   return getText(message.tool_use_result ?? message.message.content);
 };
 
+const parseJsonObject = (value: string) => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 const getToolUseSummary = (
   toolName: string,
   input: Record<string, unknown>,
@@ -121,6 +146,48 @@ const getToolUseSummary = (
   }
 
   return `${toolName}: ${getText(input) || "执行中"}`;
+};
+
+const getToolCompletedSummary = (
+  toolName: string,
+  resultText: string,
+) => {
+  if (
+    toolName === GET_CURRENT_EDIT_SESSION_TOOL_NAME ||
+    toolName.endsWith(`__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`)
+  ) {
+    const payload = parseJsonObject(resultText);
+    const workflowId =
+      typeof payload?.workflowId === "string" ? payload.workflowId : "";
+    const workflow =
+      typeof payload?.workflow === "object" && payload.workflow !== null
+        ? (payload.workflow as Record<string, unknown>)
+        : null;
+    const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes.length : null;
+
+    if (workflowId && nodes != null) {
+      return `已读取当前 edit session（workflowId: ${workflowId}，nodes: ${nodes}）`;
+    }
+
+    return "已读取当前 edit session";
+  }
+
+  if (
+    toolName === UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
+    toolName.endsWith(`__${UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`)
+  ) {
+    const payload = parseJsonObject(resultText);
+    const updatedAt =
+      typeof payload?.updatedAt === "string" ? payload.updatedAt : "";
+
+    if (updatedAt) {
+      return `已更新当前 edit session draft（updatedAt: ${updatedAt}）`;
+    }
+
+    return "已更新当前 edit session draft";
+  }
+
+  return resultText ? `工具已完成：${resultText}` : "工具已完成";
 };
 
 const allowToolUse = (input: Record<string, unknown>): PermissionResult => ({
@@ -157,7 +224,9 @@ ${params.prompt}`.trim();
       options: {
         cwd: params.repoRoot,
         permissionMode: "dontAsk",
-        tools: ["Read", "Glob", "Grep", "LS"],
+        tools: [],
+        allowedTools: RUNNER_MCP_ALLOWED_TOOL_NAMES,
+        maxTurns: 6,
         mcpServers: {
           [RUNNER_MCP_SERVER_NAME]: createRunnerEditSessionMcpServer({
             editSessionId: params.editSessionId,
@@ -186,7 +255,7 @@ ${params.prompt}`.trim();
           }
 
           return denyToolUse(
-            `禁止使用 ${toolName} 执行当前操作。只能读取仓库内容，或使用 ses-flow-runner MCP 工具访问当前 runner edit session。`,
+            `禁止使用 ${toolName} 执行当前操作。只能使用 ses-flow-runner MCP 工具访问当前 runner edit session。`,
           );
         },
       },
@@ -255,7 +324,11 @@ ${params.prompt}`.trim();
         const resultText = getToolResultText(item);
         params.onToolCompleted(
           item.parent_tool_use_id,
-          resultText ? `工具已完成：${resultText}` : "工具已完成",
+          toolCall
+            ? getToolCompletedSummary(toolCall.toolName, resultText)
+            : resultText
+              ? `工具已完成：${resultText}`
+              : "工具已完成",
         );
         continue;
       }

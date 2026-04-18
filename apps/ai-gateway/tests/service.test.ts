@@ -21,10 +21,7 @@ class MockClaudeAdapter implements ClaudeAdapter {
 }
 
 describe("ai gateway permissions", () => {
-  it("allows only whitelisted tools and runner MCP tools", () => {
-    expect(
-      isAllowedToolUse("Read", {}, "http://127.0.0.1:6302/runner-api"),
-    ).toBe(true);
+  it("allows only runner MCP tools", () => {
     expect(
       isAllowedToolUse(
         `mcp__${RUNNER_MCP_SERVER_NAME}__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`,
@@ -45,8 +42,8 @@ describe("ai gateway permissions", () => {
     ).toBe(true);
     expect(
       isAllowedToolUse(
-        "Bash",
-        { command: "curl http://127.0.0.1:6302/runner-api/edit-sessions/abc" },
+        "Read",
+        {},
         "http://127.0.0.1:6302/runner-api",
       ),
     ).toBe(false);
@@ -164,6 +161,44 @@ describe("ai gateway service", () => {
           expect.objectContaining({
             role: "assistant",
             content: "partial answer",
+            status: "completed",
+          }),
+        ]),
+      );
+    });
+  });
+
+  it("stores concise runner tool completion summaries instead of full payloads", async () => {
+    const service = createAiGatewayService({
+      claudeAdapter: new MockClaudeAdapter(async (params) => {
+        params.onClaudeSessionId("claude-session-1");
+        params.onToolStarted(
+          "tool-1",
+          GET_CURRENT_EDIT_SESSION_TOOL_NAME,
+          "读取当前 edit session",
+        );
+        params.onToolCompleted(
+          "tool-1",
+          "已读取当前 edit session（workflowId: wf-ai-1，nodes: 2）",
+        );
+        params.onAssistantDelta("done");
+        params.onAssistantCompleted();
+      }),
+      repoRoot: process.cwd(),
+    });
+
+    await service.sendMessage("session-1", {
+      message: "inspect the draft",
+      runnerBaseUrl: "http://127.0.0.1:6302/runner-api",
+    });
+
+    await vi.waitFor(() => {
+      const snapshot = service.getSnapshot("session-1");
+      expect(snapshot.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "tool-status",
+            content: "已读取当前 edit session（workflowId: wf-ai-1，nodes: 2）",
             status: "completed",
           }),
         ]),
