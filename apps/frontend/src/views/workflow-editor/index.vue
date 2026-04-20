@@ -1109,9 +1109,15 @@ const isAiMode = computed(() => pageMode.value === "ai");
 const canvasVisibilityClass = computed(() =>
   isViewportResetting.value ? "opacity-0 pointer-events-none" : "opacity-100",
 );
-const rightAsideVisibilityClass = computed(() =>
-  isViewportResetting.value ? "opacity-0 pointer-events-none" : "opacity-100",
-);
+const rightAsideVisibilityClass = computed(() => {
+  if (isAiMode.value) {
+    return "opacity-100";
+  }
+
+  return isViewportResetting.value
+    ? "opacity-0 pointer-events-none"
+    : "opacity-100";
+});
 const isSelectedSwitchNode = computed(
   () => selectedNodeData.value.kind === "switch",
 );

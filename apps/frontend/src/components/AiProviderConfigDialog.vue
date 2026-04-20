@@ -7,7 +7,7 @@
       class="max-w-[min(92vw,34rem)] rounded-[28px] border border-slate-200/80 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
     >
       <div class="overflow-hidden rounded-[28px]">
-        <div class="border-b border-slate-200/80 bg-[linear-gradient(135deg,#f8fafc,#ecfeff)] px-6 py-5">
+        <div class="border-b border-slate-200/80 px-6 py-5">
           <DialogHeader class="space-y-2">
             <DialogTitle class="text-xl font-semibold tracking-tight text-slate-950">
               AI 供应商配置
