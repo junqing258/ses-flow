@@ -10,7 +10,7 @@ export interface StorageLike {
   removeItem(key: string): void;
 }
 
-const AI_PROVIDER_CONFIG_STORAGE_KEY = "ses-flow.ai-provider-config";
+export const AI_PROVIDER_CONFIG_STORAGE_KEY = "ses-flow.ai-provider-config";
 
 const normalizeString = (value: unknown) => {
   if (typeof value !== "string") {
@@ -46,8 +46,8 @@ export const isAiProviderConfigComplete = (
 
   return Boolean(
     normalizedConfig.baseUrl &&
-      normalizedConfig.authToken &&
-      normalizedConfig.model,
+    normalizedConfig.authToken &&
+    normalizedConfig.model,
   );
 };
 

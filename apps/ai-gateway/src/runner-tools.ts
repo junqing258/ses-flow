@@ -82,7 +82,7 @@ const editSessionDraftOperationSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal(UPDATE_NODE_CONFIG_OPERATION_TYPE),
     nodeId: z.string().min(1),
-    config: z.record(z.unknown()),
+    config: z.record(z.string(), z.unknown()),
   }),
   z.object({
     type: z.literal(ADD_EDGE_OPERATION_TYPE),
@@ -98,7 +98,7 @@ const editSessionDraftOperationSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal(UPDATE_EDGE_OPERATION_TYPE),
     edgeId: z.string().min(1),
-    updates: z.record(z.unknown()),
+    updates: z.record(z.string(), z.unknown()),
   }),
 ]);
 

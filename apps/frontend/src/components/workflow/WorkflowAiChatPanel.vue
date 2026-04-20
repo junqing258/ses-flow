@@ -47,7 +47,7 @@
           <!-- <p class="mt-1 text-sm font-medium text-slate-900">
             {{ previewSyncLabel }}
           </p> -->
-          <p class="mt-1">Agent 事件流：{{ gatewayConnectionLabel }}</p>
+          <p>Agent 事件流：{{ gatewayConnectionLabel }}</p>
           <p v-if="claudeSessionId" class="mt-1 break-all">
             claude_session_id: {{ claudeSessionId }}
           </p>
@@ -165,6 +165,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 
 import { Button } from "@/components/ui/button";
+import { useAiProviderConfig } from "@/composables/useAiProviderConfig";
 import { renderAiChatMarkdown } from "@/features/workflow/ai-chat-markdown";
 import {
   cancelAiThreadTurn,
@@ -178,11 +179,6 @@ import {
   type AiChatMessageStatus,
   type AiThreadSnapshot,
 } from "@/features/workflow/ai-chat";
-import {
-  isAiProviderConfigComplete,
-  readPersistedAiProviderConfig,
-  resolveAiProviderConfigStorage,
-} from "@/features/workflow/ai-provider";
 import type { AiChatMessage } from "@/features/workflow/ai-chat";
 import type { EventSourceSubscription } from "@/lib/sse";
 
@@ -198,7 +194,7 @@ const props = defineProps<{
 }>();
 
 const storage = resolveAiChatStorage();
-const aiProviderStorage = resolveAiProviderConfigStorage();
+const { aiProviderConfig, hasCompleteAiProviderConfig } = useAiProviderConfig();
 const messageContainerRef = ref<HTMLElement | null>(null);
 const draftMessage = ref("");
 const gatewayError = ref("");
@@ -409,15 +405,15 @@ const handleSend = async () => {
 
   try {
     gatewayError.value = "";
-    const aiProviderConfig = readPersistedAiProviderConfig(aiProviderStorage);
-    if (!aiProviderConfig || !isAiProviderConfigComplete(aiProviderConfig)) {
+    const currentAiProviderConfig = aiProviderConfig.value;
+    if (!currentAiProviderConfig || !hasCompleteAiProviderConfig.value) {
       gatewayError.value = "请先在右上角设置中完整配置 AI 供应商信息";
       toast.error(gatewayError.value);
       return;
     }
 
     const snapshot = await sendAiThreadMessage(props.sessionId, {
-      aiProvider: aiProviderConfig,
+      aiProvider: currentAiProviderConfig,
       message,
       runnerBaseUrl: props.runnerBaseUrl,
       workflowId: props.workflowId,

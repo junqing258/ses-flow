@@ -9,7 +9,9 @@
       <div class="overflow-hidden rounded-[28px]">
         <div class="border-b border-slate-200/80 px-6 py-5">
           <DialogHeader class="space-y-2">
-            <DialogTitle class="text-xl font-semibold tracking-tight text-slate-950">
+            <DialogTitle
+              class="text-xl font-semibold tracking-tight text-slate-950"
+            >
               AI 供应商配置
             </DialogTitle>
             <!-- <DialogDescription class="text-sm leading-6 text-slate-600">
@@ -25,7 +27,10 @@
           </div> -->
 
           <div class="space-y-2">
-            <Label for="ai-provider-base-url" class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+            <Label
+              for="ai-provider-base-url"
+              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
+            >
               ANTHROPIC_BASE_URL
             </Label>
             <Input
@@ -37,7 +42,10 @@
           </div>
 
           <div class="space-y-2">
-            <Label for="ai-provider-auth-token" class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+            <Label
+              for="ai-provider-auth-token"
+              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
+            >
               ANTHROPIC_AUTH_TOKEN
             </Label>
             <Input
@@ -50,7 +58,10 @@
           </div>
 
           <div class="space-y-2">
-            <Label for="ai-provider-model" class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+            <Label
+              for="ai-provider-model"
+              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
+            >
               ANTHROPIC_MODEL
             </Label>
             <Input
@@ -62,7 +73,9 @@
           </div>
         </div>
 
-        <DialogFooter class="border-t border-slate-200/80 bg-slate-50/80 px-6 py-4">
+        <DialogFooter
+          class="border-t border-slate-200/80 bg-slate-50/80 px-6 py-4"
+        >
           <Button
             type="button"
             variant="outline"
@@ -93,35 +106,31 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 import { toast } from "vue-sonner";
 
+import { useAiProviderConfig } from "@/composables/useAiProviderConfig";
 import { useAiProviderConfigDialog } from "@/composables/useAiProviderConfigDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  clearPersistedAiProviderConfig,
-  isAiProviderConfigComplete,
-  persistAiProviderConfig,
-  readPersistedAiProviderConfig,
-  resolveAiProviderConfigStorage,
-} from "@/features/workflow/ai-provider";
+import { isAiProviderConfigComplete } from "@/features/workflow/ai-provider";
 
+const { aiProviderConfigDialogOpen, setAiProviderConfigDialogOpen } =
+  useAiProviderConfigDialog();
 const {
-  aiProviderConfigDialogOpen,
-  setAiProviderConfigDialogOpen,
-} = useAiProviderConfigDialog();
-
-const storage = resolveAiProviderConfigStorage();
+  aiProviderConfig,
+  clearAiProviderConfig,
+  reloadAiProviderConfig,
+  saveAiProviderConfig,
+} = useAiProviderConfig();
 const form = reactive({
   baseUrl: "",
   authToken: "",
@@ -129,18 +138,12 @@ const form = reactive({
 });
 
 const hydrateForm = () => {
-  const persistedConfig = readPersistedAiProviderConfig(storage);
-
-  form.baseUrl = persistedConfig?.baseUrl ?? "";
-  form.authToken = persistedConfig?.authToken ?? "";
-  form.model = persistedConfig?.model ?? "";
+  form.baseUrl = aiProviderConfig.value?.baseUrl ?? "";
+  form.authToken = aiProviderConfig.value?.authToken ?? "";
+  form.model = aiProviderConfig.value?.model ?? "";
 };
 
 const handleDialogOpenChange = (open: boolean) => {
-  if (open) {
-    hydrateForm();
-  }
-
   setAiProviderConfigDialogOpen(open);
 };
 
@@ -150,7 +153,7 @@ const handleCancel = () => {
 };
 
 const handleReset = () => {
-  clearPersistedAiProviderConfig(storage);
+  clearAiProviderConfig();
   hydrateForm();
   setAiProviderConfigDialogOpen(false);
   toast.success("已清空 AI 供应商配置");
@@ -164,13 +167,30 @@ const handleSave = () => {
   };
 
   if (!isAiProviderConfigComplete(nextConfig)) {
-    toast.error("请完整填写 ANTHROPIC_BASE_URL、ANTHROPIC_AUTH_TOKEN、ANTHROPIC_MODEL");
+    toast.error(
+      "请完整填写 ANTHROPIC_BASE_URL、ANTHROPIC_AUTH_TOKEN、ANTHROPIC_MODEL",
+    );
     return;
   }
 
-  persistAiProviderConfig(storage, nextConfig);
+  saveAiProviderConfig(nextConfig);
   hydrateForm();
   setAiProviderConfigDialogOpen(false);
   toast.success("AI 供应商配置已保存");
 };
+
+watch(
+  aiProviderConfigDialogOpen,
+  (open) => {
+    if (!open) {
+      return;
+    }
+
+    reloadAiProviderConfig();
+    hydrateForm();
+  },
+  {
+    immediate: true,
+  },
+);
 </script>
