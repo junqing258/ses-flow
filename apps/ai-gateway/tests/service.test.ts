@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClaudeAdapter, RunClaudeTurnParams } from "../src/claude.js";
 import { isAllowedToolUse } from "../src/permissions.js";
 import {
+  APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
+  REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
   RUNNER_MCP_SERVER_NAME,
   UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
 } from "../src/runner-tools.js";
@@ -36,6 +38,24 @@ describe("ai gateway permissions", () => {
           workflow: {
             nodes: [],
           },
+        },
+        "http://127.0.0.1:6302/runner-api",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedToolUse(
+        APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
+        {
+          operations: [{ type: "remove_node_cascade", nodeId: "node-1" }],
+        },
+        "http://127.0.0.1:6302/runner-api",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedToolUse(
+        REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+        {
+          nodeId: "node-1",
         },
         "http://127.0.0.1:6302/runner-api",
       ),

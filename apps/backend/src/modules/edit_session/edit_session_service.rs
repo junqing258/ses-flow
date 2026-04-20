@@ -1,3 +1,4 @@
+use runner::app::EditSessionDraftOperation;
 use runner::core::definition::WorkflowDefinition;
 use runner::store::WorkflowEditSessionRecord;
 use serde::Deserialize;
@@ -16,6 +17,13 @@ pub struct EditSessionUpsertRequest {
     pub workflow: WorkflowDefinition,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct EditSessionPatchRequest {
+    #[serde(rename = "workflowId", default)]
+    pub workflow_id: Option<String>,
+    pub operations: Vec<EditSessionDraftOperation>,
+}
+
 pub fn create_edit_session(
     state: &ApiState,
     request: EditSessionUpsertRequest,
@@ -28,21 +36,13 @@ pub fn create_edit_session(
     )?)
 }
 
-pub fn get_edit_session(
-    state: &ApiState,
-    session_id: &str,
-) -> Result<WorkflowEditSessionRecord, ApiError> {
+pub fn get_edit_session(state: &ApiState, session_id: &str) -> Result<WorkflowEditSessionRecord, ApiError> {
     Ok(state.app.get_edit_session(session_id)?)
 }
 
-pub fn subscribe_edit_session_events(
-    state: &ApiState,
-    session_id: &str,
-) -> Result<WorkflowEventStream, ApiError> {
+pub fn subscribe_edit_session_events(state: &ApiState, session_id: &str) -> Result<WorkflowEventStream, ApiError> {
     state.app.get_edit_session(session_id)?;
-    Ok(into_sse(
-        state.app.subscribe_edit_session_events(session_id),
-    ))
+    Ok(into_sse(state.app.subscribe_edit_session_events(session_id)))
 }
 
 pub fn update_edit_session(
@@ -56,4 +56,14 @@ pub fn update_edit_session(
         request.workflow,
         request.editor_document,
     )?)
+}
+
+pub fn patch_edit_session(
+    state: &ApiState,
+    session_id: &str,
+    request: EditSessionPatchRequest,
+) -> Result<WorkflowEditSessionRecord, ApiError> {
+    Ok(state
+        .app
+        .apply_edit_session_operations(session_id, request.workflow_id, request.operations)?)
 }

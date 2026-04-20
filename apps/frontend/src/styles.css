@@ -216,6 +216,82 @@ body,
   color: var(--text);
 }
 
+.ai-chat-markdown {
+  @apply prose prose-slate prose-sm max-w-none;
+  color: inherit;
+}
+
+.ai-chat-markdown > :first-child {
+  margin-top: 0;
+}
+
+.ai-chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.ai-chat-markdown p,
+.ai-chat-markdown li {
+  line-height: 1.7;
+}
+
+.ai-chat-markdown a {
+  color: #2563eb;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.ai-chat-markdown a:hover {
+  color: #1d4ed8;
+}
+
+.ai-chat-markdown code:not(pre code) {
+  border: 1px solid rgb(148 163 184 / 0.25);
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.8);
+  padding: 0.15rem 0.4rem;
+  font-family:
+    "IBM Plex Mono", "SFMono-Regular", "SF Mono", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.ai-chat-markdown pre {
+  overflow-x: auto;
+  border: 1px solid rgb(15 23 42 / 0.08);
+  border-radius: 0.875rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.875rem 1rem;
+}
+
+.ai-chat-markdown pre code {
+  color: inherit;
+}
+
+.ai-chat-markdown blockquote {
+  border-left: 3px solid rgb(59 130 246 / 0.4);
+  background: rgb(255 255 255 / 0.7);
+  color: rgb(71 85 105);
+  padding: 0.75rem 0.875rem;
+}
+
+.ai-chat-markdown table {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid rgb(148 163 184 / 0.2);
+  border-radius: 0.875rem;
+  background: rgb(255 255 255 / 0.75);
+}
+
+.ai-chat-markdown th,
+.ai-chat-markdown td {
+  border-bottom: 1px solid rgb(148 163 184 / 0.16);
+  padding: 0.55rem 0.75rem;
+}
+
+.ai-chat-markdown tr:last-child td {
+  border-bottom: 0;
+}
+
 .app-markdown > :first-child {
   margin-top: 0;
 }
@@ -250,7 +326,8 @@ body,
   border-radius: 0.5rem;
   background: rgb(255 255 255 / 72%);
   padding: 0.15rem 0.4rem;
-  font-family: "IBM Plex Mono", "SFMono-Regular", "SF Mono", Consolas, monospace;
+  font-family:
+    "IBM Plex Mono", "SFMono-Regular", "SF Mono", Consolas, monospace;
   font-size: 0.9em;
 }
 

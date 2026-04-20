@@ -7,23 +7,17 @@ use crate::modules::{ApiError, ApiState, WorkflowEventStream};
 use runner::app::WorkflowRegistration;
 use runner::store::{WorkflowDetailRecord, WorkflowRunRecord, WorkflowSummaryRecord};
 
-pub async fn list_workflows(
-    State(state): State<ApiState>,
-) -> Result<Json<Vec<WorkflowSummaryRecord>>, ApiError> {
+pub async fn list_workflows(State(state): State<ApiState>) -> Result<Json<Vec<WorkflowSummaryRecord>>, ApiError> {
     debug!("listing workflows");
     Ok(Json(workflow_service::list_workflows(&state)?))
 }
 
-pub async fn refresh_catalog(
-    State(state): State<ApiState>,
-) -> Result<Json<RefreshCatalogResponse>, ApiError> {
+pub async fn refresh_catalog(State(state): State<ApiState>) -> Result<Json<RefreshCatalogResponse>, ApiError> {
     debug!("refreshing workflow catalog");
     Ok(Json(workflow_service::refresh_catalog(&state)?))
 }
 
-pub async fn subscribe_workflows_events(
-    State(state): State<ApiState>,
-) -> Result<WorkflowEventStream, ApiError> {
+pub async fn subscribe_workflows_events(State(state): State<ApiState>) -> Result<WorkflowEventStream, ApiError> {
     Ok(workflow_service::subscribe_workflows_events(&state))
 }
 
@@ -54,8 +48,5 @@ pub async fn list_workflow_runs(
     Path(workflow_id): Path<String>,
 ) -> Result<Json<Vec<WorkflowRunRecord>>, ApiError> {
     debug!(workflow_id = %workflow_id, "listing workflow runs");
-    Ok(Json(workflow_service::list_workflow_runs(
-        &state,
-        &workflow_id,
-    )?))
+    Ok(Json(workflow_service::list_workflow_runs(&state, &workflow_id)?))
 }

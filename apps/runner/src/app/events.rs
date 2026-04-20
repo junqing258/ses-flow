@@ -235,5 +235,4 @@ impl WorkflowEventStreams {
             })
             .clone()
     }
-
 }

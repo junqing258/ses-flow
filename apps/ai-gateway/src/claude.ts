@@ -7,9 +7,11 @@ import {
 import { isAllowedToolUse } from "./permissions.js";
 import { resolveAiProviderConfig } from "./config.js";
 import {
+  APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
   createRunnerEditSessionMcpServer,
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
   isPreviewMutationToolName,
+  REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
   RUNNER_MCP_SERVER_NAME,
   UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
 } from "./runner-tools.js";
@@ -42,8 +44,12 @@ export interface ClaudeAdapter {
 const RUNNER_MCP_ALLOWED_TOOL_NAMES = [
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
   UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+  APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
+  REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
   `mcp__${RUNNER_MCP_SERVER_NAME}__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`,
   `mcp__${RUNNER_MCP_SERVER_NAME}__${UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`,
+  `mcp__${RUNNER_MCP_SERVER_NAME}__${APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME}`,
+  `mcp__${RUNNER_MCP_SERVER_NAME}__${REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`,
 ];
 
 const SYSTEM_PROMPT = `你是 SES Flow 页面内 AI 协作助手。
@@ -55,9 +61,11 @@ const SYSTEM_PROMPT = `你是 SES Flow 页面内 AI 协作助手。
 4. 不允许读取仓库源码、搜索仓库文件、修改仓库文件、提交代码或运行任何写文件命令。
 5. 不要为当前任务分析或排查 MCP/SDK/后端实现细节；若工具报错，应根据错误直接重试或向用户简要说明失败原因。
 6. 若要读取或修改工作流，只能使用提供的 ses-flow-runner MCP 工具。
-6. ses-flow-runner MCP 工具已经预授权，不需要向用户申请额外权限。
-7. 对于“删除节点/改连线/改配置”等直接编辑需求，优先在 1 次读取后直接更新草稿，不要进行额外探索。
-8. 回复末尾必须给出“本次改动摘要”。`;
+7. ses-flow-runner MCP 工具已经预授权，不需要向用户申请额外权限。
+8. 对于“删除节点/改连线/改配置”等直接编辑需求，优先在 1 次读取后直接更新草稿，不要进行额外探索。
+9. 优先使用 remove_node_cascade_from_current_edit_session_draft 或 apply_current_edit_session_draft_operations 一次完成修改；只有操作型工具无法表达时，才回退到 update_current_edit_session_draft。
+10. 避免连续多次调用 update_current_edit_session_draft；如果一次能做完，就不要拆成多次试错。
+11. 回复末尾必须给出“本次改动摘要”。`;
 
 const getText = (value: unknown): string => {
   if (typeof value === "string") {
@@ -147,6 +155,33 @@ const getToolUseSummary = (
     return "更新当前 edit session draft";
   }
 
+  if (
+    toolName === APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME ||
+    toolName.endsWith(
+      `__${APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME}`,
+    )
+  ) {
+    const operations = Array.isArray(input.operations) ? input.operations.length : 0;
+    return operations > 0
+      ? `批量更新当前 edit session draft（${operations} 个操作）`
+      : "批量更新当前 edit session draft";
+  }
+
+  if (
+    toolName === REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
+    toolName.endsWith(
+      `__${REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`,
+    )
+  ) {
+    const nodeId =
+      typeof input.nodeId === "string" && input.nodeId.trim()
+        ? input.nodeId.trim()
+        : "";
+    return nodeId
+      ? `删除节点并级联清理（nodeId: ${nodeId}）`
+      : "删除节点并级联清理";
+  }
+
   return `${toolName}: ${getText(input) || "执行中"}`;
 };
 
@@ -187,6 +222,40 @@ const getToolCompletedSummary = (
     }
 
     return "已更新当前 edit session draft";
+  }
+
+  if (
+    toolName === APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME ||
+    toolName.endsWith(
+      `__${APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME}`,
+    )
+  ) {
+    const payload = parseJsonObject(resultText);
+    const updatedAt =
+      typeof payload?.updatedAt === "string" ? payload.updatedAt : "";
+
+    if (updatedAt) {
+      return `已批量更新当前 edit session draft（updatedAt: ${updatedAt}）`;
+    }
+
+    return "已批量更新当前 edit session draft";
+  }
+
+  if (
+    toolName === REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
+    toolName.endsWith(
+      `__${REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`,
+    )
+  ) {
+    const payload = parseJsonObject(resultText);
+    const updatedAt =
+      typeof payload?.updatedAt === "string" ? payload.updatedAt : "";
+
+    if (updatedAt) {
+      return `已删除节点并级联更新 draft（updatedAt: ${updatedAt}）`;
+    }
+
+    return "已删除节点并级联更新 draft";
   }
 
   return resultText ? `工具已完成：${resultText}` : "工具已完成";

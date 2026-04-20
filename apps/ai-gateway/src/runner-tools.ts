@@ -10,6 +10,10 @@ export const RUNNER_MCP_SERVER_NAME = "ses-flow-runner";
 export const GET_CURRENT_EDIT_SESSION_TOOL_NAME = "get_current_edit_session";
 export const UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME =
   "update_current_edit_session_draft";
+export const APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME =
+  "apply_current_edit_session_draft_operations";
+export const REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME =
+  "remove_node_cascade_from_current_edit_session_draft";
 export const RUNNER_TOOL_REQUEST_TIMEOUT_MS = 10_000;
 
 type FetchLike = typeof fetch;
@@ -42,6 +46,12 @@ const normalizeRunnerBaseUrl = (runnerBaseUrl: string) =>
 
 const buildRunnerUrl = (runnerBaseUrl: string, path: string) =>
   `${normalizeRunnerBaseUrl(runnerBaseUrl)}${path}`;
+
+const REMOVE_NODE_CASCADE_OPERATION_TYPE = "remove_node_cascade";
+const editSessionDraftOperationSchema = z.object({
+  type: z.literal(REMOVE_NODE_CASCADE_OPERATION_TYPE),
+  nodeId: z.string().min(1),
+});
 
 const createTextResult = (text: string): CallToolResult => ({
   content: [
@@ -146,11 +156,21 @@ const callRunner = async (
 export const isRunnerMcpToolName = (toolName: string) =>
   toolName === GET_CURRENT_EDIT_SESSION_TOOL_NAME ||
   toolName === UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
+  toolName === APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME ||
+  toolName === REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
   toolName.startsWith(`mcp__${RUNNER_MCP_SERVER_NAME}__`);
 
 export const isPreviewMutationToolName = (toolName: string) =>
   toolName === UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
-  toolName.endsWith(`__${UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`);
+  toolName === APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME ||
+  toolName === REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME ||
+  toolName.endsWith(`__${UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`) ||
+  toolName.endsWith(
+    `__${APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME}`,
+  ) ||
+  toolName.endsWith(
+    `__${REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME}`,
+  );
 
 export const createRunnerEditSessionMcpServer = ({
   editSessionId,
@@ -204,6 +224,65 @@ export const createRunnerEditSessionMcpServer = ({
               }),
             },
             "更新当前 edit session draft 失败",
+          ),
+      ),
+      tool(
+        APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
+        "批量更新当前 edit session draft。优先使用 operations 一次完成多个修改；当前支持 remove_node_cascade。",
+        {
+          operations: z.array(editSessionDraftOperationSchema).min(1),
+          workflowId: z.string().min(1).optional(),
+        },
+        async ({ operations, workflowId }) =>
+          callRunner(
+            fetchImpl,
+            buildRunnerUrl(
+              runnerBaseUrl,
+              `/edit-sessions/${encodeURIComponent(editSessionId)}/draft`,
+            ),
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                operations,
+                workflowId,
+              }),
+            },
+            "批量更新当前 edit session draft 失败",
+          ),
+      ),
+      tool(
+        REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+        "删除当前 edit session draft 中的一个节点，并自动清理相关连线与 editorDocument 里的节点/边/panel。",
+        {
+          nodeId: z.string().min(1),
+          workflowId: z.string().min(1).optional(),
+        },
+        async ({ nodeId, workflowId }) =>
+          callRunner(
+            fetchImpl,
+            buildRunnerUrl(
+              runnerBaseUrl,
+              `/edit-sessions/${encodeURIComponent(editSessionId)}/draft`,
+            ),
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                operations: [
+                  {
+                    type: REMOVE_NODE_CASCADE_OPERATION_TYPE,
+                    nodeId,
+                  },
+                ],
+                workflowId,
+              }),
+            },
+            "删除节点并级联更新当前 edit session draft 失败",
           ),
       ),
     ],

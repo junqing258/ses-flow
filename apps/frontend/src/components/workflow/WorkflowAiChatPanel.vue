@@ -40,14 +40,14 @@
             runner_base_url: {{ runnerBaseUrl }}
           </div>
         </div> -->
-        <div class="rounded-[14px] border border-slate-200/80 bg-slate-50/80 px-3 py-2">
+        <div
+          class="rounded-[14px] border border-slate-200/80 bg-slate-50/80 px-3 py-2"
+        >
           <!-- <p class="font-semibold tracking-wide text-slate-500">最近同步</p> -->
           <!-- <p class="mt-1 text-sm font-medium text-slate-900">
             {{ previewSyncLabel }}
           </p> -->
-          <p class="mt-1">
-            Agent 事件流：{{ gatewayConnectionLabel }}
-          </p>
+          <p class="mt-1">Agent 事件流：{{ gatewayConnectionLabel }}</p>
           <p v-if="claudeSessionId" class="mt-1 break-all">
             claude_session_id: {{ claudeSessionId }}
           </p>
@@ -72,14 +72,13 @@
             :key="message.id"
             class="border-b border-slate-200/70 pb-4 last:border-b-0 last:pb-0"
           >
-            <div
-              class="text-[13px]"
-              :class="messageClassMap[message.role]"
-            >
+            <div class="text-[13px]" :class="messageClassMap[message.role]">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.22em]">
+                    <p
+                      class="text-[11px] font-semibold uppercase tracking-[0.22em]"
+                    >
                       {{ messageRoleLabelMap[message.role] }}
                     </p>
                     <span
@@ -100,7 +99,14 @@
                   {{ formatMessageTime(message.createdAt) }}
                 </p>
               </div>
+              <div
+                v-if="isMarkdownMessage(message)"
+                class="ai-chat-markdown"
+                :class="messageContentClassMap[message.role]"
+                v-html="renderMessageMarkdown(message)"
+              />
               <p
+                v-else
                 class="whitespace-pre-wrap wrap-break-word"
                 :class="messageContentClassMap[message.role]"
               >
@@ -115,7 +121,8 @@
         v-else
         class="rounded-2xl border border-dashed border-slate-200 bg-white/85 px-4 py-5 text-[13px] leading-6 text-slate-500"
       >
-        先描述你的改动需求，例如“新增一个审核分支，并把失败结果汇总到 respond 节点”。
+        先描述你的改动需求，例如“新增一个审核分支，并把失败结果汇总到 respond
+        节点”。
       </div>
     </div>
 
@@ -158,6 +165,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 
 import { Button } from "@/components/ui/button";
+import { renderAiChatMarkdown } from "@/features/workflow/ai-chat-markdown";
 import {
   cancelAiThreadTurn,
   fetchAiThreadSnapshot,
@@ -175,6 +183,7 @@ import {
   readPersistedAiProviderConfig,
   resolveAiProviderConfigStorage,
 } from "@/features/workflow/ai-provider";
+import type { AiChatMessage } from "@/features/workflow/ai-chat";
 import type { EventSourceSubscription } from "@/lib/sse";
 
 const props = defineProps<{
@@ -198,7 +207,9 @@ const threadSnapshot = ref<AiThreadSnapshot>({
   status: "idle",
   messages: [],
 });
-const gatewayConnectionState = ref<"idle" | "connecting" | "live" | "reconnecting">("idle");
+const gatewayConnectionState = ref<
+  "idle" | "connecting" | "live" | "reconnecting"
+>("idle");
 let threadEventSubscription: EventSourceSubscription | null = null;
 
 const messageRoleLabelMap: Record<AiChatMessageRole, string> = {
@@ -229,7 +240,9 @@ const messageStatusClassMap: Record<AiChatMessageStatus, string> = {
 };
 
 const isRunning = computed(() => threadSnapshot.value.status === "running");
-const claudeSessionId = computed(() => threadSnapshot.value.claudeSessionId ?? "");
+const claudeSessionId = computed(
+  () => threadSnapshot.value.claudeSessionId ?? "",
+);
 const gatewayConnectionLabel = computed(() => {
   switch (gatewayConnectionState.value) {
     case "connecting":
@@ -274,14 +287,18 @@ const runnerConnectionClass = computed(() => {
 });
 const previewSyncLabel = computed(() => {
   const timestamp =
-    threadSnapshot.value.lastPreviewSyncAt ?? props.runnerPreviewUpdatedAt ?? "";
+    threadSnapshot.value.lastPreviewSyncAt ??
+    props.runnerPreviewUpdatedAt ??
+    "";
   if (!timestamp) {
     return "尚未同步";
   }
 
   return new Date(timestamp).toLocaleString("zh-CN");
 });
-const combinedError = computed(() => gatewayError.value || props.sessionError || "");
+const combinedError = computed(
+  () => gatewayError.value || props.sessionError || "",
+);
 const isComposerDisabled = computed(() => !props.sessionId || isRunning.value);
 
 const formatMessageTime = (value: string) =>
@@ -302,6 +319,12 @@ const getMessageStatusLabel = (status: AiChatMessageStatus) => {
 
   return "已完成";
 };
+
+const isMarkdownMessage = (message: AiChatMessage) =>
+  message.role === "assistant" && Boolean(message.content);
+
+const renderMessageMarkdown = (message: AiChatMessage) =>
+  renderAiChatMarkdown(message.content);
 
 const persistSnapshot = (snapshot: AiThreadSnapshot) => {
   if (!snapshot.editSessionId) {
@@ -388,8 +411,7 @@ const handleSend = async () => {
     gatewayError.value = "";
     const aiProviderConfig = readPersistedAiProviderConfig(aiProviderStorage);
     if (!aiProviderConfig || !isAiProviderConfigComplete(aiProviderConfig)) {
-      gatewayError.value =
-        "请先在右上角设置中完整配置 AI 供应商信息";
+      gatewayError.value = "请先在右上角设置中完整配置 AI 供应商信息";
       toast.error(gatewayError.value);
       return;
     }

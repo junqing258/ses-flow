@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
   isPreviewMutationToolName,
   isRunnerMcpToolName,
   normalizeJsonLikeInput,
+  REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
   RUNNER_MCP_SERVER_NAME,
   RUNNER_TOOL_REQUEST_TIMEOUT_MS,
   UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
@@ -18,6 +20,16 @@ describe("runner MCP tools", () => {
     ).toBe(true);
     expect(
       isRunnerMcpToolName(
+        APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
+      ),
+    ).toBe(true);
+    expect(
+      isRunnerMcpToolName(
+        REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+      ),
+    ).toBe(true);
+    expect(
+      isRunnerMcpToolName(
         `mcp__${RUNNER_MCP_SERVER_NAME}__${GET_CURRENT_EDIT_SESSION_TOOL_NAME}`,
       ),
     ).toBe(true);
@@ -27,6 +39,16 @@ describe("runner MCP tools", () => {
   it("marks only draft update tools as preview mutations", () => {
     expect(
       isPreviewMutationToolName(UPDATE_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME),
+    ).toBe(true);
+    expect(
+      isPreviewMutationToolName(
+        APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
+      ),
+    ).toBe(true);
+    expect(
+      isPreviewMutationToolName(
+        REMOVE_NODE_CASCADE_FROM_CURRENT_EDIT_SESSION_DRAFT_TOOL_NAME,
+      ),
     ).toBe(true);
     expect(
       isPreviewMutationToolName(

@@ -69,11 +69,7 @@ async fn proxy_request_inner(
     let upstream_response = match upstream_request.send().await {
         Ok(response) => response,
         Err(error) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("failed to reach ai gateway: {error}"),
-            )
-                .into_response();
+            return (StatusCode::BAD_GATEWAY, format!("failed to reach ai gateway: {error}")).into_response();
         }
     };
 
@@ -101,10 +97,7 @@ fn build_target_url(base_url: &str, path: &str, original_uri: &Uri) -> String {
     let normalized_path = if path.is_empty() {
         AI_GATEWAY_PROXY_BASE_PATH.to_string()
     } else {
-        format!(
-            "{AI_GATEWAY_PROXY_BASE_PATH}/{}",
-            path.trim_start_matches('/')
-        )
+        format!("{AI_GATEWAY_PROXY_BASE_PATH}/{}", path.trim_start_matches('/'))
     };
     let query = original_uri
         .query()
@@ -118,9 +111,7 @@ fn filter_forward_headers(headers: &HeaderMap) -> Vec<(header::HeaderName, Strin
     headers
         .iter()
         .filter(|(header_name, _)| !is_hop_by_hop_header(header_name))
-        .filter(|(header_name, _)| {
-            *header_name != header::HOST && *header_name != header::CONTENT_LENGTH
-        })
+        .filter(|(header_name, _)| *header_name != header::HOST && *header_name != header::CONTENT_LENGTH)
         .filter_map(|(header_name, header_value)| {
             header_value
                 .to_str()

@@ -33,10 +33,7 @@ pub fn subscribe_workflows_events(state: &ApiState) -> WorkflowEventStream {
     into_sse(state.app.subscribe_workflows_events())
 }
 
-pub fn register_workflow(
-    state: &ApiState,
-    request: UploadWorkflowRequest,
-) -> Result<WorkflowRegistration, ApiError> {
+pub fn register_workflow(state: &ApiState, request: UploadWorkflowRequest) -> Result<WorkflowRegistration, ApiError> {
     info!(
         workspace_id = request.workspace_id.as_deref().unwrap_or("default"),
         workflow_key = request.workflow.meta.key,
@@ -64,18 +61,12 @@ pub fn get_workflow(state: &ApiState, workflow_id: &str) -> Result<WorkflowDetai
     Ok(state.app.get_workflow(workflow_id)?)
 }
 
-pub fn subscribe_workflow_events(
-    state: &ApiState,
-    workflow_id: &str,
-) -> Result<WorkflowEventStream, ApiError> {
+pub fn subscribe_workflow_events(state: &ApiState, workflow_id: &str) -> Result<WorkflowEventStream, ApiError> {
     state.app.get_workflow(workflow_id)?;
     Ok(into_sse(state.app.subscribe_workflow_events(workflow_id)))
 }
 
-pub fn list_workflow_runs(
-    state: &ApiState,
-    workflow_id: &str,
-) -> Result<Vec<WorkflowRunRecord>, ApiError> {
+pub fn list_workflow_runs(state: &ApiState, workflow_id: &str) -> Result<Vec<WorkflowRunRecord>, ApiError> {
     Ok(state.app.list_workflow_runs(workflow_id)?)
 }
 

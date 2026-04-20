@@ -40,10 +40,7 @@ fn build_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(system::health))
         .route("/catalog/refresh", get(workflow::refresh_catalog))
-        .route(
-            "/workflows/events",
-            get(workflow::subscribe_workflows_events),
-        )
+        .route("/workflows/events", get(workflow::subscribe_workflows_events))
         .route(
             "/workflows",
             get(workflow::list_workflows).post(workflow::upload_workflow),
@@ -53,23 +50,17 @@ fn build_api_router(state: ApiState) -> Router {
             "/workflows/{workflow_id}/events",
             get(workflow::subscribe_workflow_events),
         )
-        .route(
-            "/workflows/{workflow_id}/runs",
-            get(workflow::list_workflow_runs),
-        )
+        .route("/workflows/{workflow_id}/runs", get(workflow::list_workflow_runs))
         .route("/workflows/{workflow_id}/run", post(run::execute_workflow))
         .route("/edit-sessions", post(edit_session::create_edit_session))
-        .route(
-            "/edit-sessions/{session_id}",
-            get(edit_session::get_edit_session),
-        )
+        .route("/edit-sessions/{session_id}", get(edit_session::get_edit_session))
         .route(
             "/edit-sessions/{session_id}/events",
             get(edit_session::subscribe_edit_session_events),
         )
         .route(
             "/edit-sessions/{session_id}/draft",
-            put(edit_session::update_edit_session),
+            put(edit_session::update_edit_session).patch(edit_session::patch_edit_session),
         )
         .route("/runs/{run_id}", get(run::get_run_summary))
         .route("/runs/{run_id}/events", get(run::subscribe_run_events))
@@ -103,7 +94,7 @@ fn build_views_service() -> ServeDir<ServeFile> {
 
 fn build_cors_layer() -> CorsLayer {
     CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::OPTIONS])
         .allow_headers(Any)
         .allow_origin(Any)
 }
@@ -174,9 +165,7 @@ impl IntoResponse for ApiError {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
-            Self::Runner(RunnerError::MissingRunSnapshot(message)) => {
-                (StatusCode::NOT_FOUND, message)
-            }
+            Self::Runner(RunnerError::MissingRunSnapshot(message)) => (StatusCode::NOT_FOUND, message),
             Self::Runner(RunnerError::Validation(message))
             | Self::Runner(RunnerError::ResumeValidation(message))
             | Self::Runner(RunnerError::Transition(message))

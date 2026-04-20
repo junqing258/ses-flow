@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use serde::Serialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
 use super::{WorkflowEventStream, WorkflowEventStreams, WorkflowRunner};
@@ -43,6 +43,15 @@ pub struct WorkflowRegistration {
     pub workflow_key: String,
     #[serde(rename = "workflowVersion")]
     pub workflow_version: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EditSessionDraftOperation {
+    RemoveNodeCascade {
+        #[serde(rename = "nodeId")]
+        node_id: String,
+    },
 }
 
 #[derive(Clone)]
@@ -244,6 +253,46 @@ impl WorkflowApp {
             workspace_id: existing.workspace_id,
             workflow_id: workflow_id.or(existing.workflow_id),
             workflow: definition,
+            editor_document,
+            created_at: existing.created_at,
+            updated_at: Utc::now(),
+        };
+
+        self.edit_sessions.save_session(&session)?;
+        self.events.publish_session_changed(&session);
+        Ok(session)
+    }
+
+    pub fn apply_edit_session_operations(
+        &self,
+        session_id: &str,
+        workflow_id: Option<String>,
+        operations: Vec<EditSessionDraftOperation>,
+    ) -> Result<WorkflowEditSessionRecord, AppError> {
+        if operations.is_empty() {
+            return Err(AppError::BadRequest(
+                "edit session operations cannot be empty".to_string(),
+            ));
+        }
+
+        let existing = self
+            .edit_sessions
+            .load_session(session_id)?
+            .ok_or_else(|| AppError::NotFound(format!("workflow edit session not found: {session_id}")))?;
+        let mut workflow = existing.workflow.clone();
+        let mut editor_document = existing.editor_document.clone();
+
+        for operation in &operations {
+            apply_edit_session_operation(&mut workflow, &mut editor_document, operation)?;
+        }
+
+        workflow.validate()?;
+
+        let session = WorkflowEditSessionRecord {
+            session_id: existing.session_id,
+            workspace_id: existing.workspace_id,
+            workflow_id: workflow_id.or(existing.workflow_id),
+            workflow,
             editor_document,
             created_at: existing.created_at,
             updated_at: Utc::now(),
@@ -595,11 +644,7 @@ impl WorkflowApp {
         })
     }
 
-    fn list_active_runs(
-        &self,
-        workflow_key: &str,
-        workflow_version: u32,
-    ) -> Result<Vec<WorkflowRunRecord>, AppError> {
+    fn list_active_runs(&self, workflow_key: &str, workflow_version: u32) -> Result<Vec<WorkflowRunRecord>, AppError> {
         Ok(self
             .store
             .list_runs(workflow_key, workflow_version)?
@@ -722,6 +767,233 @@ fn persist_summary_and_publish_events(
 
     if is_terminal_status(&summary.status) {
         run_registry.finish(&summary.run_id);
+    }
+}
+
+fn apply_edit_session_operation(
+    workflow: &mut WorkflowDefinition,
+    editor_document: &mut Option<Value>,
+    operation: &EditSessionDraftOperation,
+) -> Result<(), AppError> {
+    match operation {
+        EditSessionDraftOperation::RemoveNodeCascade { node_id } => {
+            remove_node_cascade(workflow, editor_document, node_id)
+        }
+    }
+}
+
+fn remove_node_cascade(
+    workflow: &mut WorkflowDefinition,
+    editor_document: &mut Option<Value>,
+    node_id: &str,
+) -> Result<(), AppError> {
+    if workflow.node(node_id).is_none() {
+        return Err(AppError::BadRequest(format!(
+            "node does not exist in edit session workflow: {node_id}"
+        )));
+    }
+
+    let incoming_transitions = workflow
+        .transitions
+        .iter()
+        .filter(|transition| transition.to == node_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    let outgoing_transitions = workflow
+        .transitions
+        .iter()
+        .filter(|transition| transition.from == node_id)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    workflow.nodes.retain(|node| node.id != node_id);
+    workflow
+        .transitions
+        .retain(|transition| transition.from != node_id && transition.to != node_id);
+    reconnect_workflow_transitions(&mut workflow.transitions, &incoming_transitions, &outgoing_transitions);
+
+    if let Some(document) = editor_document.as_mut() {
+        remove_node_from_editor_document(document, node_id);
+    }
+
+    Ok(())
+}
+
+fn reconnect_workflow_transitions(
+    transitions: &mut Vec<crate::core::definition::TransitionDefinition>,
+    incoming_transitions: &[crate::core::definition::TransitionDefinition],
+    outgoing_transitions: &[crate::core::definition::TransitionDefinition],
+) {
+    if incoming_transitions.len() != 1 || outgoing_transitions.len() != 1 {
+        return;
+    }
+
+    let incoming = &incoming_transitions[0];
+    let outgoing = &outgoing_transitions[0];
+
+    if incoming.from == outgoing.to {
+        return;
+    }
+
+    let reconnected = crate::core::definition::TransitionDefinition {
+        from: incoming.from.clone(),
+        to: outgoing.to.clone(),
+        condition: incoming.condition.clone(),
+        priority: incoming.priority,
+        label: incoming.label.clone(),
+        branch_type: incoming.branch_type.clone(),
+    };
+
+    if transitions.iter().any(|transition| {
+        transition.from == reconnected.from
+            && transition.to == reconnected.to
+            && transition.condition == reconnected.condition
+            && transition.priority == reconnected.priority
+            && transition.label == reconnected.label
+            && transition.branch_type == reconnected.branch_type
+    }) {
+        return;
+    }
+
+    transitions.push(reconnected);
+}
+
+fn remove_node_from_editor_document(document: &mut Value, node_id: &str) {
+    let mut removed_node_ids = HashSet::from([node_id.to_string()]);
+    let mut incoming_edges = Vec::new();
+    let mut outgoing_edges = Vec::new();
+
+    if let Some(nodes) = document
+        .get_mut("graph")
+        .and_then(|graph| graph.get_mut("nodes"))
+        .and_then(Value::as_array_mut)
+    {
+        for node in nodes.iter() {
+            let current_id = node.get("id").and_then(Value::as_str);
+            let parent_node = node.get("parentNode").and_then(Value::as_str);
+
+            if current_id == Some(node_id) || parent_node == Some(node_id) {
+                if let Some(current_id) = current_id {
+                    removed_node_ids.insert(current_id.to_string());
+                }
+            }
+        }
+
+        nodes.retain(|node| {
+            let Some(current_id) = node.get("id").and_then(Value::as_str) else {
+                return true;
+            };
+
+            !removed_node_ids.contains(current_id)
+        });
+    }
+
+    if let Some(edges) = document
+        .get_mut("graph")
+        .and_then(|graph| graph.get_mut("edges"))
+        .and_then(Value::as_array_mut)
+    {
+        for edge in edges.iter() {
+            let source = edge.get("source").and_then(Value::as_str);
+            let target = edge.get("target").and_then(Value::as_str);
+
+            if target == Some(node_id) {
+                incoming_edges.push(edge.clone());
+            }
+
+            if source == Some(node_id) {
+                outgoing_edges.push(edge.clone());
+            }
+        }
+
+        edges.retain(|edge| {
+            let source = edge.get("source").and_then(Value::as_str);
+            let target = edge.get("target").and_then(Value::as_str);
+
+            !source.is_some_and(|value| removed_node_ids.contains(value))
+                && !target.is_some_and(|value| removed_node_ids.contains(value))
+        });
+
+        reconnect_editor_edges(edges, &incoming_edges, &outgoing_edges);
+    }
+
+    if let Some(panels) = document
+        .get_mut("graph")
+        .and_then(|graph| graph.get_mut("panels"))
+        .and_then(Value::as_object_mut)
+    {
+        panels.retain(|panel_node_id, _| !removed_node_ids.contains(panel_node_id));
+    }
+
+    if let Some(editor) = document.get_mut("editor").and_then(Value::as_object_mut) {
+        let should_clear_selection = editor
+            .get("selectedNodeId")
+            .and_then(Value::as_str)
+            .is_some_and(|selected_node_id| removed_node_ids.contains(selected_node_id));
+
+        if should_clear_selection {
+            editor.remove("selectedNodeId");
+        }
+    }
+}
+
+fn reconnect_editor_edges(edges: &mut Vec<Value>, incoming_edges: &[Value], outgoing_edges: &[Value]) {
+    if incoming_edges.len() != 1 || outgoing_edges.len() != 1 {
+        return;
+    }
+
+    let incoming = &incoming_edges[0];
+    let outgoing = &outgoing_edges[0];
+    let source = incoming.get("source").and_then(Value::as_str);
+    let target = outgoing.get("target").and_then(Value::as_str);
+
+    let (Some(source), Some(target)) = (source, target) else {
+        return;
+    };
+
+    if source == target {
+        return;
+    }
+
+    let source_handle = incoming.get("sourceHandle").and_then(Value::as_str);
+    let target_handle = outgoing.get("targetHandle").and_then(Value::as_str);
+
+    if edges.iter().any(|edge| {
+        edge.get("source").and_then(Value::as_str) == Some(source)
+            && edge.get("sourceHandle").and_then(Value::as_str) == source_handle
+            && edge.get("target").and_then(Value::as_str) == Some(target)
+            && edge.get("targetHandle").and_then(Value::as_str) == target_handle
+    }) {
+        return;
+    }
+
+    let Some(mut reconnected) = incoming.as_object().cloned() else {
+        return;
+    };
+
+    reconnected.insert("source".to_string(), Value::String(source.to_string()));
+    reconnected.insert("target".to_string(), Value::String(target.to_string()));
+    set_optional_string_field(&mut reconnected, "sourceHandle", source_handle);
+    set_optional_string_field(&mut reconnected, "targetHandle", target_handle);
+
+    let edge_id = format!(
+        "edge:{source}:{}->{target}:{}",
+        source_handle.unwrap_or("default"),
+        target_handle.unwrap_or("default"),
+    );
+    reconnected.insert("id".to_string(), Value::String(edge_id));
+
+    edges.push(Value::Object(reconnected));
+}
+
+fn set_optional_string_field(object: &mut serde_json::Map<String, Value>, key: &str, value: Option<&str>) {
+    match value {
+        Some(value) => {
+            object.insert(key.to_string(), Value::String(value.to_string()));
+        }
+        None => {
+            object.remove(key);
+        }
     }
 }
 

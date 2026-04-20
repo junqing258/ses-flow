@@ -31,6 +31,7 @@
     "localforage": "^1.10.0",
     "lodash-es": "^4.17.23",
     "lucide-vue-next": "^0.576.0",
+    "markdown-it": "^14.1.1",
     "pixi.js": "^8.10.2",
     "reka-ui": "2.9.2",
     "tailwind-merge": "^3.5.0",
