@@ -1,6 +1,6 @@
 <template>
   <section
-    class="relative h-screen w-full overflow-hidden bg-[#f4f4f5] text-slate-800"
+    class="workflow-editor-shell relative h-screen w-full overflow-hidden"
   >
     <!-- Main Canvas takes full absolute space -->
     <main
@@ -40,11 +40,11 @@
       <div class="pointer-events-none absolute inset-0 z-10">
         <div
           v-if="isCanvasDropTarget"
-          class="absolute inset-4 rounded-[28px] border-2 border-dashed border-[#4f6af5]/55 bg-[#4f6af5]/5 shadow-[inset_0_0_0_1px_rgba(79,106,245,0.05)]"
+          class="absolute inset-4 rounded-[28px] border-2 border-dashed border-[var(--app-accent)]/45 bg-[var(--app-accent)]/6 shadow-[inset_0_0_0_1px_rgba(46,197,213,0.12)]"
         >
           <div class="absolute inset-x-0 top-6 flex justify-center">
             <div
-              class="rounded-full bg-white/92 px-4 py-2 text-xs font-semibold tracking-[0.03em] text-[#4f6af5] shadow-sm"
+              class="rounded-full bg-white/94 px-4 py-2 text-xs font-semibold tracking-[0.03em] text-[var(--app-accent-text)] shadow-sm"
             >
               松开鼠标，将节点放入画布
             </div>
@@ -61,28 +61,28 @@
         <Button
           variant="ghost"
           size="icon"
-          class="h-8 w-8 text-slate-500 rounded-full hover:bg-slate-200"
+          class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleBackToList"
         >
           <ChevronLeft class="h-5 w-5" />
         </Button>
-        <span class="text-[16px] font-semibold tracking-tight text-slate-900">{{
+        <span class="text-[16px] font-semibold tracking-tight text-[var(--text)]">{{
           workflowTitle
         }}</span>
         <span
-          class="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold text-slate-600"
+          class="rounded-full bg-[var(--app-accent-soft)]/75 px-2 py-0.5 text-[11px] font-semibold text-[var(--app-accent-text)]"
           >{{ workflowStatusLabel }}</span
         >
         <Button
           v-if="persistedWorkflowId"
           variant="ghost"
-          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleOpenWorkflowRuns"
         >
           <LoaderCircle class="h-3.5 w-3.5" />
           查看运行
           <span
-            class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+            class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-[var(--app-primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
           >
             {{ workflowRunCount }}
           </span>
@@ -90,14 +90,14 @@
       </div>
 
       <div
-        class="absolute left-1/2 -translate-x-1/2 flex h-9 items-center rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 pointer-events-auto"
+        class="pointer-events-auto absolute left-1/2 flex h-9 -translate-x-1/2 items-center rounded-full bg-white/92 p-1 shadow-sm ring-1 ring-[var(--panel-border)]"
       >
         <button
           class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
           :class="
             isEditMode
-              ? 'bg-slate-100 text-slate-800'
-              : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800'
+              ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-text)]'
+              : 'text-[#7a7f86] hover:bg-white hover:text-[var(--text)]'
           "
           @click="handlePageModeChange('edit')"
         >
@@ -107,8 +107,8 @@
           class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
           :class="
             isRunMode
-              ? 'bg-slate-100 text-slate-800'
-              : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800'
+              ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-text)]'
+              : 'text-[#7a7f86] hover:bg-white hover:text-[var(--text)]'
           "
           @click="handlePageModeChange('run')"
         >
@@ -118,8 +118,8 @@
           class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
           :class="
             isAiMode
-              ? 'bg-slate-100 text-slate-800'
-              : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800'
+              ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-text)]'
+              : 'text-[#7a7f86] hover:bg-white hover:text-[var(--text)]'
           "
           @click="handlePageModeChange('ai')"
         >
@@ -131,35 +131,35 @@
         <Button
           variant="ghost"
           size="icon"
-          class="h-8 w-8 text-slate-500 rounded-full hover:bg-slate-200"
+          class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
         >
           <MoreHorizontal class="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          class="h-8 w-8 text-slate-500 rounded-full hover:bg-slate-200"
+          class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="openAiProviderConfigDialog"
         >
           <Settings class="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
-          class="h-8 gap-1.5 px-3 text-sm font-medium text-slate-600 rounded-full hover:bg-slate-200"
+          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
         >
           <Compass class="h-4 w-4" />
           Evaluate
         </Button>
         <Button
           variant="ghost"
-          class="h-8 gap-1.5 px-3 text-sm font-medium text-slate-600 rounded-full hover:bg-slate-200"
+          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleExportJson"
         >
           <Code class="h-4 w-4" />
           JSON
         </Button>
         <Button
-          class="ml-1 h-8 rounded-full bg-slate-900 px-4 text-[13px] font-medium text-white hover:bg-slate-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+          class="ml-1 h-8 rounded-full bg-[var(--app-primary)] px-4 text-[13px] font-medium text-white shadow-sm hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="isPublishing"
           @click="handlePublish"
         >
@@ -192,7 +192,7 @@
     <aside
       v-if="isEditMode"
       ref="leftCanvasAsideRef"
-      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-60 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-60 flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
     >
       <div class="min-h-0 flex-1 overflow-y-auto py-3 px-2">
         <div
@@ -200,7 +200,7 @@
           :key="category.id"
           class="mb-4 last:mb-0"
         >
-          <div class="mb-1.5 px-3 text-[11px] font-medium text-slate-400">
+          <div class="mb-1.5 px-3 text-[11px] font-medium text-[#7a7f86]">
             {{ category.label }}
           </div>
           <div class="space-y-0.5">
@@ -212,15 +212,15 @@
               class="flex w-full cursor-grab items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition-colors active:cursor-grabbing"
               :class="
                 selectedNodeId && selectedNodeData?.kind === item.kind
-                  ? 'bg-slate-50'
-                  : 'hover:bg-slate-50'
+                  ? 'bg-[var(--app-accent-soft)]/70'
+                  : 'hover:bg-[var(--panel-soft)]'
               "
               @click="focusPaletteItem(item.kind)"
               @dragstart="handlePaletteDragStart($event, item.id)"
               @dragend="handlePaletteDragEnd"
             >
               <div
-                class="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-slate-100"
+                class="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-[var(--app-primary-soft)]"
                 :style="{
                   color: item.accent,
                   backgroundColor: `${item.accent}15`,
@@ -229,7 +229,7 @@
                 <component :is="resolveIcon(item.icon)" class="h-3.5 w-3.5" />
               </div>
               <div class="min-w-0 flex-1">
-                <p class="truncate text-[13px] font-medium text-slate-700">
+                <p class="truncate text-[13px] font-medium text-[#354a56]">
                   {{ item.label }}
                 </p>
               </div>
@@ -242,40 +242,40 @@
     <aside
       v-else
       ref="leftCanvasAsideRef"
-      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
     >
       <div
-        class="flex h-21 shrink-0 items-center justify-between border-b border-slate-50 px-4"
+        class="flex h-21 shrink-0 items-center justify-between border-b border-[var(--panel-border)]/55 px-4"
       >
         <div>
-          <p class="text-[14px] font-semibold text-slate-900">运行配置</p>
-          <p class="mt-1 text-[11px] leading-5 text-slate-400">
+          <p class="text-[14px] font-semibold text-[var(--text)]">运行配置</p>
+          <p class="mt-1 text-[11px] leading-5 text-[#7a7f86]">
             同步当前画布到 Runner 后立即执行，适合联调节点映射和分支结果。
           </p>
         </div>
         <span
-          class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 truncate"
+          class="truncate rounded-full bg-[var(--app-primary-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--app-muted)]"
           >{{ runnerTriggerSummaryLabel }}</span
         >
       </div>
 
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <div
-          class="rounded-[18px] border border-slate-200/80 bg-slate-50/70 p-3"
+          class="rounded-[18px] border border-[var(--panel-border)]/80 bg-[var(--panel-soft)]/90 p-3"
         >
-          <p class="text-xs font-semibold tracking-wide text-slate-500">
+          <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             触发载荷
           </p>
           <div
-            class="mt-3 flex rounded-full bg-white p-1 ring-1 ring-slate-200"
+            class="mt-3 flex rounded-full bg-white p-1 ring-1 ring-[var(--panel-border)]"
           >
             <button
               type="button"
               class="flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
               :class="
                 runDraft.triggerMode === 'manual'
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-[var(--app-primary)] text-white'
+                  : 'text-[var(--app-muted)] hover:text-[var(--text)]'
               "
               @click="handleRunDraftUpdate('triggerMode', 'manual')"
             >
@@ -286,15 +286,15 @@
               class="flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
               :class="
                 runDraft.triggerMode === 'webhook'
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-[var(--app-primary)] text-white'
+                  : 'text-[var(--app-muted)] hover:text-[var(--text)]'
               "
               @click="handleRunDraftUpdate('triggerMode', 'webhook')"
             >
               Webhook
             </button>
           </div>
-          <p class="mt-3 text-[11px] leading-5 text-slate-500">
+          <p class="mt-3 text-[11px] leading-5 text-[var(--app-muted)]">
             `Manual` 只发送 `body`，`Webhook` 会附带 `headers +
             body`，方便模拟真实入口。
           </p>
@@ -302,12 +302,12 @@
 
         <div class="space-y-1.5">
           <label
-            class="block text-xs font-semibold tracking-wide text-slate-500"
+            class="block text-xs font-semibold tracking-wide text-[var(--app-muted)]"
             >Trigger Body</label
           >
           <textarea
             :value="runDraft.body"
-            class="min-h-37 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            class="min-h-37 w-full rounded-2xl border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
             @input="
               handleRunDraftUpdate(
                 'body',
@@ -319,12 +319,12 @@
 
         <div v-if="runDraft.triggerMode === 'webhook'" class="space-y-1.5">
           <label
-            class="block text-xs font-semibold tracking-wide text-slate-500"
+            class="block text-xs font-semibold tracking-wide text-[var(--app-muted)]"
             >Webhook Headers</label
           >
           <textarea
             :value="runDraft.headers"
-            class="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            class="min-h-28 w-full rounded-2xl border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
             @input="
               handleRunDraftUpdate(
                 'headers',
@@ -336,12 +336,12 @@
 
         <div class="space-y-1.5">
           <label
-            class="block text-xs font-semibold tracking-wide text-slate-500"
+            class="block text-xs font-semibold tracking-wide text-[var(--app-muted)]"
             >Run Env</label
           >
           <textarea
             :value="runDraft.env"
-            class="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+            class="min-h-28 w-full rounded-2xl border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
             @input="
               handleRunDraftUpdate(
                 'env',
@@ -351,21 +351,21 @@
           />
         </div>
 
-        <div class="rounded-[18px] border border-slate-200/80 bg-white p-3">
-          <div class="flex items-center justify-between text-xs text-slate-500">
+        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-3">
+          <div class="flex items-center justify-between text-xs text-[var(--app-muted)]">
             <span class="font-semibold">执行预览</span>
             <span>{{ runnerWorkflowPreview.nodes.length }} nodes</span>
           </div>
           <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div class="rounded-xl bg-slate-50 px-3 py-2">
-              <p class="text-slate-400">Trigger</p>
-              <p class="mt-1 font-semibold text-slate-700">
+            <div class="rounded-xl bg-[var(--panel-soft)] px-3 py-2">
+              <p class="text-[#7a7f86]">Trigger</p>
+              <p class="mt-1 font-semibold text-[#354a56]">
                 {{ runnerWorkflowPreview.trigger.type }}
               </p>
             </div>
-            <div class="rounded-xl bg-slate-50 px-3 py-2">
-              <p class="text-slate-400">Transitions</p>
-              <p class="mt-1 font-semibold text-slate-700">
+            <div class="rounded-xl bg-[var(--panel-soft)] px-3 py-2">
+              <p class="text-[#7a7f86]">Transitions</p>
+              <p class="mt-1 font-semibold text-[#354a56]">
                 {{ runnerWorkflowPreview.transitions.length }}
               </p>
             </div>
@@ -373,9 +373,9 @@
         </div>
       </div>
 
-      <div class="shrink-0 border-t border-slate-100 px-4 py-4">
+      <div class="shrink-0 border-t border-[var(--panel-border)]/55 px-4 py-4">
         <Button
-          class="h-10 w-full rounded-full bg-slate-900 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          class="h-10 w-full rounded-full bg-[var(--app-primary)] text-sm font-medium text-white hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="isRunningWorkflow"
           @click="handleRunWorkflow"
         >
@@ -383,7 +383,7 @@
           <Play v-else class="h-4 w-4" />
           {{ runActionLabel }}
         </Button>
-        <p class="mt-2 text-[11px] leading-5 text-slate-400">
+        <p class="mt-2 text-[11px] leading-5 text-[#7a7f86]">
           运行不会自动发布正式版本，但会把当前画布同步到 Runner
           进行一次最新执行。
         </p>
@@ -393,11 +393,11 @@
     <!-- Floating Right Properties Panel -->
     <aside
       v-if="isEditMode && selectedNodeId"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
       :class="rightAsideVisibilityClass"
     >
       <div
-        class="flex h-17 shrink-0 items-center gap-3 px-4 border-b border-slate-50"
+        class="flex h-17 shrink-0 items-center gap-3 border-b border-[var(--panel-border)]/55 px-4"
       >
         <div
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm"
@@ -407,17 +407,17 @@
         </div>
 
         <div class="min-w-0 flex-1 px-1">
-          <p class="truncate text-[14px] font-semibold text-slate-900">
+          <p class="truncate text-[14px] font-semibold text-[var(--text)]">
             {{ selectedNodeData.subtitle ?? selectedNodeData.title }}
           </p>
-          <p class="truncate text-[11px] font-medium text-slate-400">
+          <p class="truncate text-[11px] font-medium text-[#7a7f86]">
             {{ selectedNodeData.title }}
           </p>
         </div>
 
         <button
           type="button"
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#7a7f86] transition-colors hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-muted)]"
           @click="clearSelectedNode"
         >
           <MoreHorizontal class="h-4 w-4" />
@@ -429,14 +429,14 @@
         :model-value="activeTab"
         @update:model-value="handleTabChange"
       >
-        <div class="px-4 border-b border-slate-50">
-          <TabsList class="h-10 w-full bg-slate-50/80 p-1 rounded-lg mt-1 mb-2">
+        <div class="border-b border-[var(--panel-border)]/55 px-4">
+          <TabsList class="mt-1 mb-2 h-10 w-full rounded-lg bg-[var(--app-primary-soft)]/80 p-1">
             <TabsTrigger
               v-for="tab in visibleTabs"
               :key="tab"
               :value="tab"
               :data-tab-visible="`${tab}`"
-              class="rounded-md px-3 text-xs font-medium data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+              class="rounded-md px-3 text-xs font-medium data-[state=active]:bg-white data-[state=active]:text-[var(--text)] data-[state=active]:shadow-sm"
             >
               {{ WORKFLOW_TAB_LABELS[tab] }}
             </TabsTrigger>
@@ -459,22 +459,22 @@
             >
               <div
                 v-if="isSelectedSwitchNode && tab === 'mapping'"
-                class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
+                class="space-y-3 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-soft)]/90 p-3"
               >
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <p
-                      class="text-xs font-semibold tracking-wide text-slate-500"
+                      class="text-xs font-semibold tracking-wide text-[var(--app-muted)]"
                     >
                       Switch 分支
                     </p>
-                    <p class="mt-1 text-[11px] leading-5 text-slate-400">
+                    <p class="mt-1 text-[11px] leading-5 text-[#7a7f86]">
                       每个分支对应一个独立出口，默认分支会在没有匹配时生效。
                     </p>
                   </div>
                   <button
                     type="button"
-                    class="truncate inline-flex h-8 items-center justify-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    class="inline-flex h-8 items-center justify-center gap-1 truncate rounded-full border border-[var(--panel-border)] bg-white px-3 text-xs font-semibold text-[#354a56] transition-colors hover:border-[var(--app-accent-border)] hover:bg-[var(--app-accent-soft)]/40"
                     @click="handleAddSwitchBranch"
                   >
                     <Plus class="h-3.5 w-3.5" />
@@ -485,18 +485,18 @@
                 <div
                   v-for="branch in selectedSwitchBranches"
                   :key="branch.id"
-                  class="rounded-[14px] border border-slate-200 bg-white p-3"
+                  class="rounded-[14px] border border-[var(--panel-border)] bg-white p-3"
                 >
                   <div class="flex items-start gap-2">
                     <div class="min-w-0 flex-1 space-y-1.5">
                       <label
-                        class="block text-[11px] font-semibold tracking-wide text-slate-500"
+                        class="block text-[11px] font-semibold tracking-wide text-[var(--app-muted)]"
                       >
                         分支标签
                       </label>
                       <Input
                         :model-value="branch.label"
-                        class="h-9 rounded-lg border-slate-200 bg-white px-3 text-sm shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
+                        class="h-9 rounded-lg border-[var(--panel-border)] bg-white px-3 text-sm shadow-none focus-visible:border-[var(--app-accent-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent-soft)]"
                         @update:model-value="
                           handleSwitchBranchLabelUpdate(
                             branch.id,
@@ -511,8 +511,8 @@
                       class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       :class="
                         selectedSwitchFallbackHandle === branch.id
-                          ? 'border-slate-900 bg-slate-900 text-white'
-                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800'
+                          ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white'
+                          : 'border-[var(--panel-border)] bg-white text-[var(--app-muted)] hover:border-[var(--app-accent-border)] hover:text-[var(--text)]'
                       "
                       :title="
                         selectedSwitchFallbackHandle === branch.id
@@ -526,7 +526,7 @@
 
                     <button
                       type="button"
-                      class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-colors hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--panel-border)] bg-white text-[#7a7f86] transition-colors hover:border-[var(--danger-border)] hover:text-[var(--danger-text)] disabled:cursor-not-allowed disabled:opacity-50"
                       :disabled="selectedSwitchBranches.length <= 2"
                       title="删除分支"
                       @click="handleRemoveSwitchBranch(branch.id)"
@@ -544,7 +544,7 @@
                 class="space-y-1.5"
               >
                 <label
-                  class="flex items-center justify-between gap-3 text-xs font-semibold tracking-wide text-slate-500"
+                  class="flex items-center justify-between gap-3 text-xs font-semibold tracking-wide text-[var(--app-muted)]"
                 >
                   <span>{{ field.label }}</span>
                   <a
@@ -552,7 +552,7 @@
                     :href="getSubWorkflowLinkHref(field)"
                     target="_blank"
                     rel="noreferrer"
-                    class="shrink-0 text-xs font-medium tracking-normal text-sky-600 transition-colors hover:text-sky-700 hover:underline"
+                    class="shrink-0 text-xs font-medium tracking-normal text-[var(--info)] transition-colors hover:text-[var(--info-text)] hover:underline"
                   >
                     打开子工作流
                   </a>
@@ -561,7 +561,7 @@
                 <Input
                   v-if="field.type === 'input'"
                   :model-value="field.value"
-                  class="h-9 rounded-lg border-slate-200 bg-white px-3 text-sm shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
+                  class="h-9 rounded-lg border-[var(--panel-border)] bg-white px-3 text-sm shadow-none focus-visible:border-[var(--app-accent-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent-soft)]"
                   @update:model-value="
                     handleFieldUpdate(tab, field.key, String($event))
                   "
@@ -570,7 +570,7 @@
                 <div v-else-if="field.type === 'select'" class="relative">
                   <select
                     :value="field.value"
-                    class="h-9 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm text-slate-800 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                    class="h-9 w-full appearance-none rounded-lg border border-[var(--panel-border)] bg-white px-3 pr-9 text-sm text-[var(--text)] shadow-none outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
                     @change="
                       handleFieldUpdate(
                         tab,
@@ -588,14 +588,14 @@
                     </option>
                   </select>
                   <ChevronDown
-                    class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                    class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a7f86]"
                   />
                 </div>
 
                 <textarea
                   v-else-if="field.type === 'textarea'"
                   :value="field.value"
-                  class="min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                  class="min-h-20 w-full rounded-lg border border-[var(--panel-border)] bg-white px-3 py-2 text-sm text-[var(--text)] shadow-none outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
                   @input="
                     handleFieldUpdate(
                       tab,
@@ -610,8 +610,8 @@
                   class="flex h-9 items-center justify-between rounded-lg border px-3 text-sm"
                   :class="
                     field.type === 'readonly'
-                      ? 'border-slate-100 bg-slate-50/50 text-slate-500'
-                      : 'border-slate-200 bg-white text-slate-800'
+                      ? 'border-[var(--panel-border)]/40 bg-[var(--panel-soft)] text-[var(--app-muted)]'
+                      : 'border-[var(--panel-border)] bg-white text-[var(--text)]'
                   "
                 >
                   <span>{{ field.value }}</span>
@@ -621,7 +621,7 @@
 
             <div
               v-else
-              class="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-6 text-center text-xs leading-5 text-slate-400"
+              class="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-[var(--panel-border)] bg-[var(--panel-soft)]/70 px-6 text-center text-xs leading-5 text-[#7a7f86]"
             >
               {{ WORKFLOW_EMPTY_TAB_TEXT[tab] }}
             </div>
@@ -632,23 +632,23 @@
 
     <aside
       v-else-if="isRunMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
       :class="rightAsideVisibilityClass"
     >
       <div
-        class="flex h-18 shrink-0 items-center gap-3 border-b border-slate-50 px-4"
+        class="flex h-18 shrink-0 items-center gap-3 border-b border-[var(--panel-border)]/55 px-4"
       >
         <div
-          class="flex h-9.5 w-9.5 items-center justify-center rounded-[12px] bg-slate-900 text-white shadow-sm"
+          class="flex h-9.5 w-9.5 items-center justify-center rounded-[12px] bg-[var(--app-primary)] text-white shadow-sm"
         >
           <Webhook v-if="runDraft.triggerMode === 'webhook'" class="h-4 w-4" />
           <Play v-else class="h-4 w-4" />
         </div>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-[14px] font-semibold text-slate-900">
+          <p class="truncate text-[14px] font-semibold text-[var(--text)]">
             运行结果
           </p>
-          <p class="truncate text-[11px] text-slate-400">
+          <p class="truncate text-[11px] text-[#7a7f86]">
             {{
               activeRunId
                 ? `Run ${activeRunId}`
@@ -658,7 +658,7 @@
         </div>
         <button
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex h-8 w-8 items-center justify-center rounded-full text-[#7a7f86] transition-colors hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-muted)] disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!activeRunId"
           @click="handleRefreshRunSummary"
         >
@@ -670,14 +670,14 @@
       </div>
 
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
+        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <p class="text-xs font-semibold tracking-wide text-slate-500">
+              <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
                 运行状态
               </p>
               <p
-                class="mt-2 text-2xl font-semibold tracking-tight text-slate-900"
+                class="mt-2 text-2xl font-semibold tracking-tight text-[var(--text)]"
               >
                 {{ activeRunStatusLabel }}
               </p>
@@ -692,7 +692,7 @@
 
           <button
             type="button"
-            class="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-rose-200 px-3 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-transparent"
+            class="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[var(--danger-border)] px-3 text-sm font-medium text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)] disabled:cursor-not-allowed disabled:border-[var(--panel-border)] disabled:text-[#7a7f86] disabled:hover:bg-transparent"
             :disabled="!canTerminateActiveRun || isTerminatingWorkflow"
             @click="handleTerminateRun"
           >
@@ -704,22 +704,22 @@
             {{ isTerminatingWorkflow ? "终止中..." : "终止运行" }}
           </button>
 
-          <div class="mt-4 space-y-2 text-xs text-slate-500">
+          <div class="mt-4 space-y-2 text-xs text-[var(--app-muted)]">
             <div class="flex items-center justify-between gap-3">
               <span>Workflow ID</span>
-              <span class="truncate font-medium text-slate-700">{{
+              <span class="truncate font-medium text-[#354a56]">{{
                 activeRunWorkflowId || workflowMeta.id
               }}</span>
             </div>
             <div class="flex items-center justify-between gap-3">
               <span>Current Node</span>
-              <span class="truncate font-medium text-slate-700">{{
+              <span class="truncate font-medium text-[#354a56]">{{
                 activeRunSummary?.currentNodeId ?? "--"
               }}</span>
             </div>
             <div class="flex items-center justify-between gap-3">
               <span>Timeline Steps</span>
-              <span class="font-medium text-slate-700">{{
+              <span class="font-medium text-[#354a56]">{{
                 runTimeline.length
               }}</span>
             </div>
@@ -733,12 +733,12 @@
           </p>
         </div>
 
-        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
+        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
           <div class="flex items-center justify-between gap-3">
-            <p class="text-xs font-semibold tracking-wide text-slate-500">
+            <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
               执行时间线
             </p>
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-[11px] text-[#7a7f86]">{{
               runTimeline.length
                 ? `${runTimeline.length} steps`
                 : "No steps yet"
@@ -749,14 +749,14 @@
             <article
               v-for="(item, index) in runTimeline"
               :key="`${item.nodeId}-${index}`"
-              class="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3"
+              class="rounded-2xl border border-[var(--panel-border)]/80 bg-[var(--panel-soft)]/90 p-3"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <p class="truncate text-[13px] font-semibold text-slate-800">
+                  <p class="truncate text-[13px] font-semibold text-[var(--text)]">
                     {{ workflowNodeNameMap[item.nodeId] ?? item.nodeId }}
                   </p>
-                  <p class="mt-1 text-[11px] text-slate-400">
+                  <p class="mt-1 text-[11px] text-[#7a7f86]">
                     {{ item.nodeType }} · {{ item.nodeId }}
                   </p>
                 </div>
@@ -780,7 +780,7 @@
                 <p
                   v-for="(log, logIndex) in item.logs"
                   :key="`${item.nodeId}-log-${logIndex}`"
-                  class="rounded-xl bg-white px-2.5 py-2 font-mono text-[11px] leading-5 text-slate-500 ring-1 ring-slate-200/80"
+                  class="rounded-xl bg-white px-2.5 py-2 font-mono text-[11px] leading-5 text-[var(--app-muted)] ring-1 ring-[var(--panel-border)]/80"
                 >
                   [{{ log.level }}] {{ log.message }}
                 </p>
@@ -790,28 +790,28 @@
 
           <div
             v-else
-            class="mt-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 text-center text-xs leading-5 text-slate-400"
+            class="mt-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--panel-border)] bg-[var(--panel-soft)]/80 px-6 text-center text-xs leading-5 text-[#7a7f86]"
           >
             运行后会按顺序展示每个节点的执行结果和日志。
           </div>
         </div>
 
-        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
-          <p class="text-xs font-semibold tracking-wide text-slate-500">
+        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
+          <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             State Snapshot
           </p>
           <pre
-            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100"
+            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-[var(--app-primary)] px-3 py-3 font-mono text-[11px] leading-5 text-[#f5f7f7]"
             >{{ runStatePreview }}</pre
           >
         </div>
 
-        <div class="rounded-[18px] border border-slate-200/80 bg-white p-4">
-          <p class="text-xs font-semibold tracking-wide text-slate-500">
+        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
+          <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             Last Output
           </p>
           <pre
-            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-slate-950 px-3 py-3 font-mono text-[11px] leading-5 text-slate-100"
+            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-[var(--app-primary)] px-3 py-3 font-mono text-[11px] leading-5 text-[#f5f7f7]"
             >{{ runOutputPreview }}</pre
           >
         </div>
@@ -821,27 +821,27 @@
     <!-- Floating Bottom Control Toolbar -->
     <div
       v-if="isEditMode"
-      class="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100"
+      class="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white/92 p-1 shadow-sm ring-1 ring-[var(--panel-border)]"
     >
       <button
-        class="flex h-9 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition-colors"
+        class="flex h-9 w-10 items-center justify-center rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent-text)] transition-colors"
       >
         <Hand class="h-4 w-4" />
       </button>
       <button
-        class="flex h-9 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+        class="flex h-9 w-10 items-center justify-center rounded-full text-[#7a7f86] transition-colors hover:bg-white hover:text-[var(--text)]"
       >
         <MousePointer2 class="h-4 w-4" />
       </button>
-      <div class="mx-1 h-4 w-px bg-slate-100"></div>
+      <div class="mx-1 h-4 w-px bg-[var(--panel-border)]"></div>
       <button
-        class="flex h-9 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+        class="flex h-9 w-10 items-center justify-center rounded-full text-[#7a7f86] transition-colors hover:bg-white hover:text-[var(--text)]"
         @click="undoLastChange"
       >
         <Undo2 class="h-4 w-4" />
       </button>
       <button
-        class="flex h-9 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+        class="flex h-9 w-10 items-center justify-center rounded-full text-[#7a7f86] transition-colors hover:bg-white hover:text-[var(--text)]"
       >
         <Redo2 class="h-4 w-4" />
       </button>
@@ -852,7 +852,7 @@
       class="absolute inset-0 z-30 flex items-center justify-center bg-white/55 backdrop-blur-[2px]"
     >
       <div
-        class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm"
+        class="rounded-full border border-[var(--panel-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--app-muted)] shadow-sm"
       >
         Loading workflow...
       </div>
@@ -1080,7 +1080,7 @@ const canvasTools = [
 ];
 
 const EMPTY_NODE_DATA: WorkflowNodeData = {
-  accent: "#3B82F6",
+  accent: "#2ec5d5",
   executionStatus: undefined,
   icon: "database",
   kind: "fetch",
@@ -1236,9 +1236,9 @@ const activeRunStatusClass = computed(() => {
     case "failed":
       return "bg-rose-50 text-rose-700";
     case "terminated":
-      return "bg-slate-200 text-slate-700";
+      return "bg-[var(--app-primary-soft)] text-[#354a56]";
     default:
-      return "bg-slate-100 text-slate-500";
+      return "bg-[var(--panel-soft)] text-[var(--app-muted)]";
   }
 });
 const runTimeline = computed(() => activeRunSummary.value?.timeline ?? []);
@@ -3133,12 +3133,17 @@ setSelectedNode(selectedNodeId.value);
 </script>
 
 <style scoped>
+.workflow-editor-shell {
+  background: var(--canvas-bg);
+  color: var(--text);
+}
+
 .workflow-canvas :deep(.vue-flow__pane) {
   background-color: transparent;
 }
 
 .workflow-canvas :deep(.vue-flow__edge-path) {
-  stroke: #cbd5e1;
+  stroke: var(--panel-border-strong);
   stroke-width: 2;
 }
 

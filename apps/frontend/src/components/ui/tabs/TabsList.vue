@@ -12,7 +12,7 @@ const props = defineProps<TabsListProps & { class?: HTMLAttributes["class"] }>()
   <TabsList
     :class="
       cn(
-        'inline-flex h-10 items-end gap-1 rounded-none border-b border-slate-200 bg-transparent px-2 text-slate-500',
+        'inline-flex h-10 items-end gap-1 rounded-none border-b border-[var(--panel-border)] bg-transparent px-2 text-[var(--app-muted)]',
         props.class,
       )
     "

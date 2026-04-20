@@ -13,7 +13,7 @@ export const buttonVariants = cva(
         outline: "btn-outline shadow-none",
         secondary: "btn-muted shadow-none",
         ghost: "btn-ghost",
-        link: "text-[#2ec6d6] underline-offset-4 hover:underline",
+        link: "text-[var(--app-accent)] underline-offset-4 hover:underline hover:text-[var(--app-accent-text)]",
       },
       size: {
         default: "h-9 px-4 py-2",
