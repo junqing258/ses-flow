@@ -285,4 +285,44 @@ describe("ai gateway service", () => {
       expect(runTurn).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("prefers AI_GATEWAY_RUNNER_BASE_URL when provided", async () => {
+    const originalRunnerBaseUrl = process.env.AI_GATEWAY_RUNNER_BASE_URL;
+    process.env.AI_GATEWAY_RUNNER_BASE_URL = "http://backend:6302/runner-api/";
+
+    const runTurn = vi
+      .fn<(params: RunClaudeTurnParams) => Promise<void>>()
+      .mockImplementation(async (params) => {
+        expect(params.runnerBaseUrl).toBe("http://backend:6302/runner-api");
+        params.onAssistantDelta("configured");
+        params.onAssistantCompleted();
+      });
+
+    const service = createAiGatewayService({
+      claudeAdapter: new MockClaudeAdapter(runTurn),
+      repoRoot: process.cwd(),
+    });
+
+    try {
+      await service.sendMessage("session-1", {
+        aiProvider: {
+          authToken: "sk-user-token",
+          baseUrl: "https://provider.example.com",
+          model: "claude-custom-model",
+        },
+        message: "inspect the draft",
+        runnerBaseUrl: "http://localhost:6302/runner-api",
+      });
+
+      await vi.waitFor(() => {
+        expect(runTurn).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      if (originalRunnerBaseUrl == null) {
+        delete process.env.AI_GATEWAY_RUNNER_BASE_URL;
+      } else {
+        process.env.AI_GATEWAY_RUNNER_BASE_URL = originalRunnerBaseUrl;
+      }
+    }
+  });
 });

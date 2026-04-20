@@ -8,18 +8,20 @@ DEPLOY_SSH_TARGET="${DEPLOY_SSH_TARGET:-$DEFAULT_TARGET}"
 DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/ses-flow}"
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$ROOT_DIR/.env}"
 DEPLOY_COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-$ROOT_DIR/scripts/docker-compose.remote.yml}"
-DEPLOY_IMAGE_REPO="${DEPLOY_IMAGE_REPO:-ses-flow/backend}"
 DEPLOY_IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
+DEPLOY_BACKEND_IMAGE_REPO="${DEPLOY_BACKEND_IMAGE_REPO:-ses-flow/backend}"
+DEPLOY_AI_GATEWAY_IMAGE_REPO="${DEPLOY_AI_GATEWAY_IMAGE_REPO:-ses-flow/ai-gateway}"
 DEPLOY_VITE_RUNNER_BASE_URL="${DEPLOY_VITE_RUNNER_BASE_URL:-/runner-api}"
-DEPLOY_IMAGE_REF="${DEPLOY_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
+DEPLOY_BACKEND_IMAGE_REF="${DEPLOY_BACKEND_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
+DEPLOY_AI_GATEWAY_IMAGE_REF="${DEPLOY_AI_GATEWAY_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
 DEPLOY_DEBUG="${DEPLOY_DEBUG:-0}"
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<EOF
-用法：scripts/deploy-runner-ssh.sh
+用法：scripts/deploy-apps-ssh.sh
 
-在本地构建 backend Docker 镜像，通过 SSH 传输到远端主机，
+在本地构建 backend 与 ai-gateway Docker 镜像，通过 SSH 传输到远端主机，
 上传部署文件，并重启远端容器。
 
 首次使用前先执行（需要本地公钥）： ssh-copy-id ${DEFAULT_TARGET}
@@ -29,14 +31,15 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   DEPLOY_REMOTE_DIR            远端工作目录。默认：/opt/ses-flow
   DEPLOY_ENV_FILE              本地待上传的环境变量文件。默认：.env
   DEPLOY_COMPOSE_FILE          远端 compose 模板。默认：scripts/docker-compose.remote.yml
-  DEPLOY_IMAGE_REPO            Docker 镜像仓库名。默认：ses-flow/backend
+  DEPLOY_BACKEND_IMAGE_REPO    backend 镜像仓库名。默认：ses-flow/backend
+  DEPLOY_AI_GATEWAY_IMAGE_REPO ai-gateway 镜像仓库名。默认：ses-flow/ai-gateway
   DEPLOY_IMAGE_TAG             Docker 镜像标签。默认：当前 git 短 SHA
   DEPLOY_VITE_RUNNER_BASE_URL  前端构建参数。默认：/runner-api
   DEPLOY_PLATFORM              目标镜像平台。为空时自动从远端主机探测
   DEPLOY_DEBUG                 输出调试信息。1 表示开启
 
 示例：
-  DEPLOY_SSH_TARGET=root@192.168.110.45 scripts/deploy-runner-ssh.sh
+  DEPLOY_SSH_TARGET=root@192.168.110.45 scripts/deploy-apps-ssh.sh
 EOF
   exit 0
 fi
@@ -104,12 +107,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-grep -v '^BACKEND_IMAGE=' "$DEPLOY_ENV_FILE" > "$tmp_env_file" || true
-printf '\nBACKEND_IMAGE=%s\n' "$DEPLOY_IMAGE_REF" >> "$tmp_env_file"
+grep -Ev '^(BACKEND_IMAGE|AI_GATEWAY_IMAGE)=' "$DEPLOY_ENV_FILE" > "$tmp_env_file" || true
+printf '\nBACKEND_IMAGE=%s\n' "$DEPLOY_BACKEND_IMAGE_REF" >> "$tmp_env_file"
+printf 'AI_GATEWAY_IMAGE=%s\n' "$DEPLOY_AI_GATEWAY_IMAGE_REF" >> "$tmp_env_file"
 debug_log "使用环境变量文件：$DEPLOY_ENV_FILE"
 debug_log "临时环境变量文件：$tmp_env_file"
 debug_log "远端部署目录：$DEPLOY_REMOTE_DIR"
-debug_log "镜像引用：$DEPLOY_IMAGE_REF"
+debug_log "backend 镜像引用：$DEPLOY_BACKEND_IMAGE_REF"
+debug_log "ai-gateway 镜像引用：$DEPLOY_AI_GATEWAY_IMAGE_REF"
 
 log_step "检查远端 Docker Compose 支持：$DEPLOY_SSH_TARGET"
 remote_sh "docker compose version >/dev/null"
@@ -143,13 +148,21 @@ else
   log_step "使用手动指定的平台：$DEPLOY_PLATFORM"
 fi
 
-log_step "本地构建镜像：$DEPLOY_IMAGE_REF ($DEPLOY_PLATFORM)"
+log_step "本地构建 backend 镜像：$DEPLOY_BACKEND_IMAGE_REF ($DEPLOY_PLATFORM)"
 docker buildx build \
   --load \
   --platform "$DEPLOY_PLATFORM" \
   --file "$ROOT_DIR/apps/backend/Dockerfile" \
-  --tag "$DEPLOY_IMAGE_REF" \
+  --tag "$DEPLOY_BACKEND_IMAGE_REF" \
   --build-arg "VITE_RUNNER_BASE_URL=$DEPLOY_VITE_RUNNER_BASE_URL" \
+  "$ROOT_DIR"
+
+log_step "本地构建 ai-gateway 镜像：$DEPLOY_AI_GATEWAY_IMAGE_REF ($DEPLOY_PLATFORM)"
+docker buildx build \
+  --load \
+  --platform "$DEPLOY_PLATFORM" \
+  --file "$ROOT_DIR/apps/ai-gateway/Dockerfile" \
+  --tag "$DEPLOY_AI_GATEWAY_IMAGE_REF" \
   "$ROOT_DIR"
 
 log_step "准备远端目录：$DEPLOY_REMOTE_DIR"
@@ -160,7 +173,7 @@ scp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/docker-compose
 scp "$tmp_env_file" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/.env"
 
 log_step "传输镜像到远端主机"
-docker save "$DEPLOY_IMAGE_REF" | gzip | remote_sh "gunzip | docker load"
+docker save "$DEPLOY_BACKEND_IMAGE_REF" "$DEPLOY_AI_GATEWAY_IMAGE_REF" | gzip | remote_sh "gunzip | docker load"
 
 log_step "重启远端服务"
 remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate"
@@ -168,6 +181,6 @@ remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f d
 log_step "查看远端服务状态"
 remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env ps"
 
-printf '%s\n' "部署完成：$DEPLOY_IMAGE_REF -> $DEPLOY_SSH_TARGET"
+printf '%s\n' "部署完成：$DEPLOY_BACKEND_IMAGE_REF, $DEPLOY_AI_GATEWAY_IMAGE_REF -> $DEPLOY_SSH_TARGET"
 # http://192.168.110.45:6302/views
 printf '%s\n' "访问地址：http://$(echo "$DEPLOY_SSH_TARGET" | cut -d '@' -f 2):6302/views"

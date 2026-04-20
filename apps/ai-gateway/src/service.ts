@@ -24,6 +24,15 @@ interface CreateAiGatewayServiceOptions {
   store?: AiThreadStore;
 }
 
+const resolveRunnerBaseUrl = (runnerBaseUrl: string) => {
+  const internalRunnerBaseUrl = process.env.AI_GATEWAY_RUNNER_BASE_URL?.trim();
+  if (internalRunnerBaseUrl) {
+    return internalRunnerBaseUrl.replace(/\/$/, "");
+  }
+
+  return runnerBaseUrl.trim().replace(/\/$/, "");
+};
+
 const validateMessagePayload = (body: unknown): SendAiThreadMessageRequest => {
   if (typeof body !== "object" || body === null) {
     throw new AiGatewayServiceError(400, "请求体必须是 JSON 对象");
@@ -100,6 +109,7 @@ export const createAiGatewayService = (
     },
     async sendMessage(editSessionId: string, body: unknown): Promise<AiThreadSnapshot> {
       const payload = validateMessagePayload(body);
+      const effectiveRunnerBaseUrl = resolveRunnerBaseUrl(payload.runnerBaseUrl);
 
       if (store.isRunning(editSessionId)) {
         throw new AiGatewayServiceError(
@@ -113,7 +123,8 @@ export const createAiGatewayService = (
         aiProviderBaseUrl: payload.aiProvider.baseUrl,
         aiProviderModel: payload.aiProvider.model,
         workflowId: payload.workflowId,
-        runnerBaseUrl: payload.runnerBaseUrl,
+        runnerBaseUrl: effectiveRunnerBaseUrl,
+        requestedRunnerBaseUrl: payload.runnerBaseUrl,
         promptPreview: summarizeText(payload.message),
       });
 
@@ -137,7 +148,7 @@ export const createAiGatewayService = (
             aiProvider: payload.aiProvider,
             prompt: payload.message,
             repoRoot: options.repoRoot,
-            runnerBaseUrl: payload.runnerBaseUrl,
+            runnerBaseUrl: effectiveRunnerBaseUrl,
             workflowId: payload.workflowId,
             onAssistantDelta: (delta) => {
               if (assistantStartedAt == null) {

@@ -1,4 +1,28 @@
 services:
+  ai-gateway:
+    build:
+      context: .
+      dockerfile: apps/ai-gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      AI_GATEWAY_HOST: 0.0.0.0
+      AI_GATEWAY_PORT: 6307
+      AI_GATEWAY_RUNNER_BASE_URL: http://backend:6302/runner-api
+      CLAUDE_CODE_EXECUTABLE: ${CLAUDE_CODE_EXECUTABLE:-}
+    ports:
+      - "${AI_GATEWAY_PORT:-6307}:6307"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:6307/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
   backend:
     build:
       context: .
@@ -6,9 +30,13 @@ services:
       args:
         VITE_RUNNER_BASE_URL: /runner-api
     restart: unless-stopped
+    depends_on:
+      ai-gateway:
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       BACKEND_LOG: ${BACKEND_LOG:-info}
+      AI_GATEWAY_PROXY_TARGET: http://ai-gateway:6307
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
