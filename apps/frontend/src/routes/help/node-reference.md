@@ -156,4 +156,4 @@ Runner README 中有几个很重要的通用约定：
 
 上一页：[系统功能说明](/views/#/help/system-features)
 
-继续阅读：[AI Agent 模式与 Skill 说明](/views/#/help/ai-agent-and-skills)
+继续阅读：[AI 会话模式说明](/views/#/help/ai-agent-and-skills)
