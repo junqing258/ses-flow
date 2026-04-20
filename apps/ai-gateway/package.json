@@ -26,6 +26,8 @@
     "vitest": "^4.1.4"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-code-darwin-arm64": "2.1.114"
+    "@anthropic-ai/claude-code-darwin-arm64": "2.1.114",
+    "@anthropic-ai/claude-agent-sdk-linux-x64": "0.2.114",
+    "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "0.2.114"
   }
 }

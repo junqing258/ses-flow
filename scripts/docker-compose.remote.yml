@@ -7,7 +7,7 @@ services:
       AI_GATEWAY_HOST: 0.0.0.0
       AI_GATEWAY_PORT: 6307
       AI_GATEWAY_RUNNER_BASE_URL: http://backend:6302/runner-api
-      CLAUDE_CODE_EXECUTABLE: ${CLAUDE_CODE_EXECUTABLE:-}
+      CLAUDE_CODE_EXECUTABLE: /workspace/node_modules/.pnpm/@anthropic-ai+claude-agent-sdk-linux-x64@0.2.114/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude
     ports:
       - "${AI_GATEWAY_PORT:-6307}:6307"
     healthcheck:

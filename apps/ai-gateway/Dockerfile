@@ -18,6 +18,13 @@ COPY apps/ai-gateway/package.json apps/ai-gateway/package.json
 
 RUN pnpm install --filter ai-gateway... --frozen-lockfile --store-dir=/pnpm/store
 
+# 强制下载所有平台的 optionalDependencies 到 store
+RUN pnpm add --force --store-dir=/pnpm/store \
+  @anthropic-ai/claude-agent-sdk-linux-x64@0.2.114 \
+  @anthropic-ai/claude-agent-sdk-linux-x64-musl@0.2.114 \
+  @anthropic-ai/claude-code-linux-x64@2.1.114 \
+  @anthropic-ai/claude-code-linux-x64-musl@2.1.114 || true
+
 FROM deps AS builder
 
 COPY apps/ai-gateway apps/ai-gateway
@@ -30,7 +37,7 @@ COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/ai-gateway/package.json apps/ai-gateway/package.json
 COPY --from=deps /pnpm/store /pnpm/store
 
-RUN pnpm install --filter ai-gateway --prod --offline --frozen-lockfile --store-dir=/pnpm/store
+RUN pnpm install --filter ai-gateway --prod --frozen-lockfile --store-dir=/pnpm/store --offline
 
 COPY . .
 COPY --from=builder /workspace/apps/ai-gateway/dist apps/ai-gateway/dist
