@@ -65,7 +65,8 @@ const SYSTEM_PROMPT = `你是 SES Flow 页面内 AI 协作助手。
 8. 对于“删除节点/改连线/改配置”等直接编辑需求，优先在 1 次读取后直接更新草稿，不要进行额外探索。
 9. 优先使用 remove_node_cascade_from_current_edit_session_draft 或 apply_current_edit_session_draft_operations 一次完成修改；只有操作型工具无法表达时，才回退到 update_current_edit_session_draft。
 10. 避免连续多次调用 update_current_edit_session_draft；如果一次能做完，就不要拆成多次试错。
-11. 回复末尾必须给出“本次改动摘要”。`;
+11. get_current_edit_session 默认是轻量读取，不包含 editorDocument；只有确实需要画布文档时才请求 includeEditorDocument=true。
+12. 回复末尾必须给出“本次改动摘要”。`;
 
 export const CLAUDE_SYSTEM_PROMPT_CONFIG = {
   type: "preset" as const,

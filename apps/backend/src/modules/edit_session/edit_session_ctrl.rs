@@ -1,9 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 
-use super::edit_session_service::{
-    self, EditSessionGetRequest, EditSessionPatchRequest, EditSessionUpsertRequest,
-};
+use super::edit_session_service::{self, EditSessionGetRequest, EditSessionPatchRequest, EditSessionUpsertRequest};
 use crate::modules::{ApiError, ApiState, WorkflowEventStream};
 use runner::store::WorkflowEditSessionRecord;
 

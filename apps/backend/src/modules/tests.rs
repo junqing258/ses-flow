@@ -618,6 +618,7 @@ async fn creates_and_updates_edit_session_draft() {
     assert_eq!(update_response.status(), StatusCode::OK);
 
     let get_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
@@ -640,6 +641,31 @@ async fn creates_and_updates_edit_session_draft() {
     assert_eq!(get_payload["sessionId"], json!(session_id));
     assert_eq!(get_payload["workflowId"], json!("wf-ai-1"));
     assert_eq!(get_payload["workflow"]["meta"]["name"], json!("Updated Flow"));
+
+    let lightweight_get_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path(&format!(
+                    "/edit-sessions/{session_id}?includeEditorDocument=false"
+                )))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(lightweight_get_response.status(), StatusCode::OK);
+    let lightweight_get_body = lightweight_get_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let lightweight_get_payload: Value =
+        serde_json::from_slice(&lightweight_get_body).expect("response body should be valid json");
+
+    assert!(lightweight_get_payload.get("editorDocument").is_none());
 }
 
 #[tokio::test]
