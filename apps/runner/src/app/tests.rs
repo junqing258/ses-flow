@@ -194,6 +194,176 @@ fn applies_edit_session_operations_with_node_removal_cascade() {
     assert!(editor_document["editor"]["selectedNodeId"].is_null());
 }
 
+#[test]
+fn applies_edit_session_operations_for_node_config_and_edge_mutations() {
+    let app = WorkflowApp::new();
+
+    let session = app
+        .create_edit_session(
+            Some("ws-edit".to_string()),
+            Some("wf-1".to_string()),
+            serde_json::from_value(json!({
+                "meta": {
+                    "key": "edit-session-flow",
+                    "name": "Edit Session Flow",
+                    "version": 1
+                },
+                "trigger": {
+                    "type": "manual"
+                },
+                "inputSchema": {
+                    "type": "object"
+                },
+                "nodes": [
+                    { "id": "start_1", "type": "start", "name": "Start" },
+                    { "id": "fetch_1", "type": "fetch", "name": "Fetch", "config": { "url": "https://old.example.com" } },
+                    { "id": "wait_1", "type": "wait", "name": "Wait" },
+                    { "id": "end_1", "type": "end", "name": "End" }
+                ],
+                "transitions": [
+                    { "from": "start_1", "to": "fetch_1" }
+                ],
+                "policies": {}
+            }))
+            .expect("workflow should deserialize"),
+            Some(json!({
+                "schemaVersion": "1.0",
+                "graph": {
+                    "nodes": [
+                        { "id": "start_1", "type": "terminal" },
+                        { "id": "fetch_1", "type": "workflow-card" },
+                        { "id": "wait_1", "type": "workflow-card" },
+                        { "id": "end_1", "type": "terminal" }
+                    ],
+                    "edges": [
+                        {
+                            "id": "edge:start_1:out->fetch_1:in",
+                            "source": "start_1",
+                            "sourceHandle": "out",
+                            "target": "fetch_1",
+                            "targetHandle": "in"
+                        }
+                    ],
+                    "panels": {
+                        "start_1": { "tabs": ["base"], "fieldsByTab": {} },
+                        "fetch_1": { "tabs": ["base"], "fieldsByTab": {} },
+                        "wait_1": { "tabs": ["base"], "fieldsByTab": {} },
+                        "end_1": { "tabs": ["base"], "fieldsByTab": {} }
+                    }
+                },
+                "workflow": {
+                    "id": "wf-1",
+                    "name": "Edit Session Flow",
+                    "status": "draft",
+                    "version": "1"
+                }
+            })),
+        )
+        .expect("edit session should be created");
+
+    let updated = app
+        .apply_edit_session_operations(
+            &session.session_id,
+            None,
+            vec![
+                EditSessionDraftOperation::UpdateNodeConfig {
+                    node_id: "fetch_1".to_string(),
+                    config: json!({
+                        "url": "https://api.example.com",
+                        "method": "POST"
+                    }),
+                },
+                EditSessionDraftOperation::AddEdge {
+                    source: "fetch_1".to_string(),
+                    target: "wait_1".to_string(),
+                    source_handle: Some("out".to_string()),
+                    target_handle: Some("in".to_string()),
+                },
+                EditSessionDraftOperation::UpdateEdge {
+                    edge_id: "edge:fetch_1:out->wait_1:in".to_string(),
+                    updates: json!({
+                        "target": "end_1",
+                        "targetHandle": "in",
+                        "label": "success",
+                        "priority": 5
+                    }),
+                },
+            ],
+        )
+        .expect("edit session operations should apply");
+
+    let fetch_node = updated
+        .workflow
+        .nodes
+        .iter()
+        .find(|node| node.id == "fetch_1")
+        .expect("fetch node should exist");
+    assert_eq!(
+        fetch_node.config,
+        json!({
+            "url": "https://api.example.com",
+            "method": "POST"
+        })
+    );
+    assert!(updated.workflow.transitions.iter().any(|transition| {
+        transition.from == "fetch_1"
+            && transition.to == "end_1"
+            && transition.label.as_deref() == Some("success")
+            && transition.priority == Some(5)
+    }));
+    assert!(
+        !updated
+            .workflow
+            .transitions
+            .iter()
+            .any(|transition| { transition.from == "fetch_1" && transition.to == "wait_1" })
+    );
+
+    let editor_document = updated.editor_document.expect("editor document should exist");
+    assert!(
+        editor_document["graph"]["edges"]
+            .as_array()
+            .expect("graph edges should exist")
+            .iter()
+            .any(|edge| {
+                edge["id"].as_str() == Some("edge:fetch_1:out->end_1:in") && edge["label"].as_str() == Some("success")
+            })
+    );
+    assert!(
+        !editor_document["graph"]["edges"]
+            .as_array()
+            .expect("graph edges should exist")
+            .iter()
+            .any(|edge| edge["id"].as_str() == Some("edge:fetch_1:out->wait_1:in"))
+    );
+
+    let removed = app
+        .apply_edit_session_operations(
+            &session.session_id,
+            None,
+            vec![EditSessionDraftOperation::RemoveEdge {
+                edge_id: "edge:fetch_1:out->end_1:in".to_string(),
+            }],
+        )
+        .expect("remove edge operation should apply");
+
+    assert!(
+        !removed
+            .workflow
+            .transitions
+            .iter()
+            .any(|transition| { transition.from == "fetch_1" && transition.to == "end_1" })
+    );
+    let editor_document = removed.editor_document.expect("editor document should exist");
+    assert!(
+        !editor_document["graph"]["edges"]
+            .as_array()
+            .expect("graph edges should exist")
+            .iter()
+            .any(|edge| edge["id"].as_str() == Some("edge:fetch_1:out->end_1:in"))
+    );
+}
+
 #[tokio::test]
 async fn emits_session_change_notifications() {
     let app = WorkflowApp::new();

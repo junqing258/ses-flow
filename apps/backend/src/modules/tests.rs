@@ -830,6 +830,188 @@ async fn patches_edit_session_draft_with_remove_node_cascade_operation() {
 }
 
 #[tokio::test]
+async fn patches_edit_session_draft_with_batch_node_config_and_edge_operations() {
+    let app = build_app();
+    let workflow = json!({
+        "meta": {
+            "key": "edit-session-flow",
+            "name": "Edit Session Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            { "id": "fetch_1", "type": "fetch", "name": "Fetch", "config": { "url": "https://old.example.com" } },
+            { "id": "wait_1", "type": "wait", "name": "Wait" },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "fetch_1" }
+        ],
+        "policies": {}
+    });
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api_path("/edit-sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "workspaceId": "ws-ai",
+                        "workflowId": "wf-ai-1",
+                        "editorDocument": {
+                            "schemaVersion": "1.0",
+                            "graph": {
+                                "nodes": [
+                                    { "id": "start_1", "type": "terminal" },
+                                    { "id": "fetch_1", "type": "workflow-card" },
+                                    { "id": "wait_1", "type": "workflow-card" },
+                                    { "id": "end_1", "type": "terminal" }
+                                ],
+                                "edges": [
+                                    {
+                                        "id": "edge:start_1:out->fetch_1:in",
+                                        "source": "start_1",
+                                        "sourceHandle": "out",
+                                        "target": "fetch_1",
+                                        "targetHandle": "in"
+                                    }
+                                ],
+                                "panels": {
+                                    "start_1": { "tabs": ["base"], "fieldsByTab": {} },
+                                    "fetch_1": { "tabs": ["base"], "fieldsByTab": {} },
+                                    "wait_1": { "tabs": ["base"], "fieldsByTab": {} },
+                                    "end_1": { "tabs": ["base"], "fieldsByTab": {} }
+                                }
+                            },
+                            "workflow": {
+                                "id": "wf-ai-1",
+                                "name": "Edit Session Flow",
+                                "status": "draft",
+                                "version": "1"
+                            }
+                        },
+                        "workflow": workflow
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_body = create_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let create_payload: Value = serde_json::from_slice(&create_body).expect("response body should be valid json");
+    let session_id = create_payload["sessionId"]
+        .as_str()
+        .expect("session id should be present")
+        .to_string();
+
+    let patch_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(api_path(&format!("/edit-sessions/{session_id}/draft")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "operations": [
+                            {
+                                "type": "update_node_config",
+                                "nodeId": "fetch_1",
+                                "config": {
+                                    "url": "https://api.example.com",
+                                    "method": "POST"
+                                }
+                            },
+                            {
+                                "type": "add_edge",
+                                "source": "fetch_1",
+                                "target": "wait_1",
+                                "sourceHandle": "out",
+                                "targetHandle": "in"
+                            },
+                            {
+                                "type": "update_edge",
+                                "edgeId": "edge:fetch_1:out->wait_1:in",
+                                "updates": {
+                                    "target": "end_1",
+                                    "targetHandle": "in",
+                                    "label": "success",
+                                    "priority": 5
+                                }
+                            },
+                            {
+                                "type": "remove_edge",
+                                "edgeId": "edge:fetch_1:out->end_1:in"
+                            }
+                        ]
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(patch_response.status(), StatusCode::OK);
+    let patch_body = patch_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let patch_payload: Value = serde_json::from_slice(&patch_body).expect("response body should be valid json");
+
+    assert_eq!(
+        patch_payload["workflow"]["nodes"]
+            .as_array()
+            .expect("workflow nodes should exist")
+            .iter()
+            .find(|node| node["id"].as_str() == Some("fetch_1"))
+            .expect("fetch node should exist")["config"],
+        json!({
+            "url": "https://api.example.com",
+            "method": "POST"
+        })
+    );
+    assert_eq!(
+        patch_payload["workflow"]["transitions"]
+            .as_array()
+            .expect("workflow transitions should exist")
+            .iter()
+            .map(|transition| (
+                transition["from"].as_str().expect("transition from should exist"),
+                transition["to"].as_str().expect("transition to should exist"),
+            ))
+            .collect::<Vec<_>>(),
+        vec![("start_1", "fetch_1")]
+    );
+    assert!(
+        !patch_payload["editorDocument"]["graph"]["edges"]
+            .as_array()
+            .expect("editor document edges should exist")
+            .iter()
+            .any(|edge| edge["id"].as_str() == Some("edge:fetch_1:out->end_1:in"))
+    );
+}
+
+#[tokio::test]
 async fn terminates_waiting_run() {
     let app = build_app();
     let workflow = json!({

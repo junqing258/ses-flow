@@ -69,10 +69,38 @@ export const buildGetEditSessionPath = (
 };
 
 const REMOVE_NODE_CASCADE_OPERATION_TYPE = "remove_node_cascade";
-const editSessionDraftOperationSchema = z.object({
-  type: z.literal(REMOVE_NODE_CASCADE_OPERATION_TYPE),
-  nodeId: z.string().min(1),
-});
+const UPDATE_NODE_CONFIG_OPERATION_TYPE = "update_node_config";
+const ADD_EDGE_OPERATION_TYPE = "add_edge";
+const REMOVE_EDGE_OPERATION_TYPE = "remove_edge";
+const UPDATE_EDGE_OPERATION_TYPE = "update_edge";
+
+const editSessionDraftOperationSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal(REMOVE_NODE_CASCADE_OPERATION_TYPE),
+    nodeId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal(UPDATE_NODE_CONFIG_OPERATION_TYPE),
+    nodeId: z.string().min(1),
+    config: z.record(z.unknown()),
+  }),
+  z.object({
+    type: z.literal(ADD_EDGE_OPERATION_TYPE),
+    source: z.string().min(1),
+    target: z.string().min(1),
+    sourceHandle: z.string().optional(),
+    targetHandle: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal(REMOVE_EDGE_OPERATION_TYPE),
+    edgeId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal(UPDATE_EDGE_OPERATION_TYPE),
+    edgeId: z.string().min(1),
+    updates: z.record(z.unknown()),
+  }),
+]);
 
 const createTextResult = (text: string): CallToolResult => ({
   content: [
@@ -253,7 +281,7 @@ export const createRunnerEditSessionMcpServer = ({
       ),
       tool(
         APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
-        "批量更新当前 edit session draft。优先使用 operations 一次完成多个修改；当前支持 remove_node_cascade。",
+        "批量更新当前 edit session draft。优先使用 operations 一次完成多个修改；支持 remove_node_cascade、update_node_config、add_edge、remove_edge、update_edge。",
         {
           operations: z.array(editSessionDraftOperationSchema).min(1),
           workflowId: z.string().min(1).optional(),

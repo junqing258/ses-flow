@@ -52,6 +52,28 @@ pub enum EditSessionDraftOperation {
         #[serde(rename = "nodeId")]
         node_id: String,
     },
+    UpdateNodeConfig {
+        #[serde(rename = "nodeId")]
+        node_id: String,
+        config: Value,
+    },
+    AddEdge {
+        source: String,
+        target: String,
+        #[serde(rename = "sourceHandle", default)]
+        source_handle: Option<String>,
+        #[serde(rename = "targetHandle", default)]
+        target_handle: Option<String>,
+    },
+    RemoveEdge {
+        #[serde(rename = "edgeId")]
+        edge_id: String,
+    },
+    UpdateEdge {
+        #[serde(rename = "edgeId")]
+        edge_id: String,
+        updates: Value,
+    },
 }
 
 #[derive(Clone)]
@@ -779,7 +801,37 @@ fn apply_edit_session_operation(
         EditSessionDraftOperation::RemoveNodeCascade { node_id } => {
             remove_node_cascade(workflow, editor_document, node_id)
         }
+        EditSessionDraftOperation::UpdateNodeConfig { node_id, config } => {
+            update_node_config(workflow, node_id, config)
+        }
+        EditSessionDraftOperation::AddEdge {
+            source,
+            target,
+            source_handle,
+            target_handle,
+        } => add_edge(
+            workflow,
+            editor_document,
+            source,
+            target,
+            source_handle.as_deref(),
+            target_handle.as_deref(),
+        ),
+        EditSessionDraftOperation::RemoveEdge { edge_id } => remove_edge(workflow, editor_document, edge_id),
+        EditSessionDraftOperation::UpdateEdge { edge_id, updates } => {
+            update_edge(workflow, editor_document, edge_id, updates)
+        }
     }
+}
+
+#[derive(Clone)]
+struct EdgeReference {
+    edge_id: String,
+    source: String,
+    target: String,
+    source_handle: Option<String>,
+    target_handle: Option<String>,
+    label: Option<String>,
 }
 
 fn remove_node_cascade(
@@ -814,6 +866,180 @@ fn remove_node_cascade(
 
     if let Some(document) = editor_document.as_mut() {
         remove_node_from_editor_document(document, node_id);
+    }
+
+    Ok(())
+}
+
+fn update_node_config(workflow: &mut WorkflowDefinition, node_id: &str, config: &Value) -> Result<(), AppError> {
+    let node = workflow
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == node_id)
+        .ok_or_else(|| AppError::BadRequest(format!("node does not exist in edit session workflow: {node_id}")))?;
+
+    let Some(config_object) = config.as_object() else {
+        return Err(AppError::BadRequest(
+            "update_node_config.config must be a JSON object".to_string(),
+        ));
+    };
+
+    node.config = Value::Object(config_object.clone());
+    Ok(())
+}
+
+fn add_edge(
+    workflow: &mut WorkflowDefinition,
+    editor_document: &mut Option<Value>,
+    source: &str,
+    target: &str,
+    source_handle: Option<&str>,
+    target_handle: Option<&str>,
+) -> Result<(), AppError> {
+    ensure_node_exists(workflow, source)?;
+    ensure_node_exists(workflow, target)?;
+
+    let transition = crate::core::definition::TransitionDefinition {
+        from: source.to_string(),
+        to: target.to_string(),
+        condition: None,
+        priority: None,
+        label: None,
+        branch_type: None,
+    };
+
+    if !workflow.transitions.iter().any(|existing| {
+        existing.from == transition.from
+            && existing.to == transition.to
+            && existing.condition == transition.condition
+            && existing.priority == transition.priority
+            && existing.label == transition.label
+            && existing.branch_type == transition.branch_type
+    }) {
+        workflow.transitions.push(transition);
+    }
+
+    if let Some(document) = editor_document.as_mut() {
+        upsert_editor_edge(
+            document,
+            &EdgeReference {
+                edge_id: build_editor_edge_id(source, target, source_handle, target_handle),
+                source: source.to_string(),
+                target: target.to_string(),
+                source_handle: source_handle.map(str::to_string),
+                target_handle: target_handle.map(str::to_string),
+                label: None,
+            },
+        )?;
+    }
+
+    Ok(())
+}
+
+fn remove_edge(
+    workflow: &mut WorkflowDefinition,
+    editor_document: &mut Option<Value>,
+    edge_id: &str,
+) -> Result<(), AppError> {
+    let reference = resolve_edge_reference(editor_document.as_ref(), edge_id)?;
+    let transition_index = find_transition_index(workflow, &reference)
+        .ok_or_else(|| AppError::BadRequest(format!("edge does not exist in edit session workflow: {edge_id}")))?;
+    workflow.transitions.remove(transition_index);
+
+    if let Some(document) = editor_document.as_mut() {
+        remove_editor_edge(document, edge_id);
+    }
+
+    Ok(())
+}
+
+fn update_edge(
+    workflow: &mut WorkflowDefinition,
+    editor_document: &mut Option<Value>,
+    edge_id: &str,
+    updates: &Value,
+) -> Result<(), AppError> {
+    let updates = updates
+        .as_object()
+        .ok_or_else(|| AppError::BadRequest("update_edge.updates must be a JSON object".to_string()))?;
+    let current_reference = resolve_edge_reference(editor_document.as_ref(), edge_id)?;
+    let transition_index = find_transition_index(workflow, &current_reference)
+        .ok_or_else(|| AppError::BadRequest(format!("edge does not exist in edit session workflow: {edge_id}")))?;
+    let transition = workflow.transitions[transition_index].clone();
+
+    let next_source = optional_string_update(updates, "source").unwrap_or_else(|| current_reference.source.clone());
+    let next_target = optional_string_update(updates, "target").unwrap_or_else(|| current_reference.target.clone());
+    ensure_node_exists(workflow, &next_source)?;
+    ensure_node_exists(workflow, &next_target)?;
+
+    let next_source_handle =
+        optional_nullable_string_update(updates, "sourceHandle").unwrap_or(current_reference.source_handle.clone());
+    let next_target_handle =
+        optional_nullable_string_update(updates, "targetHandle").unwrap_or(current_reference.target_handle.clone());
+    let next_label = optional_nullable_string_update(updates, "label").unwrap_or(current_reference.label.clone());
+    let next_condition = optional_nullable_string_update(updates, "condition").unwrap_or(transition.condition.clone());
+    let next_branch_type =
+        optional_nullable_string_update(updates, "branchType").unwrap_or(transition.branch_type.clone());
+    let next_priority = optional_nullable_i32_update(updates, "priority").unwrap_or(transition.priority);
+
+    let next_transition = crate::core::definition::TransitionDefinition {
+        from: next_source.clone(),
+        to: next_target.clone(),
+        condition: next_condition,
+        priority: next_priority,
+        label: next_label.clone(),
+        branch_type: next_branch_type,
+    };
+
+    if workflow.transitions.iter().enumerate().any(|(index, existing)| {
+        index != transition_index
+            && existing.from == next_transition.from
+            && existing.to == next_transition.to
+            && existing.condition == next_transition.condition
+            && existing.priority == next_transition.priority
+            && existing.label == next_transition.label
+            && existing.branch_type == next_transition.branch_type
+    }) {
+        return Err(AppError::BadRequest(format!(
+            "updated edge would duplicate an existing transition: {edge_id}"
+        )));
+    }
+
+    workflow.transitions[transition_index] = next_transition;
+
+    if let Some(document) = editor_document.as_mut() {
+        update_editor_edge(
+            document,
+            &current_reference,
+            EdgeReference {
+                edge_id: updates
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| {
+                        if updates.contains_key("source")
+                            || updates.contains_key("target")
+                            || updates.contains_key("sourceHandle")
+                            || updates.contains_key("targetHandle")
+                        {
+                            build_editor_edge_id(
+                                &next_source,
+                                &next_target,
+                                next_source_handle.as_deref(),
+                                next_target_handle.as_deref(),
+                            )
+                        } else {
+                            current_reference.edge_id.clone()
+                        }
+                    }),
+                source: next_source,
+                target: next_target,
+                source_handle: next_source_handle,
+                target_handle: next_target_handle,
+                label: next_label,
+            },
+            updates,
+        )?;
     }
 
     Ok(())
@@ -856,6 +1082,237 @@ fn reconnect_workflow_transitions(
     }
 
     transitions.push(reconnected);
+}
+
+fn ensure_node_exists(workflow: &WorkflowDefinition, node_id: &str) -> Result<(), AppError> {
+    if workflow.node(node_id).is_none() {
+        return Err(AppError::BadRequest(format!(
+            "node does not exist in edit session workflow: {node_id}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn resolve_edge_reference(editor_document: Option<&Value>, edge_id: &str) -> Result<EdgeReference, AppError> {
+    if let Some(reference) = editor_document.and_then(|document| find_editor_edge(document, edge_id)) {
+        return Ok(reference);
+    }
+
+    parse_edge_reference_from_id(edge_id).ok_or_else(|| {
+        AppError::BadRequest(format!(
+            "edge does not exist in edit session editor document: {edge_id}"
+        ))
+    })
+}
+
+fn find_transition_index(workflow: &WorkflowDefinition, reference: &EdgeReference) -> Option<usize> {
+    workflow.transitions.iter().position(|transition| {
+        transition.from == reference.source
+            && transition.to == reference.target
+            && match reference.label.as_deref() {
+                Some(label) => transition.label.as_deref() == Some(label),
+                None => true,
+            }
+    })
+}
+
+fn find_editor_edge(document: &Value, edge_id: &str) -> Option<EdgeReference> {
+    document
+        .get("graph")
+        .and_then(|graph| graph.get("edges"))
+        .and_then(Value::as_array)
+        .and_then(|edges| {
+            edges
+                .iter()
+                .find(|edge| edge.get("id").and_then(Value::as_str) == Some(edge_id))
+                .and_then(extract_edge_reference_from_value)
+        })
+}
+
+fn extract_edge_reference_from_value(edge: &Value) -> Option<EdgeReference> {
+    Some(EdgeReference {
+        edge_id: edge.get("id").and_then(Value::as_str)?.to_string(),
+        source: edge.get("source").and_then(Value::as_str)?.to_string(),
+        target: edge.get("target").and_then(Value::as_str)?.to_string(),
+        source_handle: edge.get("sourceHandle").and_then(Value::as_str).map(str::to_string),
+        target_handle: edge.get("targetHandle").and_then(Value::as_str).map(str::to_string),
+        label: edge.get("label").and_then(Value::as_str).map(str::to_string),
+    })
+}
+
+fn parse_edge_reference_from_id(edge_id: &str) -> Option<EdgeReference> {
+    let body = edge_id.strip_prefix("edge:")?;
+    let (source_segment, target_segment) = body.split_once("->")?;
+    let (source, source_handle) = split_edge_side(source_segment)?;
+    let (target, target_handle) = split_edge_side_with_suffix(target_segment)?;
+
+    Some(EdgeReference {
+        edge_id: edge_id.to_string(),
+        source,
+        target,
+        source_handle,
+        target_handle,
+        label: None,
+    })
+}
+
+fn split_edge_side(segment: &str) -> Option<(String, Option<String>)> {
+    let (node_id, handle) = segment.rsplit_once(':')?;
+    Some((node_id.to_string(), normalize_edge_handle(handle)))
+}
+
+fn split_edge_side_with_suffix(segment: &str) -> Option<(String, Option<String>)> {
+    let mut parts = segment.rsplitn(3, ':').collect::<Vec<_>>();
+    parts.reverse();
+
+    match parts.as_slice() {
+        [node_id, handle] => Some(((*node_id).to_string(), normalize_edge_handle(handle))),
+        [node_id, handle, suffix] if suffix.chars().all(|char| char.is_ascii_digit()) => {
+            Some(((*node_id).to_string(), normalize_edge_handle(handle)))
+        }
+        _ => None,
+    }
+}
+
+fn normalize_edge_handle(handle: &str) -> Option<String> {
+    if handle.is_empty() || handle == "default" {
+        None
+    } else {
+        Some(handle.to_string())
+    }
+}
+
+fn optional_string_update(updates: &serde_json::Map<String, Value>, key: &str) -> Option<String> {
+    updates.get(key).and_then(Value::as_str).map(str::to_string)
+}
+
+fn optional_nullable_string_update(updates: &serde_json::Map<String, Value>, key: &str) -> Option<Option<String>> {
+    updates.get(key).map(|value| match value {
+        Value::Null => None,
+        Value::String(value) => Some(value.to_string()),
+        _ => None,
+    })
+}
+
+fn optional_nullable_i32_update(updates: &serde_json::Map<String, Value>, key: &str) -> Option<Option<i32>> {
+    updates.get(key).map(|value| match value {
+        Value::Null => None,
+        Value::Number(value) => value.as_i64().and_then(|number| i32::try_from(number).ok()),
+        _ => None,
+    })
+}
+
+fn upsert_editor_edge(document: &mut Value, reference: &EdgeReference) -> Result<(), AppError> {
+    let Some(edges) = document
+        .get_mut("graph")
+        .and_then(|graph| graph.get_mut("edges"))
+        .and_then(Value::as_array_mut)
+    else {
+        return Ok(());
+    };
+
+    if edges.iter().any(|edge| {
+        edge.get("id").and_then(Value::as_str) == Some(reference.edge_id.as_str())
+            || (edge.get("source").and_then(Value::as_str) == Some(reference.source.as_str())
+                && edge.get("sourceHandle").and_then(Value::as_str) == reference.source_handle.as_deref()
+                && edge.get("target").and_then(Value::as_str) == Some(reference.target.as_str())
+                && edge.get("targetHandle").and_then(Value::as_str) == reference.target_handle.as_deref())
+    }) {
+        return Ok(());
+    }
+
+    let mut edge = serde_json::Map::new();
+    edge.insert("id".to_string(), Value::String(reference.edge_id.clone()));
+    edge.insert("source".to_string(), Value::String(reference.source.clone()));
+    edge.insert("target".to_string(), Value::String(reference.target.clone()));
+    set_optional_string_field(&mut edge, "sourceHandle", reference.source_handle.as_deref());
+    set_optional_string_field(&mut edge, "targetHandle", reference.target_handle.as_deref());
+    set_optional_string_field(&mut edge, "label", reference.label.as_deref());
+
+    if edges
+        .iter()
+        .any(|edge| edge.get("id").and_then(Value::as_str) == Some(reference.edge_id.as_str()))
+    {
+        return Err(AppError::BadRequest(format!(
+            "edge already exists in edit session editor document: {}",
+            reference.edge_id
+        )));
+    }
+
+    edges.push(Value::Object(edge));
+    Ok(())
+}
+
+fn remove_editor_edge(document: &mut Value, edge_id: &str) {
+    if let Some(edges) = document
+        .get_mut("graph")
+        .and_then(|graph| graph.get_mut("edges"))
+        .and_then(Value::as_array_mut)
+    {
+        edges.retain(|edge| edge.get("id").and_then(Value::as_str) != Some(edge_id));
+    }
+}
+
+fn update_editor_edge(
+    document: &mut Value,
+    current_reference: &EdgeReference,
+    next_reference: EdgeReference,
+    updates: &serde_json::Map<String, Value>,
+) -> Result<(), AppError> {
+    let Some(edges) = document
+        .get_mut("graph")
+        .and_then(|graph| graph.get_mut("edges"))
+        .and_then(Value::as_array_mut)
+    else {
+        return Ok(());
+    };
+
+    let edge_index = edges
+        .iter()
+        .position(|edge| edge.get("id").and_then(Value::as_str) == Some(current_reference.edge_id.as_str()))
+        .ok_or_else(|| {
+            AppError::BadRequest(format!(
+                "edge does not exist in edit session editor document: {}",
+                current_reference.edge_id
+            ))
+        })?;
+
+    if edges.iter().enumerate().any(|(index, edge)| {
+        index != edge_index && edge.get("id").and_then(Value::as_str) == Some(next_reference.edge_id.as_str())
+    }) {
+        return Err(AppError::BadRequest(format!(
+            "updated edge would duplicate an existing editor edge: {}",
+            next_reference.edge_id
+        )));
+    }
+
+    let Some(existing_edge) = edges[edge_index].as_object().cloned() else {
+        return Err(AppError::BadRequest(format!(
+            "edge has invalid JSON shape in edit session editor document: {}",
+            current_reference.edge_id
+        )));
+    };
+
+    let mut next_edge = existing_edge;
+
+    for (key, value) in updates {
+        if value.is_null() {
+            next_edge.remove(key);
+        } else {
+            next_edge.insert(key.clone(), value.clone());
+        }
+    }
+
+    next_edge.insert("id".to_string(), Value::String(next_reference.edge_id));
+    next_edge.insert("source".to_string(), Value::String(next_reference.source));
+    next_edge.insert("target".to_string(), Value::String(next_reference.target));
+    set_optional_string_field(&mut next_edge, "sourceHandle", next_reference.source_handle.as_deref());
+    set_optional_string_field(&mut next_edge, "targetHandle", next_reference.target_handle.as_deref());
+    set_optional_string_field(&mut next_edge, "label", next_reference.label.as_deref());
+
+    edges[edge_index] = Value::Object(next_edge);
+    Ok(())
 }
 
 fn remove_node_from_editor_document(document: &mut Value, node_id: &str) {
@@ -984,6 +1441,19 @@ fn reconnect_editor_edges(edges: &mut Vec<Value>, incoming_edges: &[Value], outg
     reconnected.insert("id".to_string(), Value::String(edge_id));
 
     edges.push(Value::Object(reconnected));
+}
+
+fn build_editor_edge_id(
+    source: &str,
+    target: &str,
+    source_handle: Option<&str>,
+    target_handle: Option<&str>,
+) -> String {
+    format!(
+        "edge:{source}:{}->{target}:{}",
+        source_handle.unwrap_or("default"),
+        target_handle.unwrap_or("default"),
+    )
 }
 
 fn set_optional_string_field(object: &mut serde_json::Map<String, Value>, key: &str, value: Option<&str>) {
