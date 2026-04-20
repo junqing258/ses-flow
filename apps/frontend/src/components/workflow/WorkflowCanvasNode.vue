@@ -117,7 +117,7 @@ const containerClass = computed(() =>
     />
 
     <div
-      class="flex overflow-hidden rounded-[14px]"
+      class="flex overflow-hidden rounded-2xl"
       :style="{ height: `${branchNodeHeight}px` }"
     >
       <div
