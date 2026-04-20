@@ -67,6 +67,32 @@ const SYSTEM_PROMPT = `你是 SES Flow 页面内 AI 协作助手。
 10. 避免连续多次调用 update_current_edit_session_draft；如果一次能做完，就不要拆成多次试错。
 11. 回复末尾必须给出“本次改动摘要”。`;
 
+export const CLAUDE_SYSTEM_PROMPT_CONFIG = {
+  type: "preset" as const,
+  preset: "claude_code" as const,
+  append: SYSTEM_PROMPT,
+  excludeDynamicSections: true,
+};
+
+export const buildClaudeTurnPrompt = (params: {
+  editSessionId: string;
+  prompt: string;
+  runnerBaseUrl: string;
+  workflowId?: string;
+}) =>
+  [
+    "上下文：",
+    `runner_base_url: ${params.runnerBaseUrl}`,
+    `session_id: ${params.editSessionId}`,
+    params.workflowId ? `workflow_id: ${params.workflowId}` : "",
+    "",
+    "用户需求：",
+    params.prompt,
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
 const getText = (value: unknown): string => {
   if (typeof value === "string") {
     return value;
@@ -275,14 +301,12 @@ export class ClaudeCodeSdkAdapter implements ClaudeAdapter {
   async runTurn(params: RunClaudeTurnParams) {
     const config = resolveAiProviderConfig(params.aiProvider);
 
-    const prompt = `${SYSTEM_PROMPT}
-
-runner_base_url: ${params.runnerBaseUrl}
-session_id: ${params.editSessionId}
-${params.workflowId ? `workflow_id: ${params.workflowId}` : ""}
-
-用户需求：
-${params.prompt}`.trim();
+    const prompt = buildClaudeTurnPrompt({
+      editSessionId: params.editSessionId,
+      prompt: params.prompt,
+      runnerBaseUrl: params.runnerBaseUrl,
+      workflowId: params.workflowId,
+    });
 
     const toolUseInputs = new Map<
       string,
@@ -309,11 +333,7 @@ ${params.prompt}`.trim();
         resume: params.claudeSessionId || undefined,
         abortController: params.abortController,
         pathToClaudeCodeExecutable: config.claudeCodeExecutable,
-        systemPrompt: {
-          type: "preset",
-          preset: "claude_code",
-          append: SYSTEM_PROMPT,
-        },
+        systemPrompt: CLAUDE_SYSTEM_PROMPT_CONFIG,
         model: config.model,
         env: {
           ...process.env,

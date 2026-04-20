@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APPLY_CURRENT_EDIT_SESSION_DRAFT_OPERATIONS_TOOL_NAME,
+  buildGetEditSessionPath,
   GET_CURRENT_EDIT_SESSION_TOOL_NAME,
   isPreviewMutationToolName,
   isRunnerMcpToolName,
@@ -68,5 +69,18 @@ describe("runner MCP tools", () => {
     expect(normalizeJsonLikeInput("{\"nodes\":[]}")).toEqual({ nodes: [] });
     expect(normalizeJsonLikeInput("plain-text")).toBe("plain-text");
     expect(normalizeJsonLikeInput({ nodes: [] })).toEqual({ nodes: [] });
+  });
+
+  it("builds lightweight edit session read paths by query param", () => {
+    expect(
+      buildGetEditSessionPath("session-1", {
+        includeEditorDocument: false,
+      }),
+    ).toBe("/edit-sessions/session-1?includeEditorDocument=false");
+    expect(
+      buildGetEditSessionPath("session-1", {
+        includeEditorDocument: true,
+      }),
+    ).toBe("/edit-sessions/session-1?includeEditorDocument=true");
   });
 });

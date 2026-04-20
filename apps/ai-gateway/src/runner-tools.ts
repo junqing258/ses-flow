@@ -47,6 +47,27 @@ const normalizeRunnerBaseUrl = (runnerBaseUrl: string) =>
 const buildRunnerUrl = (runnerBaseUrl: string, path: string) =>
   `${normalizeRunnerBaseUrl(runnerBaseUrl)}${path}`;
 
+export const buildGetEditSessionPath = (
+  editSessionId: string,
+  options: {
+    includeEditorDocument?: boolean;
+  } = {},
+) => {
+  const searchParams = new URLSearchParams();
+
+  if (options.includeEditorDocument != null) {
+    searchParams.set(
+      "includeEditorDocument",
+      String(options.includeEditorDocument),
+    );
+  }
+
+  const queryString = searchParams.toString();
+  const basePath = `/edit-sessions/${encodeURIComponent(editSessionId)}`;
+
+  return queryString ? `${basePath}?${queryString}` : basePath;
+};
+
 const REMOVE_NODE_CASCADE_OPERATION_TYPE = "remove_node_cascade";
 const editSessionDraftOperationSchema = z.object({
   type: z.literal(REMOVE_NODE_CASCADE_OPERATION_TYPE),
@@ -182,14 +203,18 @@ export const createRunnerEditSessionMcpServer = ({
     tools: [
       tool(
         GET_CURRENT_EDIT_SESSION_TOOL_NAME,
-        "读取当前 edit session 的完整内容，包括 workflow、editorDocument 和元信息。",
-        {},
-        async () =>
+        "读取当前 edit session。默认返回轻量结果（包含 workflow 和元信息，不含 editorDocument）；只有确实需要画布文档时才传 includeEditorDocument=true。",
+        {
+          includeEditorDocument: z.boolean().optional(),
+        },
+        async ({ includeEditorDocument = false }) =>
           callRunner(
             fetchImpl,
             buildRunnerUrl(
               runnerBaseUrl,
-              `/edit-sessions/${encodeURIComponent(editSessionId)}`,
+              buildGetEditSessionPath(editSessionId, {
+                includeEditorDocument,
+              }),
             ),
             {
               method: "GET",

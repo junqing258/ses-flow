@@ -6,6 +6,10 @@ use serde_json::Value;
 
 use crate::modules::{ApiError, ApiState, WorkflowEventStream, into_sse};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize)]
 pub struct EditSessionUpsertRequest {
     #[serde(rename = "workspaceId", default)]
@@ -24,6 +28,12 @@ pub struct EditSessionPatchRequest {
     pub operations: Vec<EditSessionDraftOperation>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub struct EditSessionGetRequest {
+    #[serde(rename = "includeEditorDocument", default = "default_true")]
+    pub include_editor_document: bool,
+}
+
 pub fn create_edit_session(
     state: &ApiState,
     request: EditSessionUpsertRequest,
@@ -36,8 +46,18 @@ pub fn create_edit_session(
     )?)
 }
 
-pub fn get_edit_session(state: &ApiState, session_id: &str) -> Result<WorkflowEditSessionRecord, ApiError> {
-    Ok(state.app.get_edit_session(session_id)?)
+pub fn get_edit_session(
+    state: &ApiState,
+    session_id: &str,
+    request: EditSessionGetRequest,
+) -> Result<WorkflowEditSessionRecord, ApiError> {
+    let mut session = state.app.get_edit_session(session_id)?;
+
+    if !request.include_editor_document {
+        session.editor_document = None;
+    }
+
+    Ok(session)
 }
 
 pub fn subscribe_edit_session_events(state: &ApiState, session_id: &str) -> Result<WorkflowEventStream, ApiError> {
