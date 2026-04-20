@@ -10,7 +10,7 @@
             AI 工作流编辑助手
           </p>
           <!-- <p class="mt-1 text-[11px] leading-5 text-slate-500">
-            在页面内直接发起协作，Claude 会通过当前 edit session 更新草稿预览。
+            在页面内直接发起协作，Agent 会通过当前 edit session 更新草稿预览。
           </p> -->
         </div>
         <div class="flex flex-row items-end gap-1">
@@ -49,7 +49,7 @@
           </p> -->
           <p>Agent 事件流：{{ gatewayConnectionLabel }}</p>
           <p v-if="claudeSessionId" class="mt-1 break-all">
-            claude_session_id: {{ claudeSessionId }}
+            agent_session_id: {{ claudeSessionId }}
           </p>
         </div>
         <div
@@ -131,7 +131,7 @@
         v-model="draftMessage"
         class="min-h-23 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] leading-6 text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
         :disabled="isComposerDisabled"
-        placeholder="描述你希望 Claude 帮你调整的工作流内容"
+        placeholder="描述你希望 Agent 帮你调整的工作流内容"
         @keydown.enter.exact.prevent="handleSend"
       />
       <div class="mt-3 flex items-center justify-between gap-3">
@@ -254,11 +254,11 @@ const gatewayConnectionLabel = computed(() => {
 const threadStatusLabel = computed(() => {
   switch (threadSnapshot.value.status) {
     case "running":
-      return "Claude 协作中";
+      return "Agent 协作中";
     case "error":
-      return "Claude 需重试";
+      return "Agent 需重试";
     default:
-      return "Claude 已就绪";
+      return "Agent 已就绪";
   }
 });
 const threadStatusClass = computed(() => {

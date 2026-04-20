@@ -93,7 +93,7 @@
         class="pointer-events-auto absolute left-1/2 flex h-9 -translate-x-1/2 items-center rounded-full bg-white/92 p-1 shadow-sm ring-1 ring-[var(--panel-border)]"
       >
         <button
-          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
+          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors cursor-pointer"
           :class="
             isEditMode
               ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-text)]'
@@ -104,7 +104,7 @@
           <Pencil class="h-3.5 w-3.5" />
         </button>
         <button
-          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
+          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors cursor-pointer"
           :class="
             isRunMode
               ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-text)]'
@@ -115,7 +115,7 @@
           <Play class="h-3.5 w-3.5" />
         </button>
         <button
-          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors"
+          class="flex h-7 w-11 items-center justify-center rounded-full transition-colors cursor-pointer"
           :class="
             isAiMode
               ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-text)]'
