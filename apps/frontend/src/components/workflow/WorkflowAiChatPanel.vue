@@ -9,11 +9,11 @@
           <p class="text-[14px] font-semibold text-slate-900">
             AI 工作流编辑助手
           </p>
-          <p class="mt-1 text-[11px] leading-5 text-slate-500">
+          <!-- <p class="mt-1 text-[11px] leading-5 text-slate-500">
             在页面内直接发起协作，Claude 会通过当前 edit session 更新草稿预览。
-          </p>
+          </p> -->
         </div>
-        <div class="flex flex-col items-end gap-1">
+        <div class="flex flex-row items-end gap-1">
           <span
             class="rounded-full px-2.5 py-1 text-[11px] font-semibold text-nowrap"
             :class="runnerConnectionClass"
@@ -41,12 +41,12 @@
           </div>
         </div> -->
         <div class="rounded-[14px] border border-slate-200/80 bg-slate-50/80 px-3 py-2">
-          <p class="font-semibold tracking-wide text-slate-500">最近同步</p>
-          <p class="mt-1 text-sm font-medium text-slate-900">
+          <!-- <p class="font-semibold tracking-wide text-slate-500">最近同步</p> -->
+          <!-- <p class="mt-1 text-sm font-medium text-slate-900">
             {{ previewSyncLabel }}
-          </p>
+          </p> -->
           <p class="mt-1">
-            Claude 事件流：{{ gatewayConnectionLabel }}
+            Agent 事件流：{{ gatewayConnectionLabel }}
           </p>
           <p v-if="claudeSessionId" class="mt-1 break-all">
             claude_session_id: {{ claudeSessionId }}
