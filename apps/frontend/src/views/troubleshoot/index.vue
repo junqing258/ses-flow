@@ -1,7 +1,5 @@
 <template>
-  <section
-    class="min-h-screen bg-slate-50 text-slate-900"
-  >
+  <section class="min-h-screen bg-slate-50 text-slate-900">
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-8 lg:px-10">
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -10,47 +8,46 @@
           >
             Troubleshoot
           </p>
-          <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+          <h2 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
             运行排障工作台
-          </h1>
+          </h2>
           <!-- <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
             按 `runId`、`requestId`、订单号或波次号定位运行记录，直接查看
             timeline、错误提示和状态快照。
           </p> -->
         </div>
-
       </header>
 
       <section
-        class="mt-6 rounded-2xl border border-white/70 bg-white/90 p-5 backdrop-blur"
+        class="mt-6 rounded-2xl border border-white/70 bg-white/90 p-4 backdrop-blur"
       >
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div class="grid gap-2.5 md:grid-cols-2 xl:grid-cols-5">
           <Input
             v-model="filters.runId"
-            class="h-11 rounded-2xl border-slate-200 bg-slate-50 px-4"
+            class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="Run ID"
           />
           <Input
             v-model="filters.requestId"
-            class="h-11 rounded-2xl border-slate-200 bg-slate-50 px-4"
+            class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="Request ID"
           />
           <Input
             v-model="filters.orderNo"
-            class="h-11 rounded-2xl border-slate-200 bg-slate-50 px-4"
+            class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="订单号"
           />
           <Input
             v-model="filters.waveNo"
-            class="h-11 rounded-2xl border-slate-200 bg-slate-50 px-4"
+            class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="波次号"
           />
           <Button
-            class="h-11 rounded-2xl bg-slate-950 text-white hover:bg-slate-800"
+            class="h-10 rounded-xl bg-slate-950 px-4 text-sm text-white hover:bg-slate-800"
             :disabled="isSearching"
             @click="handleSearch"
           >
-            {{ isSearching ? "搜索中..." : "搜索运行" }}
+            {{ isSearching ? "搜索中..." : "搜索" }}
           </Button>
         </div>
         <p v-if="searchError" class="mt-3 text-sm text-rose-600">
@@ -59,17 +56,13 @@
       </section>
 
       <div class="mt-6 space-y-6">
-        <section
-          class="rounded-2xl border border-white/70 bg-white/92 p-4"
-        >
+        <section class="rounded-2xl border border-white/70 bg-white/92 p-4">
           <div class="flex items-center justify-between gap-3 px-2 pb-3">
             <div>
               <p class="text-xs font-semibold tracking-wide text-slate-500">
                 搜索结果
               </p>
-              <p class="mt-1 text-sm text-slate-400">
-                {{ total }} 条记录
-              </p>
+              <p class="mt-1 text-sm text-slate-400">{{ total }} 条记录</p>
             </div>
           </div>
 
@@ -80,15 +73,12 @@
             输入检索条件后即可定位运行记录。
           </div>
 
-          <div
-            v-else
-            class="flex gap-3 overflow-x-auto px-1 pb-1"
-          >
+          <div v-else class="flex gap-2.5 overflow-x-auto px-1 pb-1">
             <button
               v-for="item in results"
               :key="item.runId"
               type="button"
-              class="min-w-[250px] max-w-[280px] shrink-0 rounded-[20px] border px-4 py-3 text-left transition"
+              class="min-w-[220px] max-w-[250px] shrink-0 rounded-[18px] border px-3.5 py-2.5 text-left transition"
               :class="
                 item.runId === selectedRunId
                   ? 'border-cyan-200 bg-cyan-50/90'
@@ -98,10 +88,10 @@
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-slate-900">
+                  <p class="truncate text-[13px] font-semibold text-slate-900">
                     {{ item.runId }}
                   </p>
-                  <p class="mt-1 truncate text-xs text-slate-500">
+                  <p class="mt-0.5 truncate text-[11px] text-slate-500">
                     {{ item.workflowKey }}
                   </p>
                 </div>
@@ -113,7 +103,7 @@
                 </span>
               </div>
 
-              <div class="mt-3 grid gap-1 text-[11px] text-slate-500">
+              <div class="mt-2 grid gap-0.5 text-[11px] leading-5 text-slate-500">
                 <p v-if="item.requestId" class="truncate">
                   Request: {{ item.requestId }}
                 </p>
@@ -123,7 +113,9 @@
                 <p v-if="item.waveNo" class="truncate">
                   波次: {{ item.waveNo }}
                 </p>
-                <p class="truncate">开始: {{ formatDateTime(item.startedAt) }}</p>
+                <p class="truncate">
+                  开始: {{ formatDateTime(item.startedAt) }}
+                </p>
                 <p v-if="item.durationMs !== undefined">
                   总耗时: {{ item.durationMs }} ms
                 </p>
@@ -133,9 +125,7 @@
         </section>
 
         <main class="space-y-6">
-          <section
-            class="rounded-2xl border border-white/70 bg-white/92 p-5"
-          >
+          <section class="rounded-2xl border border-white/70 bg-white/92 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-xs font-semibold tracking-wide text-slate-500">
@@ -173,7 +163,9 @@
             <template v-else>
               <div class="mt-4 grid gap-3 md:grid-cols-4">
                 <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                  <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                  <p
+                    class="text-[11px] font-semibold tracking-wide text-slate-500"
+                  >
                     状态
                   </p>
                   <p class="mt-2 text-base font-semibold text-slate-900">
@@ -181,7 +173,9 @@
                   </p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                  <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                  <p
+                    class="text-[11px] font-semibold tracking-wide text-slate-500"
+                  >
                     当前节点
                   </p>
                   <p class="mt-2 text-base font-semibold text-slate-900">
@@ -189,7 +183,9 @@
                   </p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                  <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                  <p
+                    class="text-[11px] font-semibold tracking-wide text-slate-500"
+                  >
                     Timeline Steps
                   </p>
                   <p class="mt-2 text-base font-semibold text-slate-900">
@@ -197,19 +193,29 @@
                   </p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                  <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                  <p
+                    class="text-[11px] font-semibold tracking-wide text-slate-500"
+                  >
                     最近输出
                   </p>
-                  <p class="mt-2 truncate text-base font-semibold text-slate-900">
+                  <p
+                    class="mt-2 truncate text-base font-semibold text-slate-900"
+                  >
                     {{ lastOutputSummary }}
                   </p>
                 </div>
               </div>
 
               <div class="mt-5 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-                <div class="rounded-[22px] border border-slate-200 bg-slate-50/80 p-3">
-                  <div class="flex items-center justify-between gap-3 px-2 pb-3">
-                    <p class="text-xs font-semibold tracking-wide text-slate-500">
+                <div
+                  class="rounded-[22px] border border-slate-200 bg-slate-50/80 p-3"
+                >
+                  <div
+                    class="flex items-center justify-between gap-3 px-2 pb-3"
+                  >
+                    <p
+                      class="text-xs font-semibold tracking-wide text-slate-500"
+                    >
                       节点日志
                     </p>
                     <span class="text-[11px] text-slate-400">
@@ -232,7 +238,9 @@
                     >
                       <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
-                          <p class="truncate text-sm font-semibold text-slate-900">
+                          <p
+                            class="truncate text-sm font-semibold text-slate-900"
+                          >
                             {{ item.nodeId }}
                           </p>
                           <p class="mt-1 text-[11px] text-slate-500">
@@ -265,11 +273,17 @@
                   </div>
                 </div>
 
-                <div class="rounded-[22px] border border-slate-200 bg-white p-4">
+                <div
+                  class="rounded-[22px] border border-slate-200 bg-white p-4"
+                >
                   <div v-if="selectedTimelineItem" class="space-y-4">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div
+                      class="flex flex-wrap items-start justify-between gap-3"
+                    >
                       <div>
-                        <p class="text-xs font-semibold tracking-wide text-slate-500">
+                        <p
+                          class="text-xs font-semibold tracking-wide text-slate-500"
+                        >
                           节点详情
                         </p>
                         <p class="mt-2 text-lg font-semibold text-slate-950">
@@ -289,7 +303,9 @@
 
                     <div class="grid gap-3 md:grid-cols-3">
                       <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                        <p
+                          class="text-[11px] font-semibold tracking-wide text-slate-500"
+                        >
                           开始时间
                         </p>
                         <p class="mt-2 text-sm font-medium text-slate-900">
@@ -297,7 +313,9 @@
                         </p>
                       </div>
                       <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                        <p
+                          class="text-[11px] font-semibold tracking-wide text-slate-500"
+                        >
                           结束时间
                         </p>
                         <p class="mt-2 text-sm font-medium text-slate-900">
@@ -305,7 +323,9 @@
                         </p>
                       </div>
                       <div class="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p class="text-[11px] font-semibold tracking-wide text-slate-500">
+                        <p
+                          class="text-[11px] font-semibold tracking-wide text-slate-500"
+                        >
                           节点耗时
                         </p>
                         <p class="mt-2 text-sm font-medium text-slate-900">
@@ -348,28 +368,46 @@
 
                     <div class="grid gap-4 xl:grid-cols-2">
                       <div>
-                        <p class="text-xs font-semibold tracking-wide text-slate-500">
+                        <p
+                          class="text-xs font-semibold tracking-wide text-slate-500"
+                        >
                           Input
                         </p>
                         <pre
                           class="mt-3 max-h-80 overflow-auto rounded-[18px] bg-slate-950 px-4 py-4 font-mono text-[11px] leading-5 text-slate-100"
-                          >{{ JSON.stringify(selectedTimelineItem.input ?? {}, null, 2) }}</pre
+                          >{{
+                            JSON.stringify(
+                              selectedTimelineItem.input ?? {},
+                              null,
+                              2,
+                            )
+                          }}</pre
                         >
                       </div>
 
                       <div>
-                        <p class="text-xs font-semibold tracking-wide text-slate-500">
+                        <p
+                          class="text-xs font-semibold tracking-wide text-slate-500"
+                        >
                           Output
                         </p>
                         <pre
                           class="mt-3 max-h-80 overflow-auto rounded-[18px] bg-slate-950 px-4 py-4 font-mono text-[11px] leading-5 text-slate-100"
-                          >{{ JSON.stringify(selectedTimelineItem.output ?? {}, null, 2) }}</pre
+                          >{{
+                            JSON.stringify(
+                              selectedTimelineItem.output ?? {},
+                              null,
+                              2,
+                            )
+                          }}</pre
                         >
                       </div>
                     </div>
 
                     <div v-if="selectedTimelineItem.logs?.length">
-                      <p class="text-xs font-semibold tracking-wide text-slate-500">
+                      <p
+                        class="text-xs font-semibold tracking-wide text-slate-500"
+                      >
                         原始日志
                       </p>
                       <div class="mt-3 space-y-2">
@@ -406,7 +444,9 @@
                 </p>
                 <pre
                   class="mt-3 max-h-72 overflow-auto rounded-[18px] bg-slate-950 px-4 py-4 font-mono text-[11px] leading-5 text-slate-100"
-                  >{{ JSON.stringify(selectedSummary.state ?? {}, null, 2) }}</pre
+                  >{{
+                    JSON.stringify(selectedSummary.state ?? {}, null, 2)
+                  }}</pre
                 >
               </div>
 
@@ -460,7 +500,9 @@ const searchError = ref("");
 const summaryError = ref("");
 
 const lastOutputValue = computed(
-  () => selectedSummary.value?.timeline[selectedSummary.value.timeline.length - 1]?.output ?? {},
+  () =>
+    selectedSummary.value?.timeline[selectedSummary.value.timeline.length - 1]
+      ?.output ?? {},
 );
 const lastOutputSummary = computed(() => {
   const output = lastOutputValue.value;
@@ -577,7 +619,9 @@ const refreshSelectedRun = async () => {
 };
 
 const selectDefaultTimelineIndex = (summary: WorkflowRunSummary) => {
-  const failedIndex = summary.timeline.findIndex((item) => item.status === "failed");
+  const failedIndex = summary.timeline.findIndex(
+    (item) => item.status === "failed",
+  );
 
   if (failedIndex >= 0) {
     return failedIndex;
