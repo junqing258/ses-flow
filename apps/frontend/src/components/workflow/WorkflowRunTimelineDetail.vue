@@ -12,33 +12,6 @@
             {{ timeline.length ? `${timeline.length} steps` : emptyText }}
           </p>
         </div>
-        <div class="flex items-center gap-2" v-if="timeline.length > 1">
-          <button
-            type="button"
-            class="rounded-full border border-[var(--panel-border)] px-3 py-1 text-[11px] font-medium text-[var(--app-muted)] transition hover:bg-[var(--panel-soft)]"
-            @click="handleResetReplay"
-          >
-            重置回放
-          </button>
-          <button
-            type="button"
-            class="rounded-full bg-[var(--app-primary)] px-3 py-1 text-[11px] font-medium text-white transition hover:opacity-90"
-            @click="toggleReplay"
-          >
-            {{ isReplayPlaying ? "暂停回放" : "播放回放" }}
-          </button>
-        </div>
-      </div>
-
-      <div
-        v-if="timeline.length"
-        class="mt-4 rounded-2xl border border-[var(--panel-border)]/70 bg-[var(--panel-soft)]/65 px-3 py-2 text-[11px] text-[var(--app-muted)]"
-      >
-        <span v-if="activeReplayItem">
-          当前回放节点：{{ nodeTitle(activeReplayItem.nodeId) }}
-          · {{ activeReplayItem.status }}
-        </span>
-        <span v-else>点击“播放回放”按节点发生顺序重演一次执行过程。</span>
       </div>
 
       <div v-if="timeline.length" class="mt-4 space-y-3">
@@ -46,21 +19,13 @@
           v-for="(item, index) in timeline"
           :key="`${item.nodeId}-${index}`"
           class="rounded-2xl border p-4 transition"
-          :class="cardClass(item, index)"
+          :class="cardClass(item)"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <p class="truncate text-[13px] font-semibold text-[var(--text)]">
-                  {{ nodeTitle(item.nodeId) }}
-                </p>
-                <span
-                  v-if="isReplayFocused(index)"
-                  class="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-700"
-                >
-                  Replay
-                </span>
-              </div>
+              <p class="truncate text-[13px] font-semibold text-[var(--text)]">
+                {{ nodeTitle(item.nodeId) }}
+              </p>
               <p class="mt-1 text-[11px] text-[#7a7f86]">
                 {{ item.nodeType }} · {{ item.nodeId }}
               </p>
@@ -171,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed } from "vue";
 
 import type { WorkflowRunSummary, WorkflowRunTimelineItem } from "@/features/workflow/runner";
 import { getTroubleshootTemplateSteps } from "@/features/workflow/troubleshoot-templates";
@@ -197,73 +162,6 @@ const maxDurationMs = computed(() =>
     ...timeline.value.map((item) => Math.max(item.durationMs ?? 0, 0)),
   ),
 );
-const replayCursor = ref(-1);
-const isReplayPlaying = ref(false);
-let replayTimer: number | null = null;
-
-const activeReplayItem = computed(() => {
-  if (replayCursor.value < 0 || replayCursor.value >= timeline.value.length) {
-    return null;
-  }
-
-  return timeline.value[replayCursor.value] ?? null;
-});
-
-const clearReplayTimer = () => {
-  if (replayTimer !== null) {
-    window.clearTimeout(replayTimer);
-    replayTimer = null;
-  }
-};
-
-const stepReplay = () => {
-  if (!timeline.value.length) {
-    isReplayPlaying.value = false;
-    replayCursor.value = -1;
-    return;
-  }
-
-  if (replayCursor.value >= timeline.value.length - 1) {
-    isReplayPlaying.value = false;
-    clearReplayTimer();
-    return;
-  }
-
-  replayCursor.value += 1;
-  const item = timeline.value[replayCursor.value];
-  const nextDelay = Math.min(Math.max(item?.durationMs ?? 500, 350), 1400);
-
-  replayTimer = window.setTimeout(() => {
-    replayTimer = null;
-    stepReplay();
-  }, nextDelay);
-};
-
-const toggleReplay = () => {
-  if (!timeline.value.length) {
-    return;
-  }
-
-  if (isReplayPlaying.value) {
-    isReplayPlaying.value = false;
-    clearReplayTimer();
-    return;
-  }
-
-  if (replayCursor.value >= timeline.value.length - 1) {
-    replayCursor.value = -1;
-  }
-
-  isReplayPlaying.value = true;
-  clearReplayTimer();
-  stepReplay();
-};
-
-const handleResetReplay = () => {
-  isReplayPlaying.value = false;
-  clearReplayTimer();
-  replayCursor.value = -1;
-};
 
 const nodeTitle = (nodeId: string) => props.nodeNameMap[nodeId] ?? nodeId;
 
@@ -307,13 +205,7 @@ const statusClass = (status: string) => {
   }
 };
 
-const isReplayFocused = (index: number) => replayCursor.value === index;
-
-const cardClass = (item: WorkflowRunTimelineItem, index: number) => {
-  if (isReplayFocused(index)) {
-    return "border-cyan-200 bg-cyan-50/70 shadow-[0_12px_32px_rgba(14,165,233,0.12)]";
-  }
-
+const cardClass = (item: WorkflowRunTimelineItem) => {
   if (item.status === "failed") {
     return "border-rose-200 bg-rose-50/45";
   }
@@ -330,15 +222,4 @@ const templateSteps = (item: WorkflowRunTimelineItem) =>
     props.workflowKey || props.summary?.workflowKey || "",
     item.errorCode,
   );
-
-watch(
-  () => timeline.value.length,
-  () => {
-    handleResetReplay();
-  },
-);
-
-onBeforeUnmount(() => {
-  clearReplayTimer();
-});
 </script>
