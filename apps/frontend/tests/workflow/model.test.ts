@@ -9,20 +9,20 @@ import {
 
 describe("createWorkflowNodeDraft", () => {
   it("uses the palette id as a stable fallback when the label is non-latin", () => {
-    const taskPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
-      (category) => category.items,
-    ).find((item) => item.id === "palette-task");
-
-    expect(taskPaletteItem).toBeDefined();
-
     const { node } = createWorkflowNodeDraft(
-      taskPaletteItem!,
+      {
+        id: "palette-review-step",
+        kind: "effect",
+        label: "人工复核",
+        icon: "activity",
+        accent: "#8B5CF6",
+      },
       { x: 120, y: 240 },
       [],
     );
 
-    expect(node.id).toBe("task");
-    expect(node.data.nodeKey).toBe("task");
+    expect(node.id).toBe("review_step");
+    expect(node.data.nodeKey).toBe("review_step");
   });
 
   it("provides editable options for fetch request methods", () => {

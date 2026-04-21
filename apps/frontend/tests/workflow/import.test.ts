@@ -185,4 +185,66 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
       state.nodes.find((node) => node.id === "mark_decision")?.data.kind,
     ).toBe("set-state");
   });
+
+  it("keeps legacy task nodes readable in the editor", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "legacy-task-flow",
+        name: "Legacy Task Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: {
+        type: "manual",
+      },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "manual_review",
+          type: "task",
+          name: "Manual Review",
+          config: {
+            taskType: "manual.review",
+          },
+          inputMapping: {
+            orderId: "{{input.orderId}}",
+          },
+        },
+        {
+          id: "end_1",
+          type: "end",
+          name: "End",
+        },
+      ],
+      transitions: [
+        { from: "start_1", to: "manual_review" },
+        { from: "manual_review", to: "end_1" },
+      ],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition);
+    const taskPanel = state.panelByNodeId.manual_review;
+
+    expect(
+      state.nodes.find((node) => node.id === "manual_review")?.data.title,
+    ).toBe("Task");
+    expect(
+      taskPanel.fieldsByTab.base?.find((field) => field.key === "command")
+        ?.value,
+    ).toBe("manual.review");
+    expect(
+      taskPanel.fieldsByTab.mapping?.find((field) => field.key === "payload")
+        ?.value,
+    ).toBe('{\n  "orderId": "{{input.orderId}}"\n}');
+  });
 });

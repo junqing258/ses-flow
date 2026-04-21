@@ -556,22 +556,15 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
       },
     ],
   },
-  {
-    id: "task",
-    label: "任务",
-    icon: "listTodo",
-    defaultOpen: false,
-    items: [
-      {
-        id: "palette-task",
-        kind: "effect",
-        label: "任务编排",
-        icon: "listTodo",
-        accent: "#8B5CF6",
-      },
-    ],
-  },
 ];
+
+export const LEGACY_TASK_PALETTE_ITEM: WorkflowPaletteItem = {
+  id: "palette-task",
+  kind: "effect",
+  label: "Task",
+  icon: "listTodo",
+  accent: "#8B5CF6",
+};
 
 const INITIAL_WORKFLOW_EDGES: Edge[] = [
   {
@@ -1570,7 +1563,6 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
         "palette-shell": "Shell",
         "palette-respond": "Respond",
         "palette-subflow": "Sub-Workflow",
-        "palette-task": "Task",
       };
       const title = titleMap[item.id] ?? item.label;
 

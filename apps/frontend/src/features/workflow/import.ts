@@ -1,6 +1,7 @@
 import { Position, type Edge } from "@vue-flow/core";
 
 import {
+  LEGACY_TASK_PALETTE_ITEM,
   WORKFLOW_EDGE_STYLE,
   WORKFLOW_EDGE_TYPE,
   WORKFLOW_PALETTE_CATEGORIES,
@@ -23,9 +24,10 @@ import {
 } from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 
-const paletteItemById = WORKFLOW_PALETTE_CATEGORIES.flatMap(
-  (category) => category.items,
-).reduce<Record<string, WorkflowPaletteItem>>((accumulator, item) => {
+const paletteItemById = [
+  ...WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items),
+  LEGACY_TASK_PALETTE_ITEM,
+].reduce<Record<string, WorkflowPaletteItem>>((accumulator, item) => {
   accumulator[item.id] = item;
   return accumulator;
 }, {});
