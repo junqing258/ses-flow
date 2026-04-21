@@ -102,6 +102,11 @@
 
 路径 B 统一使用一个插件请求/响应模型，不同 transport 只影响传输方式，不影响语义。
 
+动态节点调用时，runner 必须透传两类链路标识：
+
+- `runId`：工作流运行实例 id，用于定位本次执行、终止、恢复和日志归档。
+- `requestId`：业务请求幂等/联查 id，优先透传 trigger payload 或上游节点上下文中的 `requestId`；首次执行、恢复执行、取消执行都必须保持同一个值。
+
 响应的 `status` 对应 runner 内部 `NodeExecutionResult` 的三种状态（`success`/`waiting`/`failed`）：
 
 ```jsonc
@@ -111,6 +116,7 @@
   "config": { ... },
   "context": {
     "runId": "run-abc",
+    "requestId": "req-001",
     "workflowKey": "wf-001",
     "input": { ... },
     "state": { ... },
@@ -148,12 +154,12 @@
 **终止（Terminate）**
 
 - **process 模式**：`PluginExecutor` 复用 `wait_for_process_output()` 的 `context.should_terminate()` 检测，直接 `kill()` 子进程，插件进程无需感知。
-- **HTTP 模式**：runner 在收到终止信号后，主动调用插件的 `POST /cancel` 接口，让插件有机会清理资源（释放硬件锁、取消外部任务单等）；调用后取消 HTTP 请求。
+- **HTTP 模式**：runner 在收到终止信号后，主动调用插件的 `POST /cancel` 接口，让插件有机会清理资源（释放硬件锁、取消外部任务单等）；调用后取消 HTTP 请求。`/cancel` 请求体同样要携带 `runId`、`requestId`，便于插件侧做幂等清理和审计。
 
 **恢复（Resume）**
 
 - **process 模式**：不需要插件实现额外接口。插件声明 `status: "waiting"` 后 runner 挂起工作流；外部回调到达时，runner 重新 spawn 插件进程，`stdin` 中 `resumeSignal` 携带回调 payload，插件通过判断 `resumeSignal` 是否为 `null` 区分首次执行和恢复。
-- **HTTP 模式**：外部系统调用插件的 `POST /resume`，由**插件主动通知 runner** 继续（携带回调结果），而非外部系统直接回调 runner。这样回调路由逻辑封装在插件内部，runner 无需暴露额外 webhook 端点。
+- **HTTP 模式**：外部系统调用插件的 `POST /resume`，由**插件主动通知 runner** 继续（携带回调结果），而非外部系统直接回调 runner。这样回调路由逻辑封装在插件内部，runner 无需暴露额外 webhook 端点。`/resume` 请求体必须继续透传首次执行时的 `runId`、`requestId`，确保恢复链路能和原始业务请求关联。
 
 ```rust
 // process 模式插件示例
@@ -211,6 +217,7 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 ```json
 {
   "runId": "run-abc",
+  "requestId": "req-001",
   "nodeId": "node-123",
   "reason": "workflow_terminated"
 }
@@ -221,6 +228,7 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 ```json
 {
   "runId": "run-abc",
+  "requestId": "req-001",
   "nodeId": "node-123",
   "signal": {
     "type": "barcode_scanned",
@@ -229,7 +237,7 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 }
 ```
 
-插件收到 `/resume` 后，向 runner 回调（携带执行结果），runner 继续推进工作流。`supportsCancel` / `supportsResume` 为 `false` 的插件不需要实现对应接口，runner 对 cancel 降级为直接中断，对 resume 不允许该节点挂起。
+插件收到 `/resume` 后，向 runner 回调（携带执行结果），runner 继续推进工作流。`supportsCancel` / `supportsResume` 为 `false` 的插件不需要实现对应接口，runner 对 cancel 降级为直接中断，对 resume 不允许该节点挂起。对动态节点的任一次调用（`/execute`、`/cancel`、`/resume` 或 process `stdin`）都要求至少带上同一组 `runId` + `requestId`。
 
 #### 服务发现策略
 
@@ -275,6 +283,8 @@ impl NodeExecutor for PluginExecutor {
 
     async fn execute(&self, node: &NodeDefinition, ctx: &ExecutionContext) -> Result<Value> {
         let input = build_plugin_input(node, ctx);
+        // build_plugin_input 负责从 ExecutionContext 中提取 runId/requestId
+        // 并透传给 HTTP body 或 process stdin。
         match self.transport {
             PluginTransport::Http { endpoint } => call_http_plugin(endpoint, input).await,
             PluginTransport::Process { binary } => call_process_plugin(binary, input).await,
