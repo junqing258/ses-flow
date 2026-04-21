@@ -15,7 +15,7 @@
     </div>
 
     <div
-      class="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 sm:px-8 lg:px-12"
+      class="relative mx-auto flex min-h-screen w-full flex-col max-w-7xl px-4 pb-20 pt-6 sm:px-8 lg:px-12"
     >
       <header class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">

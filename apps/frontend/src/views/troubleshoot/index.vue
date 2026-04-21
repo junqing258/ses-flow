@@ -2,7 +2,7 @@
   <section
     class="min-h-screen bg-slate-50 text-slate-900"
   >
-    <div class="mx-auto max-w-7xl px-5 py-6 sm:px-8 lg:px-10">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-8 lg:px-10">
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p
