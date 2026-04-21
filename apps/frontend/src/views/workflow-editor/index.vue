@@ -128,22 +128,7 @@
       </div>
 
       <div class="flex items-center gap-1.5 pointer-events-auto">
-        <!-- 更多菜单 -->
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-        >
-          <MoreHorizontal class="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-          @click="openAiProviderConfigDialog"
-        >
-          <Settings class="h-4 w-4" />
-        </Button>
+        <WorkflowHeaderActionButtons appearance="compact" />
         <Button
           variant="ghost"
           class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
@@ -839,7 +824,6 @@ import {
   Play,
   Plus,
   Redo2,
-  Settings,
   Square,
   Trash2,
   Undo2,
@@ -848,10 +832,10 @@ import {
 import { type LocationQueryValue, useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
-import { useAiProviderConfigDialog } from "@/composables/useAiProviderConfigDialog";
 import WorkflowAiChatPanel from "@/components/workflow/WorkflowAiChatPanel.vue";
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
+import WorkflowHeaderActionButtons from "@/components/workflow/WorkflowHeaderActionButtons.vue";
 import WorkflowRunTimelineDetail from "@/components/workflow/WorkflowRunTimelineDetail.vue";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import WorkflowTerminalNode from "@/components/workflow/WorkflowTerminalNode.vue";
@@ -939,7 +923,6 @@ const CANVAS_LEFT_PADDING_MAX_RATIO = 0.45;
 
 const route = useRoute();
 const router = useRouter();
-const { openAiProviderConfigDialog } = useAiProviderConfigDialog();
 const initialEditorState = createInitialWorkflowEditorState();
 const nodes = ref<WorkflowFlowNode[]>(initialEditorState.nodes);
 const edges = ref<Edge[]>(initialEditorState.edges);

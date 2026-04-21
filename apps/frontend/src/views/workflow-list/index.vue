@@ -37,30 +37,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <Button
-            variant="outline"
-            class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
-            @click="openTroubleshootWorkbench"
-          >
-            <Search class="h-4 w-4" />
-            排障工作台
-          </Button>
-          <Button
-            variant="outline"
-            class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
-            @click="openAiProviderConfigDialog"
-          >
-            <Wand2 class="h-4 w-4" />
-            AI 供应商
-          </Button>
-          <Button
-            variant="outline"
-            class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
-            @click="openHelp"
-          >
-            <BookOpen class="h-4 w-4" />
-            帮助文档
-          </Button>
+          <WorkflowHeaderActionButtons appearance="pill" />
           <div
             class="hidden rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:flex"
           >
@@ -300,12 +277,10 @@
 import dayjs from "dayjs";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import {
-  BookOpen,
   Clock3,
   GitBranchPlus,
   LoaderCircle,
   Plus,
-  Search,
   Sparkles,
   Wand2,
   Workflow,
@@ -313,7 +288,7 @@ import {
 import { useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 
-import { useAiProviderConfigDialog } from "@/composables/useAiProviderConfigDialog";
+import WorkflowHeaderActionButtons from "@/components/workflow/WorkflowHeaderActionButtons.vue";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -350,7 +325,6 @@ interface WorkflowTemplateItem {
 }
 
 const router = useRouter();
-const { openAiProviderConfigDialog } = useAiProviderConfigDialog();
 const activeTab = ref<WorkflowTabId>("drafts");
 const workflowSummaries = ref<WorkflowSummary[]>([]);
 const isLoadingWorkflows = ref(false);
@@ -475,14 +449,6 @@ onBeforeUnmount(() => {
 
 const handleCreate = () => {
   void router.push({ name: "workflow-new" });
-};
-
-const openTroubleshootWorkbench = () => {
-  void router.push({ name: "troubleshoot-workbench" });
-};
-
-const openHelp = () => {
-  void router.push({ path: "/help" });
 };
 
 const handleRefreshCatalog = async () => {
