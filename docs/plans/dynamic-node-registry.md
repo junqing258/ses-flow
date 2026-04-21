@@ -100,40 +100,82 @@
 
 #### 插件调用协议
 
-路径 B 统一使用一个插件请求/响应模型，不同 transport 只影响传输方式，不影响语义：
+路径 B 统一使用一个插件请求/响应模型，不同 transport 只影响传输方式，不影响语义。
+
+响应的 `status` 对应 runner 内部 `NodeExecutionResult` 的三种状态（`success`/`waiting`/`failed`）：
 
 ```jsonc
 // runner → plugin（HTTP body 或 stdin）
 {
   "nodeId": "node-123",
-  "config": { ... },          // 面板配置，来自 configSchema
-  "inputMapping": { ... },
+  "config": { ... },
   "context": {
     "runId": "run-abc",
     "workflowKey": "wf-001",
     "input": { ... },
     "state": { ... },
-    "env": { ... }
+    "env": { ... },
+    "resumeSignal": null   // 首次执行为 null；恢复时携带外部回调的 payload
   }
 }
 
 // plugin → runner（HTTP response body 或 stdout）
 {
-  "output": { ... },          // 节点输出，进入后续 outputMapping
-  "logs": [
-    { "level": "info", "message": "扫描成功", "ts": 1234567890 }
-  ],
-  "error": null
+  "status": "success" | "waiting" | "failed",  // 必填
+
+  // status = "success"
+  "output": { ... },
+  "statePatch": { ... },   // 可选，更新工作流 state
+  "logs": [ { "level": "info", "message": "..." } ],
+
+  // status = "waiting" — runner 将工作流挂起，等待外部回调
+  // 插件需声明等待什么事件，runner 持久化 WorkflowRunSnapshot 后暂停
+  // 收到匹配回调后，runner 重新调用插件，resumeSignal 携带回调数据
+  "waitSignal": {
+    "type": "barcode_scanned",
+    "payload": { "taskId": "t-001" }
+  },
+
+  // status = "failed"
+  "error": {
+    "code": "SCAN_TIMEOUT",
+    "message": "扫描超时",
+    "retryable": true
+  }
+}
+```
+
+**终止（Terminate）**
+
+- **process 模式**：`PluginExecutor` 复用 `wait_for_process_output()` 的 `context.should_terminate()` 检测，直接 `kill()` 子进程，插件进程无需感知。
+- **HTTP 模式**：runner 在收到终止信号后，主动调用插件的 `POST /cancel` 接口，让插件有机会清理资源（释放硬件锁、取消外部任务单等）；调用后取消 HTTP 请求。
+
+**恢复（Resume）**
+
+- **process 模式**：不需要插件实现额外接口。插件声明 `status: "waiting"` 后 runner 挂起工作流；外部回调到达时，runner 重新 spawn 插件进程，`stdin` 中 `resumeSignal` 携带回调 payload，插件通过判断 `resumeSignal` 是否为 `null` 区分首次执行和恢复。
+- **HTTP 模式**：外部系统调用插件的 `POST /resume`，由**插件主动通知 runner** 继续（携带回调结果），而非外部系统直接回调 runner。这样回调路由逻辑封装在插件内部，runner 无需暴露额外 webhook 端点。
+
+```rust
+// process 模式插件示例
+fn execute(&self, req: PluginRequest) -> PluginResponse {
+    if let Some(signal) = req.context.resume_signal {
+        return PluginResponse::success(signal.payload);
+    }
+    PluginResponse::waiting("barcode_scanned", json!({ "taskId": "t-001" }))
 }
 ```
 
 #### HTTP 插件标准接口
 
-首期不做 runner 侧的“自动扫网段发现服务”，而采用**注册中心 + 标准插件 API**的模式。每个 HTTP 插件至少暴露 3 个固定接口：
+首期不做 runner 侧的"自动扫网段发现服务"，而采用**注册中心 + 标准插件 API**的模式。每个 HTTP 插件暴露 **5 个固定接口**：
 
-- `GET /descriptor`：返回插件自描述，用于注册校验、版本比对和管理台展示
-- `GET /health`：健康检查，用于平台接入校验和告警
-- `POST /execute`：主执行入口，runner 调用该接口执行业务逻辑
+| 接口 | 调用方 | 说明 |
+|---|---|---|
+| `GET /descriptor` | 平台注册时 | 返回插件自描述，用于协议校验和管理台展示 |
+| `GET /health` | 平台 / runner | 健康检查 |
+| `POST /execute` | runner | 主执行入口，首次执行和恢复执行复用此接口 |
+| `POST /cancel` | runner | 工作流被终止时调用，插件清理资源 |
+| `POST /resume` | 外部系统 | 外部回调入口，插件收到后主动通知 runner 继续 |
 
 `GET /descriptor` 返回示例：
 
@@ -145,21 +187,49 @@
   "displayName": "条码扫描",
   "transport": "http",
   "configSchema": { ... },
-  "timeoutMs": 5000
+  "timeoutMs": 5000,
+  "supportsCancel": true,
+  "supportsResume": true
 }
 ```
 
-`POST /execute` 返回示例：
+`POST /execute` 响应示例（挂起等待外部回调）：
 
 ```json
 {
-  "output": { "barcode": "BC-001" },
-  "logs": [
-    { "level": "info", "message": "scan completed" }
-  ],
-  "error": null
+  "status": "waiting",
+  "waitSignal": {
+    "type": "barcode_scanned",
+    "payload": { "taskId": "t-001" }
+  },
+  "logs": [{ "level": "info", "message": "等待扫码中" }]
 }
 ```
+
+`POST /cancel` 请求体：
+
+```json
+{
+  "runId": "run-abc",
+  "nodeId": "node-123",
+  "reason": "workflow_terminated"
+}
+```
+
+`POST /resume` 请求体（外部系统 → 插件）：
+
+```json
+{
+  "runId": "run-abc",
+  "nodeId": "node-123",
+  "signal": {
+    "type": "barcode_scanned",
+    "payload": { "barcode": "1234567890" }
+  }
+}
+```
+
+插件收到 `/resume` 后，向 runner 回调（携带执行结果），runner 继续推进工作流。`supportsCancel` / `supportsResume` 为 `false` 的插件不需要实现对应接口，runner 对 cancel 降级为直接中断，对 resume 不允许该节点挂起。
 
 #### 服务发现策略
 
