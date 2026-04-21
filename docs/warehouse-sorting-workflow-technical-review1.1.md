@@ -69,7 +69,7 @@
 
 需要明确说明的边界：
 
-- `set_state`、`if_else` 已有运行时支持，但前端未作为正式节点默认开放。
+- `set_state`、`if_else` 已有运行时支持，没有调试。
 - `Webhook Trigger` 当前更偏流程定义元数据，不是“配置完即自动生成独立 HTTP 路由”。
 - AI 模式当前以“外部 Agent + 编辑会话 + Web 展示”的协作方式为主，尚未集成页面内原生对话式编辑。
 
@@ -192,7 +192,7 @@
 - catalog store：保存 workflow 定义、workspace 信息。
 - edit session store：保存 AI 编辑会话草稿和同步状态。
 
-### 7.3 当前架构的优点
+### 7.3 当前架构的特点
 
 - 实现链路短，适合当前阶段快速迭代。
 - Runner 直接以内嵌库方式接入 Backend，调试和集成成本低。

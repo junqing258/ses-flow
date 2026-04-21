@@ -1,0 +1,93 @@
+@startuml
+title SES Flow 当前项目架构
+
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam packageStyle rectangle
+skinparam ArrowColor #4B5563
+skinparam PackageBorderColor #9CA3AF
+skinparam PackageBackgroundColor #F8FAFC
+skinparam ComponentBorderColor #475569
+skinparam ComponentBackgroundColor #FFFFFF
+skinparam DatabaseBorderColor #0F766E
+skinparam DatabaseBackgroundColor #ECFEFF
+skinparam NoteBackgroundColor #FFF7ED
+skinparam NoteBorderColor #FDBA74
+
+actor "用户 / 开发者" as User
+
+rectangle "浏览器" as Browser {
+  component "Frontend SPA\napps/frontend\nVue 3 + Vite" as Frontend
+}
+
+package "SES Flow Monorepo\npnpm workspace + just" {
+  package "apps/backend" {
+    component "Backend Web Service\nRust + Axum\n:6302" as Backend
+    component "Static Views Service\n/ -> /views/\nServeDir(dist)" as Views
+  }
+
+  package "apps/runner" {
+    component "WorkflowApp\n嵌入 backend 进程" as WorkflowApp
+    component "Workflow Engine\nExecutorRegistry" as Engine
+    component "Node Executors\nstart / fetch / if_else / switch\nset_state / respond / wait / task\nsub_workflow / shell / code / end" as Executors
+    component "Store Abstractions\ncatalog / run / edit session" as Stores
+  }
+
+  package "apps/ai-gateway" {
+    component "AI Gateway\nNode + Express\n:6307" as AiGateway
+    component "Claude Session Service\nthread state / SSE / permissions" as AiSession
+  }
+
+  package "packages/scheme" {
+    component "@ses/scheme\n共享 schema 包\n当前为轻量占位" as Scheme
+  }
+}
+
+database "PostgreSQL\nworkflow catalog / runs /\nedit sessions / snapshots" as Postgres
+component "Claude Agent SDK\n受限工具调用" as ClaudeSdk
+component "Shell 子进程\nshell executor" as ShellProc
+component "Node 子进程\ncode executor" as NodeProc
+
+User --> Frontend : 编辑工作流\n查看运行结果
+Frontend --> Backend : HTTP /runner-api\nworkflow CRUD / run / SSE
+Frontend --> Backend : HTTP /api/ai/*\nAI 协作消息 / 事件流
+Frontend ..> Scheme : workspace package
+
+Backend --> Views : 托管前端静态资源
+Browser --> Views : GET /views/
+Browser --> Frontend : 加载 SPA
+
+Backend --> AiGateway : 反向代理 /api/ai/*
+AiGateway --> AiSession : 管理会话与事件流
+AiSession --> ClaudeSdk : 调用 Claude Agent SDK
+AiGateway --> Backend : 访问 /runner-api\nedit session / preview sync
+
+Backend --> WorkflowApp : 调用 runner 库
+WorkflowApp --> Engine : 执行 / 恢复 / 终止工作流
+Engine --> Executors : 按节点类型分发
+WorkflowApp --> Stores : 统一读写抽象
+Stores --> Postgres : PostgreSQL 实现
+Engine --> ShellProc : shell 节点时按需拉起
+Engine --> NodeProc : code 节点时按需拉起
+
+note right of Backend
+对外统一入口：
+- /views 静态页面
+- /runner-api REST + SSE
+- /api/ai 反向代理到 AI Gateway
+end note
+
+note bottom of WorkflowApp
+runner 不是独立服务，
+而是作为 Rust 库直接运行在 backend 进程内。
+end note
+
+note bottom of AiGateway
+前端开发态先到 backend，
+再由 backend 转发到 ai-gateway；
+生产态也保持同源入口。
+end note
+
+@enduml
