@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::Utc;
 use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
@@ -136,19 +137,46 @@ impl WorkflowEngine {
         if waiting_node.node_type == NodeType::SubWorkflow {
             return self.resume_sub_workflow(definition, waiting_node, snapshot, resume_input);
         }
-        self.validate_resume_input(waiting_node, &snapshot, &resume_input)?;
+        let started_at = Utc::now();
+        if let Err(error) = self.validate_resume_input(waiting_node, &snapshot, &resume_input) {
+            let summary = failed_summary(
+                snapshot.run_id,
+                snapshot.workflow_key,
+                snapshot.workflow_version,
+                Some(waiting_node.id.clone()),
+                snapshot.state,
+                snapshot.timeline,
+                Some(build_node_record_from_error(
+                    waiting_node.id.clone(),
+                    waiting_node.node_type,
+                    resume_input.clone(),
+                    error,
+                    started_at,
+                    Utc::now(),
+                    Vec::new(),
+                )),
+                snapshot.last_signal,
+            );
+            self.emit_summary(&summary);
+            return Ok(summary);
+        }
         let outgoing = definition.transitions_from(&waiting_node.id);
         let next = self.resolve_transition(&outgoing, None)?;
         let mut timeline = snapshot.timeline.clone();
-        timeline.push(NodeExecutionRecord {
-            node_id: waiting_node.id.clone(),
-            node_type: waiting_node.node_type,
-            status: ExecutionStatus::Success,
-            output: resume_input.clone(),
-            state_patch: Value::Null,
-            branch_key: None,
-            logs: Vec::new(),
-        });
+        timeline.push(build_node_record(
+            waiting_node.id.clone(),
+            waiting_node.node_type,
+            ExecutionStatus::Success,
+            resume_input.clone(),
+            resume_input.clone(),
+            Value::Null,
+            None,
+            started_at,
+            Utc::now(),
+            None,
+            None,
+            Vec::new(),
+        ));
 
         self.execute_from(
             definition,
@@ -321,7 +349,7 @@ impl WorkflowEngine {
             Arc::new(NoopWorkflowRunObserver),
             self.controller.clone(),
         );
-        let child_summary = child_engine.resume(&child_definition, child_snapshot, resume_input)?;
+        let child_summary = child_engine.resume(&child_definition, child_snapshot, resume_input.clone())?;
         let child_output = sub_workflow_summary_output(&child_summary);
 
         let mut state = snapshot.state.clone();
@@ -330,20 +358,37 @@ impl WorkflowEngine {
         }
 
         let mut timeline = snapshot.timeline.clone();
-        timeline.push(NodeExecutionRecord {
-            node_id: waiting_node.id.clone(),
-            node_type: waiting_node.node_type,
-            status: map_workflow_status_to_execution(&child_summary.status),
-            output: child_output.clone(),
-            state_patch: waiting_node
-                .config
-                .get("statePath")
-                .and_then(Value::as_str)
-                .map(|path| nested_state_patch(path, child_output.clone()))
-                .unwrap_or(Value::Null),
-            branch_key: None,
-            logs: Vec::new(),
-        });
+        let started_at = Utc::now();
+        let state_patch = waiting_node
+            .config
+            .get("statePath")
+            .and_then(Value::as_str)
+            .map(|path| nested_state_patch(path, child_output.clone()))
+            .unwrap_or(Value::Null);
+        let error_code = matches!(child_summary.status, WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated)
+            .then(|| {
+                if matches!(child_summary.status, WorkflowRunStatus::Terminated) {
+                    "SUB_WORKFLOW_TERMINATED".to_string()
+                } else {
+                    "SUB_WORKFLOW_FAILED".to_string()
+                }
+            });
+        let error_detail = matches!(child_summary.status, WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated)
+            .then(|| format!("sub-workflow {} ended with {}", child_summary.workflow_key, status_label(&child_summary.status)));
+        timeline.push(build_node_record(
+            waiting_node.id.clone(),
+            waiting_node.node_type,
+            map_workflow_status_to_execution(&child_summary.status),
+            resume_input.clone(),
+            child_output.clone(),
+            state_patch,
+            None,
+            started_at,
+            Utc::now(),
+            error_code,
+            error_detail,
+            Vec::new(),
+        ));
 
         match child_summary.status {
             WorkflowRunStatus::Running => Err(RunnerError::SubWorkflow(format!(
@@ -506,6 +551,7 @@ impl WorkflowEngine {
                 input = %serde_json::to_string(&current_input).unwrap_or_else(|_| "serialize error".to_string()),
                 "node input before execution",
             );
+            let started_at = Utc::now();
             let result = match executor.execute(node, &context) {
                 Ok(result) => result,
                 Err(RunnerError::Terminated(_)) if self.controller.should_terminate(&run_id) => {
@@ -521,8 +567,30 @@ impl WorkflowEngine {
                     self.emit_summary(&summary);
                     return Ok(summary);
                 }
-                Err(error) => return Err(error),
+                Err(error) => {
+                    let summary = failed_summary(
+                        run_id,
+                        workflow_key,
+                        workflow_version,
+                        Some(node.id.clone()),
+                        state,
+                        timeline,
+                        Some(build_node_record_from_error(
+                            node.id.clone(),
+                            node.node_type,
+                            current_input.clone(),
+                            error,
+                            started_at,
+                            Utc::now(),
+                            Vec::new(),
+                        )),
+                        last_signal,
+                    );
+                    self.emit_summary(&summary);
+                    return Ok(summary);
+                }
             };
+            let ended_at = Utc::now();
             info!(
                 run_id = %run_id,
                 workflow_key = %workflow_key,
@@ -543,15 +611,14 @@ impl WorkflowEngine {
                 merge_state(&mut state, result.state_patch.clone());
             }
 
-            timeline.push(NodeExecutionRecord {
-                node_id: node.id.clone(),
-                node_type: node.node_type,
-                status: result.status.clone(),
-                output: result.output.clone(),
-                state_patch: result.state_patch.clone(),
-                branch_key: result.branch_key.clone(),
-                logs: result.logs.clone(),
-            });
+            timeline.push(build_node_record_from_result(
+                node.id.clone(),
+                node.node_type,
+                current_input.clone(),
+                &result,
+                started_at,
+                ended_at,
+            ));
 
             if self.controller.should_terminate(&run_id) {
                 let summary = self.terminated_summary(
@@ -787,6 +854,162 @@ fn resolve_sub_workflow_definition_from_services(
         "node {} is missing sub-workflow definition/ref",
         node.id
     )))
+}
+
+fn build_node_record(
+    node_id: String,
+    node_type: NodeType,
+    status: ExecutionStatus,
+    input: Value,
+    output: Value,
+    state_patch: Value,
+    branch_key: Option<String>,
+    started_at: chrono::DateTime<Utc>,
+    ended_at: chrono::DateTime<Utc>,
+    error_code: Option<String>,
+    error_detail: Option<String>,
+    logs: Vec<super::runtime::NodeLogRecord>,
+) -> NodeExecutionRecord {
+    NodeExecutionRecord {
+        node_id,
+        node_type,
+        status,
+        input,
+        output,
+        state_patch,
+        branch_key,
+        started_at: Some(started_at),
+        ended_at: Some(ended_at),
+        error_code,
+        error_detail,
+        logs,
+    }
+}
+
+fn build_node_record_from_result(
+    node_id: String,
+    node_type: NodeType,
+    input: Value,
+    result: &super::runtime::NodeExecutionResult,
+    started_at: chrono::DateTime<Utc>,
+    ended_at: chrono::DateTime<Utc>,
+) -> NodeExecutionRecord {
+    build_node_record(
+        node_id,
+        node_type,
+        result.status.clone(),
+        input,
+        result.output.clone(),
+        result.state_patch.clone(),
+        result.branch_key.clone(),
+        started_at,
+        ended_at,
+        result
+            .error
+            .as_ref()
+            .map(|error| normalize_error_code(&error.code)),
+        result.error.as_ref().map(|error| error.message.clone()),
+        result.logs.clone(),
+    )
+}
+
+fn build_node_record_from_error(
+    node_id: String,
+    node_type: NodeType,
+    input: Value,
+    error: RunnerError,
+    started_at: chrono::DateTime<Utc>,
+    ended_at: chrono::DateTime<Utc>,
+    logs: Vec<super::runtime::NodeLogRecord>,
+) -> NodeExecutionRecord {
+    let error_detail = error.to_string();
+    build_node_record(
+        node_id,
+        node_type,
+        ExecutionStatus::Failed,
+        input,
+        Value::Null,
+        Value::Null,
+        None,
+        started_at,
+        ended_at,
+        Some(error_code_for_runner_error(&error)),
+        Some(error_detail),
+        logs,
+    )
+}
+
+fn failed_summary(
+    run_id: String,
+    workflow_key: String,
+    workflow_version: u32,
+    current_node_id: Option<String>,
+    state: Value,
+    mut timeline: Vec<NodeExecutionRecord>,
+    record: Option<NodeExecutionRecord>,
+    last_signal: Option<super::runtime::NextSignal>,
+) -> WorkflowRunSummary {
+    if let Some(record) = record {
+        timeline.push(record);
+    }
+
+    WorkflowRunSummary {
+        run_id,
+        workflow_key,
+        workflow_version,
+        status: WorkflowRunStatus::Failed,
+        current_node_id,
+        state,
+        timeline,
+        last_signal,
+        resume_state: None,
+    }
+}
+
+fn error_code_for_runner_error(error: &RunnerError) -> String {
+    match error {
+        RunnerError::FetchRequest(_) | RunnerError::InvalidFetchConfig(_) => "HTTP_ERROR".to_string(),
+        RunnerError::Validation(_) => "VALIDATION_FAILED".to_string(),
+        RunnerError::ResumeValidation(_) => "RESUME_MISMATCH".to_string(),
+        RunnerError::CodeExecution(message) | RunnerError::ShellExecution(message)
+            if message.to_ascii_lowercase().contains("timeout") =>
+        {
+            "TIMEOUT".to_string()
+        }
+        RunnerError::CodeExecution(_) | RunnerError::ShellExecution(_) => "NODE_EXECUTION_ERROR".to_string(),
+        RunnerError::Terminated(_) => "TERMINATED".to_string(),
+        RunnerError::Transition(_) => "TRANSITION_ERROR".to_string(),
+        RunnerError::SubWorkflow(_) | RunnerError::MissingSubWorkflow(_) => "SUB_WORKFLOW_ERROR".to_string(),
+        RunnerError::MissingExecutor(_) | RunnerError::MissingNode(_) => "WORKFLOW_CONFIG_ERROR".to_string(),
+        RunnerError::Store(_) => "STORE_ERROR".to_string(),
+        RunnerError::Io(_) | RunnerError::Json(_) => "INTERNAL_ERROR".to_string(),
+        RunnerError::MissingTaskHandler(_) => "TASK_HANDLER_MISSING".to_string(),
+        RunnerError::InvalidShellConfig(_) => "VALIDATION_FAILED".to_string(),
+        RunnerError::MissingRunSnapshot(_) => "MISSING_SNAPSHOT".to_string(),
+    }
+}
+
+fn normalize_error_code(raw: &str) -> String {
+    match raw.trim().to_ascii_uppercase().as_str() {
+        "SUB_WORKFLOW_FAILED" => "SUB_WORKFLOW_FAILED".to_string(),
+        "SUB_WORKFLOW_TERMINATED" => "SUB_WORKFLOW_TERMINATED".to_string(),
+        "HTTP_ERROR" => "HTTP_ERROR".to_string(),
+        "TIMEOUT" => "TIMEOUT".to_string(),
+        "VALIDATION_FAILED" => "VALIDATION_FAILED".to_string(),
+        "RESUME_MISMATCH" => "RESUME_MISMATCH".to_string(),
+        "TRANSITION_ERROR" => "TRANSITION_ERROR".to_string(),
+        value => value.replace(['-', ' '], "_"),
+    }
+}
+
+fn status_label(status: &WorkflowRunStatus) -> &'static str {
+    match status {
+        WorkflowRunStatus::Running => "running",
+        WorkflowRunStatus::Completed => "completed",
+        WorkflowRunStatus::Waiting => "waiting",
+        WorkflowRunStatus::Failed => "failed",
+        WorkflowRunStatus::Terminated => "terminated",
+    }
 }
 
 fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStatus {

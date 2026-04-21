@@ -71,6 +71,12 @@ export interface WorkflowExecutionAccepted {
 
 export interface WorkflowRunTimelineItem {
   branchKey?: string;
+  durationMs?: number;
+  endedAt?: string;
+  errorCode?: string | null;
+  errorDetail?: string | null;
+  input: unknown;
+  inputSummary?: string | null;
   logs?: Array<{
     level: string;
     message: string;
@@ -78,6 +84,9 @@ export interface WorkflowRunTimelineItem {
   nodeId: string;
   nodeType: string;
   output: unknown;
+  outputSummary?: string | null;
+  recoveryHint?: string | null;
+  startedAt?: string;
   statePatch: unknown;
   status: string;
 }
@@ -92,6 +101,29 @@ export interface WorkflowRunSummary {
   timeline: WorkflowRunTimelineItem[];
   workflowKey: string;
   workflowVersion: number;
+}
+
+export interface WorkflowRunSearchItem {
+  durationMs?: number;
+  endedAt?: string;
+  orderNo?: string;
+  requestId?: string;
+  runId: string;
+  startedAt: string;
+  status: WorkflowRunStatus;
+  waveNo?: string;
+  workflowKey: string;
+}
+
+export interface WorkflowRunSearchResponse {
+  items: WorkflowRunSearchItem[];
+  total: number;
+}
+
+export interface WorkflowRunManualPatchRequest {
+  nodeId: string;
+  note: string;
+  operator: string;
 }
 
 export interface RunnerWorkflowDefinition {
@@ -791,6 +823,44 @@ export const fetchWorkflowRunSummary = async (
   return parseRunnerResponse<WorkflowRunSummary>(response, "获取运行状态失败");
 };
 
+export const searchWorkflowRuns = async (params: {
+  orderNo?: string;
+  page?: number;
+  pageSize?: number;
+  requestId?: string;
+  runId?: string;
+  waveNo?: string;
+}): Promise<WorkflowRunSearchResponse> => {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (typeof value === "string" && value.trim()) {
+      searchParams.set(key, value.trim());
+      return;
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      searchParams.set(key, String(value));
+    }
+  });
+
+  let response: Response;
+
+  try {
+    const query = searchParams.toString();
+    response = await sendRequest(
+      `${RUNNER_BASE_URL}/runs/search${query ? `?${query}` : ""}`,
+    );
+  } catch {
+    throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
+  }
+
+  return parseRunnerResponse<WorkflowRunSearchResponse>(
+    response,
+    "搜索运行记录失败",
+  );
+};
+
 export const terminateWorkflowRun = async (
   runId: string,
 ): Promise<WorkflowRunSummary> => {
@@ -810,5 +880,32 @@ export const terminateWorkflowRun = async (
   return parseRunnerResponse<WorkflowRunSummary>(
     response,
     "终止工作流运行失败",
+  );
+};
+
+export const manualPatchWorkflowRun = async (
+  runId: string,
+  request: WorkflowRunManualPatchRequest,
+): Promise<WorkflowRunSummary> => {
+  let response: Response;
+
+  try {
+    response = await sendRequest(
+      `${RUNNER_BASE_URL}/runs/${encodeURIComponent(runId)}/manual-patch`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+      },
+    );
+  } catch {
+    throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
+  }
+
+  return parseRunnerResponse<WorkflowRunSummary>(
+    response,
+    "提交人工补录失败",
   );
 };

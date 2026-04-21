@@ -1,11 +1,13 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use tracing::info;
 
-use super::run_service::{self, ExecuteWorkflowRequest, ResumeWorkflowRequest, WorkflowExecutionAccepted};
+use super::run_service::{
+    self, ExecuteWorkflowRequest, ManualPatchRequest, ResumeWorkflowRequest, RunSearchRequest, WorkflowExecutionAccepted,
+    WorkflowRunSearchResponse, WorkflowRunSummaryResponse,
+};
 use crate::modules::{ApiError, ApiState, WorkflowEventStream};
-use runner::core::runtime::WorkflowRunSummary;
 
 pub async fn execute_workflow(
     State(state): State<ApiState>,
@@ -28,8 +30,15 @@ pub async fn resume_workflow(
 pub async fn get_run_summary(
     State(state): State<ApiState>,
     Path(run_id): Path<String>,
-) -> Result<Json<WorkflowRunSummary>, ApiError> {
+) -> Result<Json<WorkflowRunSummaryResponse>, ApiError> {
     Ok(Json(run_service::get_run_summary(&state, &run_id)?))
+}
+
+pub async fn search_runs(
+    State(state): State<ApiState>,
+    Query(query): Query<RunSearchRequest>,
+) -> Result<Json<WorkflowRunSearchResponse>, ApiError> {
+    Ok(Json(run_service::search_runs(&state, query)?))
 }
 
 pub async fn subscribe_run_events(
@@ -42,7 +51,15 @@ pub async fn subscribe_run_events(
 pub async fn terminate_workflow(
     State(state): State<ApiState>,
     Path(run_id): Path<String>,
-) -> Result<Json<WorkflowRunSummary>, ApiError> {
+) -> Result<Json<WorkflowRunSummaryResponse>, ApiError> {
     info!(run_id = %run_id, "terminating workflow run");
     Ok(Json(run_service::terminate_workflow(&state, &run_id)?))
+}
+
+pub async fn manual_patch_run(
+    State(state): State<ApiState>,
+    Path(run_id): Path<String>,
+    Json(request): Json<ManualPatchRequest>,
+) -> Result<Json<WorkflowRunSummaryResponse>, ApiError> {
+    Ok(Json(run_service::manual_patch_run(&state, &run_id, request)?))
 }

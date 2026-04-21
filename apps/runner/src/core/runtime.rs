@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -211,11 +212,21 @@ pub struct NodeExecutionRecord {
     #[serde(rename = "nodeType")]
     pub node_type: NodeType,
     pub status: ExecutionStatus,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub input: Value,
     pub output: Value,
     #[serde(rename = "statePatch")]
     pub state_patch: Value,
     #[serde(rename = "branchKey", skip_serializing_if = "Option::is_none")]
     pub branch_key: Option<String>,
+    #[serde(rename = "startedAt", skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
+    #[serde(rename = "endedAt", skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<DateTime<Utc>>,
+    #[serde(rename = "errorCode", skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(rename = "errorDetail", skip_serializing_if = "Option::is_none")]
+    pub error_detail: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub logs: Vec<NodeLogRecord>,
 }

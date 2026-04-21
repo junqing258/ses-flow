@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
-use sqlx::{Row, postgres::PgPool};
+use sqlx::{QueryBuilder, Row, postgres::PgPool};
 
 use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary};
 use crate::error::RunnerError;
 
-use super::{WorkflowRunRecord, WorkflowRunStore};
+use super::{WorkflowRunLookup, WorkflowRunRecord, WorkflowRunSearchQuery, WorkflowRunSearchResult, WorkflowRunStore};
 
 pub struct PostgresRunStore {
     pool: PgPool,
@@ -81,6 +81,54 @@ impl PostgresRunStore {
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_key ON workflow_runs(workflow_key)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            ALTER TABLE workflow_runs
+                ADD COLUMN IF NOT EXISTS order_no TEXT,
+                ADD COLUMN IF NOT EXISTS wave_no TEXT,
+                ADD COLUMN IF NOT EXISTS request_id TEXT
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to alter workflow_runs table: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_workflow_runs_order_no ON workflow_runs(order_no)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_workflow_runs_wave_no ON workflow_runs(wave_no)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_workflow_runs_request_id ON workflow_runs(request_id)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_workflow_runs_timeline_gin ON workflow_runs USING GIN (timeline)
             "#,
         )
         .execute(&self.pool)
@@ -396,7 +444,8 @@ impl WorkflowRunStore for PostgresRunStore {
             tokio::runtime::Handle::current().block_on(async move {
                 let rows = sqlx::query(
                     r#"
-                    SELECT run_id, workflow_key, workflow_version, status, current_node_id, created_at, updated_at
+                    SELECT run_id, workflow_key, workflow_version, status, current_node_id,
+                           order_no, wave_no, request_id, created_at, updated_at
                     FROM workflow_runs
                     WHERE workflow_key = $1 AND workflow_version = $2
                     ORDER BY updated_at DESC, created_at DESC
@@ -432,6 +481,15 @@ impl WorkflowRunStore for PostgresRunStore {
                             current_node_id: row
                                 .try_get("current_node_id")
                                 .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?,
+                            order_no: row
+                                .try_get("order_no")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get order_no: {}", e)))?,
+                            wave_no: row
+                                .try_get("wave_no")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get wave_no: {}", e)))?,
+                            request_id: row
+                                .try_get("request_id")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get request_id: {}", e)))?,
                             created_at: row
                                 .try_get::<DateTime<Utc>, _>("created_at")
                                 .map_err(|e| RunnerError::Store(format!("Failed to get created_at: {}", e)))?,
@@ -441,6 +499,144 @@ impl WorkflowRunStore for PostgresRunStore {
                         })
                     })
                     .collect()
+            })
+        })
+    }
+
+    fn register_run_lookup(&self, lookup: WorkflowRunLookup) -> Result<(), RunnerError> {
+        let pool = self.pool.clone();
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                sqlx::query(
+                    r#"
+                    UPDATE workflow_runs
+                    SET order_no = $2,
+                        wave_no = $3,
+                        request_id = $4,
+                        updated_at = NOW()
+                    WHERE run_id = $1
+                    "#,
+                )
+                .bind(&lookup.run_id)
+                .bind(&lookup.order_no)
+                .bind(&lookup.wave_no)
+                .bind(&lookup.request_id)
+                .execute(&pool)
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to register run lookup: {}", e)))?;
+
+                Ok(())
+            })
+        })
+    }
+
+    fn search_runs(&self, query: &WorkflowRunSearchQuery) -> Result<WorkflowRunSearchResult, RunnerError> {
+        let pool = self.pool.clone();
+        let query = query.clone();
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let mut count_builder = QueryBuilder::new("SELECT COUNT(*) AS total FROM workflow_runs WHERE 1=1");
+                let mut select_builder = QueryBuilder::new(
+                    "SELECT run_id, workflow_key, workflow_version, status, current_node_id, order_no, wave_no, request_id, created_at, updated_at FROM workflow_runs WHERE 1=1",
+                );
+
+                if let Some(run_id) = query.run_id.as_deref() {
+                    let pattern = format!("%{run_id}%");
+                    count_builder.push(" AND run_id ILIKE ").push_bind(pattern.clone());
+                    select_builder.push(" AND run_id ILIKE ").push_bind(pattern);
+                }
+
+                if let Some(order_no) = query.order_no.as_deref() {
+                    let pattern = format!("%{order_no}%");
+                    count_builder.push(" AND order_no ILIKE ").push_bind(pattern.clone());
+                    select_builder.push(" AND order_no ILIKE ").push_bind(pattern);
+                }
+
+                if let Some(wave_no) = query.wave_no.as_deref() {
+                    let pattern = format!("%{wave_no}%");
+                    count_builder.push(" AND wave_no ILIKE ").push_bind(pattern.clone());
+                    select_builder.push(" AND wave_no ILIKE ").push_bind(pattern);
+                }
+
+                if let Some(request_id) = query.request_id.as_deref() {
+                    let pattern = format!("%{request_id}%");
+                    count_builder.push(" AND request_id ILIKE ").push_bind(pattern.clone());
+                    select_builder.push(" AND request_id ILIKE ").push_bind(pattern);
+                }
+
+                let total_row = count_builder
+                    .build()
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to count workflow runs: {}", e)))?;
+                let total: i64 = total_row
+                    .try_get("total")
+                    .map_err(|e| RunnerError::Store(format!("Failed to get total: {}", e)))?;
+
+                let page = query.page.max(1) as i64;
+                let page_size = query.page_size.max(1) as i64;
+                let offset = (page - 1) * page_size;
+                select_builder
+                    .push(" ORDER BY updated_at DESC, created_at DESC LIMIT ")
+                    .push_bind(page_size)
+                    .push(" OFFSET ")
+                    .push_bind(offset);
+
+                let rows = select_builder
+                    .build()
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to search workflow runs: {}", e)))?;
+
+                let items = rows
+                    .into_iter()
+                    .map(|row| {
+                        let status_str: String = row
+                            .try_get("status")
+                            .map_err(|e| RunnerError::Store(format!("Failed to get status: {}", e)))?;
+                        let status: WorkflowRunStatus = serde_json::from_str(&status_str)
+                            .map_err(|e| RunnerError::Store(format!("Failed to deserialize status: {}", e)))?;
+
+                        Ok(WorkflowRunRecord {
+                            run_id: row
+                                .try_get("run_id")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get run_id: {}", e)))?,
+                            workflow_key: row
+                                .try_get("workflow_key")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get workflow_key: {}", e)))?,
+                            workflow_version: row
+                                .try_get::<i32, _>("workflow_version")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get workflow_version: {}", e)))?
+                                as u32,
+                            status,
+                            current_node_id: row
+                                .try_get("current_node_id")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?,
+                            order_no: row
+                                .try_get("order_no")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get order_no: {}", e)))?,
+                            wave_no: row
+                                .try_get("wave_no")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get wave_no: {}", e)))?,
+                            request_id: row
+                                .try_get("request_id")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get request_id: {}", e)))?,
+                            created_at: row
+                                .try_get::<DateTime<Utc>, _>("created_at")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get created_at: {}", e)))?,
+                            updated_at: row
+                                .try_get::<DateTime<Utc>, _>("updated_at")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get updated_at: {}", e)))?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, RunnerError>>()?;
+
+                Ok(WorkflowRunSearchResult {
+                    items,
+                    total: total.max(0) as usize,
+                })
             })
         })
     }

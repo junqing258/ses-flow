@@ -1461,6 +1461,161 @@ async fn executes_sub_workflow_references_from_registered_workflow_ids() {
     );
 }
 
+#[tokio::test]
+async fn searches_runs_by_request_id_and_order_no() {
+    let app = build_app();
+    let workflow_id = upload_workflow(
+        app.clone(),
+        json!({
+            "meta": {
+                "key": "searchable-flow",
+                "name": "Searchable Flow",
+                "version": 1
+            },
+            "trigger": {
+                "type": "manual"
+            },
+            "inputSchema": {
+                "type": "object"
+            },
+            "nodes": [
+                { "id": "start_1", "type": "start", "name": "Start" },
+                { "id": "end_1", "type": "end", "name": "End" }
+            ],
+            "transitions": [
+                { "from": "start_1", "to": "end_1" }
+            ],
+            "policies": {}
+        }),
+    )
+    .await;
+
+    let run_id = start_run(
+        app.clone(),
+        &workflow_id,
+        json!({
+            "headers": {
+                "requestId": "req-search-1"
+            },
+            "body": {
+                "orderNo": "SO-SEARCH-1",
+                "waveNo": "WAVE-SEARCH-1"
+            }
+        }),
+    )
+    .await;
+
+    let _summary = wait_for_terminal_status(app.clone(), &run_id).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/runs/search?requestId=req-search-1&orderNo=SO-SEARCH-1"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("response body should be valid json");
+
+    assert_eq!(payload["total"], json!(1));
+    assert_eq!(payload["items"][0]["runId"], json!(run_id));
+    assert_eq!(payload["items"][0]["requestId"], json!("req-search-1"));
+    assert_eq!(payload["items"][0]["orderNo"], json!("SO-SEARCH-1"));
+    assert_eq!(payload["items"][0]["waveNo"], json!("WAVE-SEARCH-1"));
+}
+
+#[tokio::test]
+async fn appends_manual_patch_note_to_run_timeline() {
+    let app = build_app();
+    let workflow_id = upload_workflow(
+        app.clone(),
+        json!({
+            "meta": {
+                "key": "manual-patch-flow",
+                "name": "Manual Patch Flow",
+                "version": 1
+            },
+            "trigger": {
+                "type": "manual"
+            },
+            "inputSchema": {
+                "type": "object"
+            },
+            "nodes": [
+                { "id": "start_1", "type": "start", "name": "Start" },
+                { "id": "end_1", "type": "end", "name": "End" }
+            ],
+            "transitions": [
+                { "from": "start_1", "to": "end_1" }
+            ],
+            "policies": {}
+        }),
+    )
+    .await;
+
+    let run_id = start_run(
+        app.clone(),
+        &workflow_id,
+        json!({
+            "body": {
+                "orderNo": "SO-MANUAL-1"
+            }
+        }),
+    )
+    .await;
+
+    let _summary = wait_for_terminal_status(app.clone(), &run_id).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api_path(&format!("/runs/{run_id}/manual-patch")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "nodeId": "end_1",
+                        "note": "人工确认已处理",
+                        "operator": "张工"
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("response body should be valid json");
+
+    assert!(
+        payload["timeline"].as_array().is_some_and(|timeline| timeline.iter().any(|entry| {
+            entry["nodeId"] == json!("end_1")
+                && entry["logs"].as_array().is_some_and(|logs| logs.iter().any(|log| {
+                    log["level"] == json!("manual")
+                        && log["message"].as_str().is_some_and(|message| message.contains("人工确认已处理"))
+                }))
+        })),
+        "manual patch note should be appended to the node logs",
+    );
+}
+
 async fn wait_for_terminal_status(app: axum::Router, run_id: &str) -> Value {
     for _ in 0..40 {
         let summary = get_summary(app.clone(), run_id).await;

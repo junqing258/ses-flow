@@ -9,7 +9,10 @@ pub use catalog::{
     WorkspaceRecord,
 };
 pub use inmemory_catalog::InMemoryCatalogStore;
-pub use memory::{InMemoryRunStore, WorkflowRunRecord, WorkflowRunStore};
+pub use memory::{
+    InMemoryRunStore, WorkflowRunLookup, WorkflowRunRecord, WorkflowRunSearchQuery, WorkflowRunSearchResult,
+    WorkflowRunStore,
+};
 pub use postgres::PostgresRunStore;
 pub use session::{
     InMemoryEditSessionStore, PostgresEditSessionStore, WorkflowEditSessionRecord, WorkflowEditSessionStore,

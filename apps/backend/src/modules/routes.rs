@@ -62,8 +62,10 @@ fn build_api_router(state: ApiState) -> Router {
             "/edit-sessions/{session_id}/draft",
             put(edit_session::update_edit_session).patch(edit_session::patch_edit_session),
         )
+        .route("/runs/search", get(run::search_runs))
         .route("/runs/{run_id}", get(run::get_run_summary))
         .route("/runs/{run_id}/events", get(run::subscribe_run_events))
+        .route("/runs/{run_id}/manual-patch", post(run::manual_patch_run))
         .route("/runs/{run_id}/resume", post(run::resume_workflow))
         .route("/runs/{run_id}/terminate", post(run::terminate_workflow))
         .layer(middleware::from_fn(log_http_requests))

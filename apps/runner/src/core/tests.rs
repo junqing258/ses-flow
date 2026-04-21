@@ -661,7 +661,7 @@ fn rejects_resume_when_wait_event_mismatches() {
         )
         .expect("workflow run should succeed");
 
-    let error = engine
+    let summary = engine
         .resume(
             &definition,
             waiting_summary
@@ -672,9 +672,16 @@ fn rejects_resume_when_wait_event_mismatches() {
                 "correlationKey": "req-6"
             }),
         )
-        .expect_err("resume should be rejected");
+        .expect("resume should produce a failed summary");
 
-    assert!(matches!(error, crate::error::RunnerError::ResumeValidation(_)));
+    assert!(matches!(summary.status, WorkflowRunStatus::Failed));
+    assert_eq!(
+        summary
+            .timeline
+            .last()
+            .and_then(|record| record.error_code.as_deref()),
+        Some("RESUME_MISMATCH")
+    );
 }
 
 #[test]
@@ -692,7 +699,7 @@ fn rejects_resume_when_correlation_key_mismatches() {
         )
         .expect("workflow run should succeed");
 
-    let error = engine
+    let summary = engine
         .resume(
             &definition,
             waiting_summary
@@ -703,9 +710,16 @@ fn rejects_resume_when_correlation_key_mismatches() {
                 "correlationKey": "req-other"
             }),
         )
-        .expect_err("resume should be rejected");
+        .expect("resume should produce a failed summary");
 
-    assert!(matches!(error, crate::error::RunnerError::ResumeValidation(_)));
+    assert!(matches!(summary.status, WorkflowRunStatus::Failed));
+    assert_eq!(
+        summary
+            .timeline
+            .last()
+            .and_then(|record| record.error_code.as_deref()),
+        Some("RESUME_MISMATCH")
+    );
 }
 
 #[test]
@@ -1062,7 +1076,7 @@ fn rejects_code_node_when_timeout_is_exceeded() {
     .expect("timeout workflow should deserialize");
     let engine = WorkflowEngine::new();
 
-    let error = engine
+    let summary = engine
         .run(
             &definition,
             json!({
@@ -1070,12 +1084,16 @@ fn rejects_code_node_when_timeout_is_exceeded() {
             }),
             RunEnvironment::default(),
         )
-        .expect_err("timeout should fail");
+        .expect("timeout should return a failed summary");
 
-    assert!(matches!(
-        error,
-        crate::error::RunnerError::CodeExecution(message) if message.contains("timeout")
-    ));
+    assert!(matches!(summary.status, WorkflowRunStatus::Failed));
+    assert_eq!(
+        summary
+            .timeline
+            .last()
+            .and_then(|record| record.error_code.as_deref()),
+        Some("TIMEOUT")
+    );
 }
 
 #[test]

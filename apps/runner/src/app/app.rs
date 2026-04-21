@@ -19,8 +19,8 @@ use crate::error::RunnerError;
 use crate::services::WorkflowServices;
 use crate::store::{
     InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
-    WorkflowDetailRecord, WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunRecord, WorkflowRunStore,
-    WorkflowSummaryRecord, WorkspaceRecord,
+    WorkflowDetailRecord, WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunLookup, WorkflowRunRecord,
+    WorkflowRunSearchQuery, WorkflowRunSearchResult, WorkflowRunStore, WorkflowSummaryRecord, WorkspaceRecord,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -382,6 +382,10 @@ impl WorkflowApp {
         Ok(self.store.load_summary(run_id)?)
     }
 
+    pub fn search_runs(&self, query: &WorkflowRunSearchQuery) -> Result<WorkflowRunSearchResult, AppError> {
+        Ok(self.store.search_runs(query)?)
+    }
+
     pub fn subscribe_run_events(&self, run_id: &str) -> WorkflowEventStream {
         self.events.subscribe_run(run_id)
     }
@@ -434,6 +438,8 @@ impl WorkflowApp {
             resume_state: None,
         };
         self.publish_summary(&summary);
+        self.store
+            .register_run_lookup(extract_run_lookup(&run_id, &trigger))?;
 
         let runner = self.build_runner()?;
         let fallback = self.clone();
@@ -583,6 +589,45 @@ impl WorkflowApp {
                 }
             }
         }
+    }
+
+    pub fn patch_run_node(
+        &self,
+        run_id: &str,
+        node_id: &str,
+        note: &str,
+        operator: &str,
+    ) -> Result<WorkflowRunSummary, AppError> {
+        let mut summary = self
+            .store
+            .load_summary(run_id)?
+            .ok_or_else(|| AppError::NotFound(format!("workflow run not found: {run_id}")))?;
+        let message = format!("人工补录 by {}: {}", operator.trim(), note.trim());
+
+        let target_record = summary
+            .timeline
+            .iter_mut()
+            .find(|record| record.node_id == node_id)
+            .ok_or_else(|| AppError::BadRequest(format!("node not found in timeline: {node_id}")))?;
+        target_record.logs.push(crate::core::runtime::NodeLogRecord {
+            level: "manual".to_string(),
+            message: message.clone(),
+        });
+
+        if matches!(summary.status, WorkflowRunStatus::Waiting) {
+            if let Some(mut snapshot) = self.store.load_snapshot(run_id)? {
+                if let Some(snapshot_record) = snapshot.timeline.iter_mut().find(|record| record.node_id == node_id) {
+                    snapshot_record.logs.push(crate::core::runtime::NodeLogRecord {
+                        level: "manual".to_string(),
+                        message,
+                    });
+                }
+                self.store.save_snapshot(snapshot)?;
+            }
+        }
+
+        self.publish_summary_with_workflow_fallback(&summary);
+        Ok(summary)
     }
 
     fn publish_summary(&self, summary: &WorkflowRunSummary) {
@@ -758,6 +803,30 @@ fn is_terminal_status(status: &WorkflowRunStatus) -> bool {
 
 fn is_active_run_status(status: &WorkflowRunStatus) -> bool {
     matches!(status, WorkflowRunStatus::Running | WorkflowRunStatus::Waiting)
+}
+
+fn extract_string_value(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn extract_run_lookup(run_id: &str, trigger: &Value) -> WorkflowRunLookup {
+    let headers = trigger.get("headers");
+    let body = trigger.get("body");
+
+    WorkflowRunLookup {
+        run_id: run_id.to_string(),
+        order_no: extract_string_value(body.and_then(|value| value.get("orderNo")))
+            .or_else(|| extract_string_value(body.and_then(|value| value.get("order_no")))),
+        wave_no: extract_string_value(body.and_then(|value| value.get("waveNo")))
+            .or_else(|| extract_string_value(body.and_then(|value| value.get("wave_no")))),
+        request_id: extract_string_value(headers.and_then(|value| value.get("requestId")))
+            .or_else(|| extract_string_value(body.and_then(|value| value.get("requestId"))))
+            .or_else(|| extract_string_value(body.and_then(|value| value.get("request_id")))),
+    }
 }
 
 fn persist_summary(store: &dyn WorkflowRunStore, summary: &WorkflowRunSummary) {

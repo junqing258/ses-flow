@@ -40,6 +40,14 @@
           <Button
             variant="outline"
             class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+            @click="openTroubleshootWorkbench"
+          >
+            <Search class="h-4 w-4" />
+            排障工作台
+          </Button>
+          <Button
+            variant="outline"
+            class="h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
             @click="openAiProviderConfigDialog"
           >
             <Wand2 class="h-4 w-4" />
@@ -297,6 +305,7 @@ import {
   GitBranchPlus,
   LoaderCircle,
   Plus,
+  Search,
   Sparkles,
   Wand2,
   Workflow,
@@ -466,6 +475,10 @@ onBeforeUnmount(() => {
 
 const handleCreate = () => {
   void router.push({ name: "workflow-new" });
+};
+
+const openTroubleshootWorkbench = () => {
+  void router.push({ name: "troubleshoot-workbench" });
 };
 
 const openHelp = () => {
