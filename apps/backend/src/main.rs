@@ -1,9 +1,11 @@
 use std::env;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use backend::modules::{ApiState, ai_gateway, build_router};
 use runner::app::WorkflowApp;
+use runner::config::RunnerConfig;
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
 use tracing::{error, info};
@@ -25,6 +27,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = parse_arg("--database-url")
         .or_else(|| env::var("DATABASE_URL").ok())
         .unwrap_or_else(|| "postgresql://runner:runner@localhost/flow-runner".to_string());
+    let config_path = parse_arg("--config")
+        .map(PathBuf::from)
+        .or_else(|| env::var("RUNNER_CONFIG_PATH").ok().map(PathBuf::from));
+    let config = RunnerConfig::load_optional(config_path.as_ref())?;
 
     let address: SocketAddr = format!("{host}:{port}").parse()?;
 
@@ -34,10 +40,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let edit_session_store = Arc::new(PostgresEditSessionStore::new(run_store.get_pool()).await?);
 
     let router = build_router(ApiState {
-        app: Arc::new(WorkflowApp::with_store_catalog_and_sessions(
+        app: Arc::new(WorkflowApp::with_store_catalog_sessions_and_concurrency(
             run_store,
             catalog_store,
             edit_session_store,
+            config.concurrency,
         )),
         ai_gateway_base_url: ai_gateway::resolve_ai_gateway_base_url(),
         ai_gateway_client: reqwest::Client::new(),

@@ -1,8 +1,13 @@
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::thread;
+use std::time::Instant;
+
 use futures_util::StreamExt;
 use serde_json::json;
 use tokio::time::{Duration, sleep};
 
-use crate::app::{EditSessionDraftOperation, WorkflowApp};
+use crate::app::{AppError, ConcurrencyConfig, EditSessionDraftOperation, OverflowPolicy, WorkflowApp};
 use crate::core::definition::WorkflowDefinition;
 use crate::core::runtime::WorkflowRunStatus;
 
@@ -29,6 +34,70 @@ fn sample_workflow(key: &str) -> WorkflowDefinition {
         "policies": {}
     }))
     .expect("sample workflow should deserialize")
+}
+
+fn delayed_fetch_workflow(key: &str, url: &str) -> WorkflowDefinition {
+    serde_json::from_value(json!({
+        "meta": {
+            "key": key,
+            "name": "Delayed Fetch Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "fetch_1",
+                "type": "fetch",
+                "name": "Fetch",
+                "config": {
+                    "url": url,
+                    "method": "GET"
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "fetch_1" },
+            { "from": "fetch_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("delayed fetch workflow should deserialize")
+}
+
+fn spawn_delayed_http_server(delay: Duration) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("delayed test server should bind to a random port");
+    let address = listener
+        .local_addr()
+        .expect("delayed test server should expose local address");
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+
+            let mut buffer = [0u8; 1024];
+            let _ = stream.read(&mut buffer);
+            thread::sleep(delay);
+
+            let response_body = json!({ "status": "slow" }).to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+
+    format!("http://{address}")
 }
 
 #[test]
@@ -418,6 +487,84 @@ async fn starts_workflow_and_persists_completed_summary() {
     let final_summary = wait_for_terminal_summary(&app, &summary.run_id).await;
     assert!(matches!(final_summary.status, WorkflowRunStatus::Completed));
     assert_eq!(final_summary.workflow_key, "run-flow");
+}
+
+#[tokio::test]
+async fn rejects_second_start_when_workflow_concurrency_limit_is_reached() {
+    let app = WorkflowApp::with_concurrency_config(ConcurrencyConfig {
+        max_global: 5,
+        queue_timeout_secs: 1,
+        overflow_policy: OverflowPolicy::Reject,
+        per_workflow: crate::app::PerWorkflowConcurrencyConfig {
+            default_max: 1,
+            overrides: Default::default(),
+        },
+    });
+    let delayed_server = spawn_delayed_http_server(Duration::from_millis(250));
+    let registration = app
+        .register_workflow(
+            Some("ws-run".to_string()),
+            Some("Run Workspace".to_string()),
+            None,
+            delayed_fetch_workflow("limited-flow", &delayed_server),
+            None,
+        )
+        .expect("workflow should register");
+
+    let first = app
+        .start_workflow(&registration.workflow_id, json!({}), Default::default())
+        .await
+        .expect("first workflow should start");
+
+    let second = app
+        .start_workflow(&registration.workflow_id, json!({}), Default::default())
+        .await;
+
+    assert!(matches!(second, Err(AppError::Throttled(_))));
+
+    let final_summary = wait_for_terminal_summary(&app, &first.run_id).await;
+    assert!(matches!(final_summary.status, WorkflowRunStatus::Completed));
+}
+
+#[tokio::test]
+async fn queues_second_start_until_first_run_releases_its_permit() {
+    let app = WorkflowApp::with_concurrency_config(ConcurrencyConfig {
+        max_global: 5,
+        queue_timeout_secs: 2,
+        overflow_policy: OverflowPolicy::Queue,
+        per_workflow: crate::app::PerWorkflowConcurrencyConfig {
+            default_max: 1,
+            overrides: Default::default(),
+        },
+    });
+    let delayed_server = spawn_delayed_http_server(Duration::from_millis(250));
+    let registration = app
+        .register_workflow(
+            Some("ws-run".to_string()),
+            Some("Run Workspace".to_string()),
+            None,
+            delayed_fetch_workflow("queued-flow", &delayed_server),
+            None,
+        )
+        .expect("workflow should register");
+
+    let first = app
+        .start_workflow(&registration.workflow_id, json!({}), Default::default())
+        .await
+        .expect("first workflow should start");
+
+    let started_at = Instant::now();
+    let second = app
+        .start_workflow(&registration.workflow_id, json!({}), Default::default())
+        .await
+        .expect("second workflow should eventually start");
+
+    assert!(started_at.elapsed() >= Duration::from_millis(200));
+
+    let first_summary = wait_for_terminal_summary(&app, &first.run_id).await;
+    let second_summary = wait_for_terminal_summary(&app, &second.run_id).await;
+    assert!(matches!(first_summary.status, WorkflowRunStatus::Completed));
+    assert!(matches!(second_summary.status, WorkflowRunStatus::Completed));
 }
 
 async fn wait_for_terminal_summary(app: &WorkflowApp, run_id: &str) -> crate::core::runtime::WorkflowRunSummary {

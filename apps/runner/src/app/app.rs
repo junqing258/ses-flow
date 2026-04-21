@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
+use super::concurrency::{ConcurrencyConfig, ConcurrencyGate};
 use super::{WorkflowEventStream, WorkflowEventStreams, WorkflowRunner};
 use crate::core::definition::WorkflowDefinition;
 use crate::core::engine::{WorkflowEngine, new_run_id};
@@ -29,6 +30,10 @@ pub enum AppError {
     BadRequest(String),
     #[error("{0}")]
     NotFound(String),
+    #[error("{0}")]
+    Throttled(String),
+    #[error("{0}")]
+    QueueTimeout(String),
     #[error(transparent)]
     Runner(#[from] RunnerError),
 }
@@ -82,6 +87,7 @@ pub struct WorkflowApp {
     catalog: Arc<dyn WorkflowCatalogStore>,
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     run_registry: RunRegistry,
+    concurrency_gate: Arc<ConcurrencyGate>,
     events: WorkflowEventStreams,
 }
 
@@ -92,7 +98,12 @@ impl WorkflowApp {
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
-        Self::with_store_catalog_and_sessions(Arc::new(InMemoryRunStore::new()), catalog, edit_sessions)
+        Self::with_store_catalog_sessions_and_concurrency(
+            Arc::new(InMemoryRunStore::new()),
+            catalog,
+            edit_sessions,
+            ConcurrencyConfig::default(),
+        )
     }
 
     pub fn with_store(store: Arc<dyn WorkflowRunStore>) -> Self {
@@ -101,18 +112,35 @@ impl WorkflowApp {
         debug!("initializing workflow server with in-memory catalog");
         let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
-        Self::with_store_catalog_and_sessions(store, catalog, edit_sessions)
+        Self::with_store_catalog_sessions_and_concurrency(store, catalog, edit_sessions, ConcurrencyConfig::default())
+    }
+
+    pub fn with_concurrency_config(concurrency_config: ConcurrencyConfig) -> Self {
+        debug!("initializing workflow server with custom concurrency config");
+        let catalog: Arc<dyn WorkflowCatalogStore> = Arc::new(InMemoryCatalogStore::new());
+        let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
+        Self::with_store_catalog_sessions_and_concurrency(
+            Arc::new(InMemoryRunStore::new()),
+            catalog,
+            edit_sessions,
+            concurrency_config,
+        )
     }
 
     pub fn with_catalog(catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
         debug!("initializing workflow server with custom catalog");
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
-        Self::with_store_catalog_and_sessions(Arc::new(InMemoryRunStore::new()), catalog, edit_sessions)
+        Self::with_store_catalog_sessions_and_concurrency(
+            Arc::new(InMemoryRunStore::new()),
+            catalog,
+            edit_sessions,
+            ConcurrencyConfig::default(),
+        )
     }
 
     pub fn with_store_and_catalog(store: Arc<dyn WorkflowRunStore>, catalog: Arc<dyn WorkflowCatalogStore>) -> Self {
         let edit_sessions: Arc<dyn WorkflowEditSessionStore> = Arc::new(InMemoryEditSessionStore::new());
-        Self::with_store_catalog_and_sessions(store, catalog, edit_sessions)
+        Self::with_store_catalog_sessions_and_concurrency(store, catalog, edit_sessions, ConcurrencyConfig::default())
     }
 
     pub fn with_store_catalog_and_sessions(
@@ -120,8 +148,18 @@ impl WorkflowApp {
         catalog: Arc<dyn WorkflowCatalogStore>,
         edit_sessions: Arc<dyn WorkflowEditSessionStore>,
     ) -> Self {
+        Self::with_store_catalog_sessions_and_concurrency(store, catalog, edit_sessions, ConcurrencyConfig::default())
+    }
+
+    pub fn with_store_catalog_sessions_and_concurrency(
+        store: Arc<dyn WorkflowRunStore>,
+        catalog: Arc<dyn WorkflowCatalogStore>,
+        edit_sessions: Arc<dyn WorkflowEditSessionStore>,
+        concurrency_config: ConcurrencyConfig,
+    ) -> Self {
         debug!("initializing workflow server with custom store and catalog");
         let run_registry = RunRegistry::default();
+        let concurrency_gate = Arc::new(ConcurrencyGate::new(concurrency_config));
         let events = WorkflowEventStreams::default();
 
         Self {
@@ -129,6 +167,7 @@ impl WorkflowApp {
             catalog,
             edit_sessions,
             run_registry,
+            concurrency_gate,
             events,
         }
     }
@@ -421,10 +460,20 @@ impl WorkflowApp {
             start_node_id = %start_node,
             workflow_key = stored_workflow.definition.meta.key,
             workflow_version = stored_workflow.definition.meta.version,
-            "workflow run queued",
+            "workflow run awaiting concurrency slot",
         );
 
-        self.run_registry.bind(&run_id, stored_workflow.id.clone());
+        let permit = self
+            .concurrency_gate
+            .acquire(&stored_workflow.definition.meta.key)
+            .await?;
+        let runner = self.build_runner()?;
+        self.store.register_run_lookup(extract_run_lookup(&run_id, &trigger))?;
+        self.run_registry.bind(
+            &run_id,
+            stored_workflow.id.clone(),
+            stored_workflow.definition.meta.key.clone(),
+        );
 
         let summary = WorkflowRunSummary {
             run_id: run_id.clone(),
@@ -438,12 +487,9 @@ impl WorkflowApp {
             resume_state: None,
         };
         self.publish_summary(&summary);
-        self.store
-            .register_run_lookup(extract_run_lookup(&run_id, &trigger))?;
-
-        let runner = self.build_runner()?;
         let fallback = self.clone();
         tokio::task::spawn_blocking(move || {
+            let _permit = permit;
             let run_result = runner.run_with_id(&stored_workflow.definition, run_id.clone(), trigger, env);
             if let Err(error) = run_result {
                 error!(
@@ -485,35 +531,38 @@ impl WorkflowApp {
             .catalog
             .load_workflow(&workflow_id)?
             .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
+        let permit = self
+            .concurrency_gate
+            .acquire(&stored_workflow.definition.meta.key)
+            .await?;
+        let existing_summary = self.store.load_summary(run_id)?;
+        let runner = self.build_runner()?;
 
         let running_summary = WorkflowRunSummary {
             run_id: run_id.to_string(),
             workflow_key: stored_workflow.definition.meta.key.clone(),
             workflow_version: stored_workflow.definition.meta.version,
             status: WorkflowRunStatus::Running,
-            current_node_id: self
-                .store
-                .load_summary(run_id)?
-                .and_then(|summary| summary.current_node_id),
-            state: self
-                .store
-                .load_summary(run_id)?
-                .map(|summary| summary.state)
+            current_node_id: existing_summary
+                .as_ref()
+                .and_then(|summary| summary.current_node_id.clone()),
+            state: existing_summary
+                .as_ref()
+                .map(|summary| summary.state.clone())
                 .unwrap_or_else(|| json!({})),
-            timeline: self
-                .store
-                .load_summary(run_id)?
-                .map(|summary| summary.timeline)
+            timeline: existing_summary
+                .as_ref()
+                .map(|summary| summary.timeline.clone())
                 .unwrap_or_default(),
             last_signal: None,
             resume_state: None,
         };
         self.publish_summary(&running_summary);
 
-        let runner = self.build_runner()?;
         let fallback = self.clone();
         let run_id = run_id.to_string();
         tokio::task::spawn_blocking(move || {
+            let _permit = permit;
             let resume_result = runner.resume_by_run_id(&stored_workflow.definition, &run_id, event);
             if let Err(error) = resume_result {
                 error!(
@@ -729,13 +778,22 @@ struct RunRegistry {
 #[derive(Default)]
 struct RunRegistryState {
     workflow_ids: HashMap<String, String>,
+    workflow_keys: HashMap<String, String>,
+    active_count_by_workflow: HashMap<String, usize>,
     termination_requests: HashSet<String>,
 }
 
 impl RunRegistry {
-    fn bind(&self, run_id: &str, workflow_id: String) {
+    fn bind(&self, run_id: &str, workflow_id: String, workflow_key: String) {
         if let Ok(mut state) = self.state.lock() {
             state.workflow_ids.insert(run_id.to_string(), workflow_id);
+            let previous_workflow_key = state.workflow_keys.insert(run_id.to_string(), workflow_key.clone());
+            if previous_workflow_key.as_deref() != Some(workflow_key.as_str()) {
+                if let Some(previous) = previous_workflow_key.as_deref() {
+                    decrement_active_count(&mut state.active_count_by_workflow, previous);
+                }
+                *state.active_count_by_workflow.entry(workflow_key).or_insert(0) += 1;
+            }
             state.termination_requests.remove(run_id);
         } else {
             warn!(run_id = %run_id, "failed to acquire run registry lock while binding run");
@@ -765,6 +823,9 @@ impl RunRegistry {
     fn finish(&self, run_id: &str) {
         if let Ok(mut state) = self.state.lock() {
             state.workflow_ids.remove(run_id);
+            if let Some(workflow_key) = state.workflow_keys.remove(run_id) {
+                decrement_active_count(&mut state.active_count_by_workflow, &workflow_key);
+            }
             state.termination_requests.remove(run_id);
         } else {
             warn!(run_id = %run_id, "failed to acquire run registry lock while finalizing run");
@@ -858,6 +919,16 @@ fn persist_summary_and_publish_events(
 
     if is_terminal_status(&summary.status) {
         run_registry.finish(&summary.run_id);
+    }
+}
+
+fn decrement_active_count(active_count_by_workflow: &mut HashMap<String, usize>, workflow_key: &str) {
+    if let Some(count) = active_count_by_workflow.get_mut(workflow_key) {
+        if *count > 1 {
+            *count -= 1;
+        } else {
+            active_count_by_workflow.remove(workflow_key);
+        }
     }
 }
 

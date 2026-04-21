@@ -249,11 +249,12 @@ pub fn manual_patch_run(
         return Err(ApiError::BadRequest("manual patch operator is required".to_string()));
     }
 
-    Ok(to_summary_response(
-        state
-            .app
-            .patch_run_node(run_id, &request.node_id, note, operator)?,
-    ))
+    Ok(to_summary_response(state.app.patch_run_node(
+        run_id,
+        &request.node_id,
+        note,
+        operator,
+    )?))
 }
 
 fn default_trigger() -> Value {

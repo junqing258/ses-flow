@@ -1,0 +1,9 @@
+[concurrency]
+max_global = 50
+queue_timeout_secs = 30
+overflow_policy = "queue"
+
+[concurrency.per_workflow]
+default_max = 5
+"warehouse-sorting" = 10
+"manual-review" = 2

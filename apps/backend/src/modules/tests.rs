@@ -1,5 +1,6 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use axum::response::IntoResponse;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::io::{Read, Write};
@@ -154,6 +155,40 @@ fn parse_content_length(headers: &[u8]) -> usize {
             None
         })
         .unwrap_or(0)
+}
+
+#[tokio::test]
+async fn maps_throttled_errors_to_429() {
+    let response =
+        crate::modules::ApiError::from(runner::app::AppError::Throttled("too many runs".to_string())).into_response();
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("response body should collect")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("error response should be valid json");
+
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(payload["error"], "too many runs");
+}
+
+#[tokio::test]
+async fn maps_queue_timeout_errors_to_503() {
+    let response = crate::modules::ApiError::from(runner::app::AppError::QueueTimeout("queue timed out".to_string()))
+        .into_response();
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("response body should collect")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("error response should be valid json");
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(payload["error"], "queue timed out");
 }
 
 #[tokio::test]
@@ -1605,13 +1640,19 @@ async fn appends_manual_patch_note_to_run_timeline() {
     let payload: Value = serde_json::from_slice(&body).expect("response body should be valid json");
 
     assert!(
-        payload["timeline"].as_array().is_some_and(|timeline| timeline.iter().any(|entry| {
-            entry["nodeId"] == json!("end_1")
-                && entry["logs"].as_array().is_some_and(|logs| logs.iter().any(|log| {
-                    log["level"] == json!("manual")
-                        && log["message"].as_str().is_some_and(|message| message.contains("人工确认已处理"))
-                }))
-        })),
+        payload["timeline"]
+            .as_array()
+            .is_some_and(|timeline| timeline.iter().any(|entry| {
+                entry["nodeId"] == json!("end_1")
+                    && entry["logs"].as_array().is_some_and(|logs| {
+                        logs.iter().any(|log| {
+                            log["level"] == json!("manual")
+                                && log["message"]
+                                    .as_str()
+                                    .is_some_and(|message| message.contains("人工确认已处理"))
+                        })
+                    })
+            })),
         "manual patch note should be appended to the node logs",
     );
 }

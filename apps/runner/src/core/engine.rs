@@ -365,16 +365,28 @@ impl WorkflowEngine {
             .and_then(Value::as_str)
             .map(|path| nested_state_patch(path, child_output.clone()))
             .unwrap_or(Value::Null);
-        let error_code = matches!(child_summary.status, WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated)
-            .then(|| {
-                if matches!(child_summary.status, WorkflowRunStatus::Terminated) {
-                    "SUB_WORKFLOW_TERMINATED".to_string()
-                } else {
-                    "SUB_WORKFLOW_FAILED".to_string()
-                }
-            });
-        let error_detail = matches!(child_summary.status, WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated)
-            .then(|| format!("sub-workflow {} ended with {}", child_summary.workflow_key, status_label(&child_summary.status)));
+        let error_code = matches!(
+            child_summary.status,
+            WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated
+        )
+        .then(|| {
+            if matches!(child_summary.status, WorkflowRunStatus::Terminated) {
+                "SUB_WORKFLOW_TERMINATED".to_string()
+            } else {
+                "SUB_WORKFLOW_FAILED".to_string()
+            }
+        });
+        let error_detail = matches!(
+            child_summary.status,
+            WorkflowRunStatus::Failed | WorkflowRunStatus::Terminated
+        )
+        .then(|| {
+            format!(
+                "sub-workflow {} ended with {}",
+                child_summary.workflow_key,
+                status_label(&child_summary.status)
+            )
+        });
         timeline.push(build_node_record(
             waiting_node.id.clone(),
             waiting_node.node_type,
@@ -904,10 +916,7 @@ fn build_node_record_from_result(
         result.branch_key.clone(),
         started_at,
         ended_at,
-        result
-            .error
-            .as_ref()
-            .map(|error| normalize_error_code(&error.code)),
+        result.error.as_ref().map(|error| normalize_error_code(&error.code)),
         result.error.as_ref().map(|error| error.message.clone()),
         result.logs.clone(),
     )

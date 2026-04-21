@@ -676,10 +676,7 @@ fn rejects_resume_when_wait_event_mismatches() {
 
     assert!(matches!(summary.status, WorkflowRunStatus::Failed));
     assert_eq!(
-        summary
-            .timeline
-            .last()
-            .and_then(|record| record.error_code.as_deref()),
+        summary.timeline.last().and_then(|record| record.error_code.as_deref()),
         Some("RESUME_MISMATCH")
     );
 }
@@ -714,10 +711,7 @@ fn rejects_resume_when_correlation_key_mismatches() {
 
     assert!(matches!(summary.status, WorkflowRunStatus::Failed));
     assert_eq!(
-        summary
-            .timeline
-            .last()
-            .and_then(|record| record.error_code.as_deref()),
+        summary.timeline.last().and_then(|record| record.error_code.as_deref()),
         Some("RESUME_MISMATCH")
     );
 }
@@ -1088,10 +1082,7 @@ fn rejects_code_node_when_timeout_is_exceeded() {
 
     assert!(matches!(summary.status, WorkflowRunStatus::Failed));
     assert_eq!(
-        summary
-            .timeline
-            .last()
-            .and_then(|record| record.error_code.as_deref()),
+        summary.timeline.last().and_then(|record| record.error_code.as_deref()),
         Some("TIMEOUT")
     );
 }

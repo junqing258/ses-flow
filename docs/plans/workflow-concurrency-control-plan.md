@@ -44,23 +44,13 @@ pub struct ConcurrencyGate {
 }
 ```
 
-每次 `start_workflow` / `resume_workflow` 进入执行前，必须**同时**拿到两个 permit：
+- 每个 `workflow_key` 对应一个 `tokio::sync::Semaphore`，许可数 = `max_concurrent_per_workflow`（默认 5）。
+- 全局 `Semaphore` 许可数 = `max_concurrent_global`（默认 50）。
+- `acquire()` 同时持有两个 permit，执行完后 `drop` 释放（RAII）。
+- 策略为 `Reject` 时，使用 `try_acquire` 失败即返回 `AppError::Throttled`。
+- 策略为 `Queue` 时，使用 `acquire().await` + 可选超时（`tokio::time::timeout`），超时返回 `AppError::QueueTimeout`。
 
-**per-workflow-key permit**（限制单个 key 的并发）
-- 每个 `workflow_key` 对应一个独立的 `tokio::sync::Semaphore`，许可数 = `max_concurrent_per_workflow`（默认 5）。
-- 防止同一个 workflow 被高频触发时自身打满资源。
-
-**global permit**（限制 runner 进程内的总并发）
-- 所有 workflow_key 共享同一个 `Semaphore`，许可数 = `max_concurrent_global`（默认 50）。
-- 防止多个不同 workflow_key 同时大量触发、总量仍超出线程池/下游承载上限。即使每个 key 自身未超限，全局兜底仍会生效。
-
-两个 permit 均通过 RAII 持有， 闭包返回时自动释放。acquire 发生在 `spawn_blocking` **之前**（async 上下文），permit 通过 move 传入闭包。
-
-**overflow 策略**（两层共用同一策略）：
-- `Reject`：任一层 `try_acquire` 失败 → 立即返回 `AppError::Throttled`（HTTP 429）。
-- `Queue`：`acquire().await` 等待槽位释放，超过 `queue_timeout_secs` → 返回 `AppError::QueueTimeout`（HTTP 503）。
-
-**与 `RunRegistry` 的关系**：`ConcurrencyGate` 只负责准入控制；`RunRegistry` 继续负责 run_id 生命周期和终止信号，两者职责不重叠。
+**与 `RunRegistry` 的关系**：`ConcurrencyGate` 只负责准入；`RunRegistry` 继续负责 run_id 生命周期和终止信号，两者职责不重叠。
 
 ---
 

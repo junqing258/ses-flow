@@ -143,6 +143,8 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
 pub enum ApiError {
     BadRequest(String),
     NotFound(String),
+    Throttled(String),
+    ServiceUnavailable(String),
     Runner(RunnerError),
 }
 
@@ -157,6 +159,8 @@ impl From<AppError> for ApiError {
         match value {
             AppError::BadRequest(message) => Self::BadRequest(message),
             AppError::NotFound(message) => Self::NotFound(message),
+            AppError::Throttled(message) => Self::Throttled(message),
+            AppError::QueueTimeout(message) => Self::ServiceUnavailable(message),
             AppError::Runner(error) => Self::Runner(error),
         }
     }
@@ -167,6 +171,8 @@ impl IntoResponse for ApiError {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
+            Self::Throttled(message) => (StatusCode::TOO_MANY_REQUESTS, message),
+            Self::ServiceUnavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
             Self::Runner(RunnerError::MissingRunSnapshot(message)) => (StatusCode::NOT_FOUND, message),
             Self::Runner(RunnerError::Validation(message))
             | Self::Runner(RunnerError::ResumeValidation(message))

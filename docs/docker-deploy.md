@@ -21,6 +21,20 @@ cp .env.example .env
 DATABASE_URL=postgresql://runner:runner@host.docker.internal:5432/flow-runner
 BACKEND_PORT=6302
 AI_GATEWAY_PORT=6307
+RUNNER_CONFIG_PATH=/app/config/runner.toml
+```
+
+如果需要开启工作流并发控制配置，可以提供一个 TOML 文件并通过 `RUNNER_CONFIG_PATH` 或 backend 启动参数 `--config` 指向它。示例可参考 [runner-config.toml](./examples/runner-config.toml)：
+
+```toml
+[concurrency]
+max_global = 50
+queue_timeout_secs = 30
+overflow_policy = "queue"
+
+[concurrency.per_workflow]
+default_max = 5
+"warehouse-sorting" = 10
 ```
 
 ## 2. 启动服务
