@@ -52,14 +52,25 @@
                 </p>
               </div>
               <span
-                class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                :class="
-                  run.status === 'waiting'
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-cyan-50 text-cyan-700'
-                "
+                class="flex shrink-0 items-center gap-2"
               >
-                {{ formatRunStatusLabel(run.status) }}
+                <button
+                  type="button"
+                  class="inline-flex h-8 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+                  @click.stop="handleCopyRunId(run.runId)"
+                >
+                  复制 ID
+                </button>
+                <span
+                  class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  :class="
+                    run.status === 'waiting'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'bg-cyan-50 text-cyan-700'
+                  "
+                >
+                  {{ formatRunStatusLabel(run.status) }}
+                </span>
               </span>
             </div>
 
@@ -205,6 +216,15 @@ const loadWorkflowRuns = async (
 const handleRunSelect = (runId: string) => {
   emit("select-run", runId);
   emit("update:open", false);
+};
+
+const handleCopyRunId = async (runId: string) => {
+  try {
+    await navigator.clipboard.writeText(runId);
+    toast.success(`已复制运行 ID：${runId}`);
+  } catch {
+    toast.error("复制运行 ID 失败");
+  }
 };
 
 watch(
