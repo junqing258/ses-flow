@@ -10,8 +10,7 @@ LAYOUT_WITH_LEGEND()
 ' -- 外部调用方
 Container_Ext(backend, "Backend Service", "Rust + Axum", "接收 HTTP 请求，调用 Runner 公开 API")
 ContainerDb_Ext(postgres, "PostgreSQL", "数据库", "持久化工作流定义、运行记录、快照、编辑 session")
-System_Ext(shell_proc, "Shell 子进程", "shell 节点 fork")
-System_Ext(node_proc, "Node.js 子进程", "code 节点 fork")
+System_Ext(node_proc, "Node.js / Rust 子进程", "code 节点 fork（JS/TS 用 Node.js，Rust 用 rustc 编译后执行）")
 
 ' -- Runner Library
 Container_Boundary(runner, "Runner Library (apps/runner)") {
@@ -37,7 +36,7 @@ Container_Boundary(runner, "Runner Library (apps/runner)") {
 
     Component(exec_async, "异步等待执行器 wait/task/respond", "NodeExecutor", "wait: 产出 NextSignal 挂起，恢复时校验 event+correlationKey；task: 调 TaskHandler.create()；respond: 回写 HTTP 响应，可设 terminal=true")
 
-    Component(exec_compute, "计算执行器 code/shell", "NodeExecutor", "code: fork Node.js 子进程执行 JS；shell: fork Shell 子进程执行命令；共享 timeout 轮询 + terminate 信号检测")
+    Component(exec_compute, "计算执行器 code", "NodeExecutor", "code: fork Node.js 子进程执行 JS/TS（Node.js 22+），或 rustc 编译后执行 Rust（需 rustc 在 PATH）；支持 timeout 轮询 + terminate 信号检测")
 
     Component(exec_sub, "子流程执行器 sub_workflow", "NodeExecutor", "内联 definition 或 config.ref 两种来源，递归调用 WorkflowEngine，子流程 Waiting 时透传 NextSignal，通过 statePath 合并子 state")
 
@@ -90,7 +89,7 @@ Rel_D(node_executor_trait, exec_trigger, "start / webhook_trigger / cron_trigger
 Rel_D(node_executor_trait, exec_control, "if_else / switch", "")
 Rel_D(node_executor_trait, exec_data, "set_state / fetch", "")
 Rel_D(node_executor_trait, exec_async, "wait / task / respond", "")
-Rel_D(node_executor_trait, exec_compute, "code / shell", "")
+Rel_D(node_executor_trait, exec_compute, "code", "")
 Rel_D(node_executor_trait, exec_sub, "sub_workflow", "")
 Rel_D(node_executor_trait, exec_end, "end", "")
 
@@ -100,8 +99,7 @@ Rel(exec_data, template_engine, "inputMapping / config 解析", "")
 Rel(exec_async, task_handler_reg, "task_type -> handler.create()", "")
 Rel(exec_sub, workflow_def_reg, "ref -> WorkflowDefinition", "")
 Rel(exec_sub, workflow_engine, "递归 engine.run() / engine.resume()", "递归调用")
-Rel(exec_compute, shell_proc, "fork stdin/stdout timeout/terminate", "process")
-Rel(exec_compute, node_proc, "fork stdin/stdout timeout/terminate", "process")
+Rel(exec_compute, node_proc, "JS/TS: fork Node.js stdin/stdout\nRust: rustc 编译临时文件后 fork binary\n+ timeout / terminate", "process")
 
 ' -- 关系：存储层
 Rel_D(catalog_store, postgres, "SQL", "sqlx")
