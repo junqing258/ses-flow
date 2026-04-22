@@ -25,7 +25,8 @@ System_Boundary(ses, "SES Flow Monorepo") {
 }
 
 System_Ext(claude_sdk, "Claude Agent SDK", "Anthropic AI Agent，受限工具调用")
-System_Ext(node_proc, "Node.js / Rust 子进程", "code executor 按需拉起（JS/TS 用 Node.js，Rust 用 rustc 编译后执行）")
+System_Ext(node_proc, "Node.js 子进程", "code executor 按需拉起（JS/TS 用 Node.js fork）")
+System_Ext(wasm_runtime, "Wasmtime 运行时", "code executor 内嵌；加载预编译 .wasm 模块执行\n（Rust 离线编译 → wasm32-wasip1，沙箱隔离，< 5ms）")
 
 Rel(user, frontend, "编辑工作流 / 查看运行结果", "HTTPS")
 Rel(frontend, backend, "工作流 CRUD / 触发运行 / SSE 订阅", "HTTP /runner-api")
@@ -36,7 +37,8 @@ Rel(ai_gateway, backend, "回调读写 edit session / preview", "HTTP /runner-ap
 Rel(ai_gateway, claude_sdk, "调用 Claude Agent SDK", "HTTPS API")
 Rel(backend, runner_lib, "调用（库函数，同进程）", "in-process")
 Rel(runner_lib, postgres, "读写 catalog / 运行记录 / edit session / 快照", "SQL via sqlx")
-Rel(runner_lib, node_proc, "code 节点：fork 子进程", "stdin/stdout")
+Rel(runner_lib, node_proc, "code 节点 JS/TS：fork 子进程", "stdin/stdout")
+Rel(runner_lib, wasm_runtime, "code 节点 Rust：加载 .wasm 模块", "in-process")
 
 @enduml
 
@@ -77,7 +79,7 @@ Container_Boundary(runner, "Runner Library  (apps/runner)") {
 
     Component(exec_async, "异步等待节点\nwait / task / respond", "NodeExecutor", "wait：挂起，产出 NextSignal(event)，等待外部 resume\ntask：调用 TaskHandler.create()，挂起等待任务完成\nrespond：向 webhook 调用方回写 HTTP 响应，可选 terminal")
 
-    Component(exec_compute, "计算节点\ncode", "NodeExecutor", "code：fork Node.js 子进程执行 JS/TS 脚本，\n或 rustc 编译后执行 Rust 代码\n支持 timeout + terminate 信号")
+    Component(exec_compute, "计算节点\ncode", "NodeExecutor", "code：JS/TS → fork Node.js 子进程执行脚本；\nRust → Wasmtime 内嵌加载预编译 .wasm 模块（沙箱隔离，< 5ms）\n支持 timeout + terminate 信号")
 
     Component(exec_sub, "子流程节点\nsub_workflow", "NodeExecutor", "内联或按 ref 解析子工作流定义；\n递归调用 WorkflowEngine.run()；\n子流程 Waiting 时产出 NextSignal 透传给父流程")
 
@@ -103,7 +105,8 @@ Container_Boundary(runner, "Runner Library  (apps/runner)") {
 
 ' ── 外部依赖 ────────────────────────────────────────────────
 ContainerDb_Ext(postgres, "PostgreSQL", "数据库", "PG 实现的持久化后端")
-System_Ext(node_proc, "Node.js 子进程", "code executor fork")
+System_Ext(node_proc, "Node.js 子进程", "code executor JS/TS fork")
+System_Ext(wasm_runtime, "Wasmtime 运行时", "内嵌于 runner 进程；加载预编译 .wasm 模块\n模块缓存（首次编译后 < 5ms）；沙箱隔离")
 
 ' ── 关系 ────────────────────────────────────────────────────
 Rel(backend_api, workflow_app, "run(def, trigger, env)\nresume(run_id, signal)\nterminate(run_id)", "in-process fn call")
@@ -130,7 +133,8 @@ Rel(node_executor_trait, exec_end, "", "")
 Rel(exec_data, store_catalog, "fetch 节点需要解析外部服务地址\n（通过 WorkflowServices）", "in-process")
 Rel(exec_sub, workflow_def_registry, "按 ref 查找子工作流定义", "in-process")
 Rel(exec_async, task_handler_registry, "task 节点 → handler.create(payload)", "in-process")
-Rel(exec_compute, node_proc, "JS/TS: fork Node.js + stdin/stdout\nRust: rustc 编译临时文件后 fork binary\n+ timeout / terminate", "process")
+Rel(exec_compute, node_proc, "JS/TS: fork Node.js + stdin/stdout\n+ timeout / terminate", "process")
+Rel(exec_compute, wasm_runtime, "Rust: 加载 .wasm 模块（模块缓存）\n+ epoch 超时 / terminate", "in-process")
 
 Rel(store_catalog, postgres, "SQL", "sqlx")
 Rel(store_run, postgres, "SQL", "sqlx")
