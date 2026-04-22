@@ -57,14 +57,14 @@
       }
     },
     {
-      "id": "manual_review_task",
-      "type": "task",
-      "name": "创建人工复核任务",
+      "id": "wait_manual_review_callback",
+      "type": "wait",
+      "name": "等待人工复核结果",
       "config": {
-        "taskType": "manual_review",
-        "completeEvent": "task.completed"
+        "event": "manual_review.completed"
       },
       "inputMapping": {
+        "correlationKey": "{{trigger.headers.requestId}}",
         "orderNo": "{{trigger.body.orderNo}}",
         "reason": "bizType requires manual review"
       }
@@ -115,7 +115,7 @@
     },
     {
       "from": "route_switch",
-      "to": "manual_review_task",
+      "to": "wait_manual_review_callback",
       "label": "manual_review",
       "priority": 100
     },
@@ -132,7 +132,7 @@
       "priority": 1
     },
     {
-      "from": "manual_review_task",
+      "from": "wait_manual_review_callback",
       "to": "end_1"
     },
     {

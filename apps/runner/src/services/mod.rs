@@ -1,6 +1,6 @@
 pub mod handlers;
 
-pub use handlers::{TaskHandler, TaskHandlerRegistry, WorkflowDefinitionRegistry, WorkflowServices};
+pub use handlers::{WorkflowDefinitionRegistry, WorkflowServices};
 
 #[cfg(test)]
 mod tests;

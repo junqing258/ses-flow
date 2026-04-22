@@ -76,7 +76,7 @@
 }
 ```
 
-### 路径 B：原子型节点（插件节点，默认 HTTP，后续支持本地进程）
+### 路径 B：原子型节点（插件节点，首期 HTTP，中期 gRPC）
 
 **适用场景**：新业务能力需要**全新的执行逻辑**，无法通过现有节点组合实现，例如调用外部硬件 API、写特定数据库、对接第三方系统。
 
@@ -250,9 +250,44 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 
 这样可以避免把服务发现、网络治理、执行逻辑耦合到 runner 内部。
 
-#### 后续支持：本地进程插件
+#### transport 分层策略
 
-对于需要更强隔离、设备侧本机调用、或现场不方便部署 HTTP 服务的场景，后续支持：
+不同场景对调试体验、运行效率、内存开销、部署条件的要求不同，plugin 通信方案分三层逐步演进：
+
+| transport | 单次调用延迟 | 内存开销 | 调试体验 | 隔离方式 | 推荐场景 |
+|---|---|---|---|---|---|
+| `http` | ~1–5ms | 每请求独立连接（keep-alive 复用后~低）；JSON 序列化拷贝一份 | 最好（curl/Postman 直测） | 进程/网络隔离 | 跨机器、已有服务、首期默认 |
+| `process` (stdin/stdout) | ~5–20ms（含 fork）| 每次调用 fork 一个新进程，内存独立但开销最高（~数 MB/次）| 良好（直接跑二进制） | 进程隔离，崩溃不污染 runner | 设备侧、现场无 HTTP 服务 |
+| `grpc` (Unix socket) | <0.5ms | 长驻进程复用，Protobuf 序列化比 JSON 节省 30–50%；连接常驻，无 fork 开销 | 良好（grpcurl）| 进程隔离 | 同机高频调用、需流式日志 |
+| `wasm` (wasmtime) | <0.1ms（同进程）| 与 runner 共享进程堆，线性内存按需增长；无 fork/序列化拷贝，内存效率最高 | 一般（需专用工具） | 沙箱隔离（内存隔离但同进程）| 远期：平台内置扩展点 |
+| 动态库 `.so` | <0.05ms（函数调用）| 与 runner 完全共享内存，无拷贝 | 差（链接问题难排查）| 无隔离，崩溃即 runner 崩溃 | **不推荐**，ABI 不稳定 |
+
+**内存开销排序（从高到低）**：`process` > `http` > `grpc` > `wasm` > `.so`
+
+**首期实现：`http`**，覆盖跨机器、已有服务、联调调试等主要场景。
+
+**中期补充：`grpc` over Unix socket**，作为 `process` 的高性能替代：
+- runner 侧用 `tonic`（Rust gRPC 库），插件侧实现同一份 `.proto`
+- Unix socket 消除网络栈，延迟与 stdin/stdout 相当，但支持**流式推送日志**（不必等执行完才返回 logs）
+- `cancel` 和 `resume` 天然是独立 RPC，比 HTTP 接口更清晰
+- 调试：`grpcurl -plaintext -unix /tmp/ses-plugin-barcode.sock describe`
+
+```protobuf
+// plugin.proto（所有插件共用）
+service Plugin {
+  rpc Execute (PluginRequest)  returns (PluginResponse);
+  rpc Cancel  (CancelRequest)  returns (CancelResponse);
+}
+// Resume 由外部系统调插件自己的 /resume 端点，不走 runner→插件方向
+```
+
+**远期参考：`wasm`**，用 wasmtime 在 runner 进程内执行插件，同进程调用无 fork/网络开销，沙箱隔离优于动态库 `.so`。适合平台能力稳定、对执行延迟极敏感的内置扩展点，首期不建议引入（工具链对业务团队要求高）。
+
+**不推荐：动态库 `.so`**。ABI 不稳定，Rust 版本/编译器变化即可导致崩溃，调试极难，收益不抵风险。
+
+#### 本地进程插件（process transport，中后期）
+
+对于设备侧本机调用、或现场不方便部署 HTTP/gRPC 服务的场景，中后期支持：
 
 - `transport: "process"`
 - runner 通过 `Command::new(binary)` 直接拉起插件进程
@@ -281,27 +316,25 @@ pub struct PluginExecutor {
 impl NodeExecutor for PluginExecutor {
     fn node_type(&self) -> &NodeType { ... }
 
-    async fn execute(&self, node: &NodeDefinition, ctx: &ExecutionContext) -> Result<Value> {
+    fn execute(&self, node: &NodeDefinition, ctx: &NodeExecutionContext<'_>) -> Result<NodeExecutionResult, RunnerError> {
         let input = build_plugin_input(node, ctx);
-        // build_plugin_input 负责从 ExecutionContext 中提取 runId/requestId
-        // 并透传给 HTTP body 或 process stdin。
-        match self.transport {
-            PluginTransport::Http { endpoint } => call_http_plugin(endpoint, input).await,
-            PluginTransport::Process { binary } => call_process_plugin(binary, input).await,
+        match &self.transport {
+            PluginTransport::Http { endpoint } => call_http_plugin(endpoint, &input, ctx),
+            PluginTransport::Process { binary } => call_process_plugin(binary, &input, ctx),
+            PluginTransport::Grpc { socket } => call_grpc_plugin(socket, &input, ctx),  // 中期
         }
     }
 }
 ```
 
-| 对比项 | 路径 A（组合型） | 路径 B（插件型） |
-|---|---|---|
-| 执行逻辑 | 复用子流程 | 独立二进制，任意语言 |
-| 前端改动 | 零 | 零 |
-| Runner 核心改动 | 零 | 仅一次性增加 `PluginExecutor` |
-| 扩展者工作量 | 写 JSON descriptor | 首期写 HTTP 插件服务 + descriptor；后续可写本地可执行包 |
-| 调试方式 | 看子流程 | 首期最友好：HTTP 联调；后续可选本地进程 |
-| 进程隔离 | 无 | process 模式天然进程隔离；HTTP 模式天然服务隔离 |
-| 适用场景 | 现有能力的业务封装 | 全新平台能力 |
+| 对比项 | `http` | `process` | `grpc`（Unix socket） |
+|---|---|---|---|
+| 延迟 | ~1–5ms | ~5–20ms | <0.5ms |
+| 调试 | 最友好 | 友好 | 良好（grpcurl） |
+| 流式日志 | 需轮询 | 不支持 | 原生支持 |
+| cancel/resume | `POST /cancel` / `POST /resume` | kill / 重新 spawn | 独立 RPC |
+| 实现阶段 | 首期 | 中后期 | 中期 |
+
 
 ---
 
@@ -339,7 +372,7 @@ interface NodeDescriptor {
   icon?: string;
   status: "stable" | "beta" | "deprecated";
   requiredPermissions?: string[];
-  transport?: "builtin" | "http" | "process"; // 路径 B 使用 http/process，内置节点默认 builtin
+  transport?: "builtin" | "http" | "grpc" | "process"; // 首期 http；中期 grpc；中后期 process；内置节点默认 builtin
   endpoint?: string;              // transport=http 时必填
   binary?: string;                // transport=process 时必填
   timeoutMs?: number;
@@ -372,18 +405,18 @@ interface NodeDescriptor {
 ```
 executor/
   registry/
-    node_registry.go          // 注册中心，维护全量 descriptor
+    node_registry.rs         // 注册中心，维护全量 descriptor
     descriptors/
       builtin/
-        sub_workflow.go       // 现有节点迁移
-        fetch_order.go
-        assign_task.go
+        sub_workflow.rs      // 现有节点迁移
+        fetch_order.rs
+        assign_task.rs
       biz/
         pick_task.json        // 路径 A：纯 JSON descriptor
         sort_task.json
       custom/
         barcode_scan.json     // 路径 B：HTTP / process 插件 descriptor
-    plugin_registry.go        // 维护 runnerType -> endpoint/binary 映射
+    plugin_registry.rs       // 维护 runnerType -> endpoint/binary 映射
   api/
     GET /api/node-descriptors              // 按 token 权限过滤返回
     GET /api/node-descriptors/:id/versions
@@ -392,51 +425,8 @@ executor/
 
 ---
 
-## 阶段二：前端 NodeRegistry 替代硬编码
 
-### 2.1 新增 `nodeRegistry.ts`
-
-```typescript
-// apps/frontend/src/features/workflow/nodeRegistry.ts
-
-class NodeRegistry {
-  private byId    = new Map<string, FrontendNodeDescriptor>();
-  private byPalette  = new Map<string, FrontendNodeDescriptor>();
-  private byRunner   = new Map<string, FrontendNodeDescriptor>();
-
-  async load(apiUrl: string) {
-    const raw: NodeDescriptor[] = await fetch(apiUrl).then(r => r.json());
-    for (const d of raw) {
-      const fd = { ...d, paletteId: `palette-${d.id}`, panelTemplate: schemaToPanel(d.configSchema) };
-      this.byId.set(d.id, fd);
-      this.byPalette.set(fd.paletteId, fd);
-      this.byRunner.set(d.runnerType, fd);   // 注意：多个 descriptor 可共享同一 runnerType（路径 A）
-    }
-  }
-
-  getByPaletteId(paletteId: string)  { return this.byPalette.get(paletteId); }
-  getByRunnerType(runnerType: string) { return this.byRunner.get(runnerType); }
-  getByCategory(category: string)    { return [...this.byId.values()].filter(d => d.category === category); }
-}
-
-export const nodeRegistry = new NodeRegistry();
-```
-
-### 2.2 改造现有硬编码点
-
-| 文件 | 改造前 | 改造后 |
-|---|---|---|
-| `model.ts:642` | `INITIAL_WORKFLOW_PANELS` 静态对象 | `nodeRegistry.getByPaletteId(id)?.panelTemplate` |
-| `model.ts:1283` | switch/case 工厂函数 | registry lookup + 通用 draft 构造 |
-| `runner.ts:405` | 硬编码 kind→type 表 | `nodeRegistry.getByPaletteId(id)?.runnerType` |
-| `runner.ts:461` | 每类节点独立序列化 | 通用 schema-based config 序列化 |
-| `import.ts:33` | 硬编码 type→paletteId 表 | `nodeRegistry.getByRunnerType(type)?.paletteId` |
-
-**迁移策略**：`INITIAL_WORKFLOW_PANELS` 保留为 fallback，registry 未就绪时降级，渐进迁移不破坏现有功能。
-
----
-
-## 阶段三：版本管理与权限控制
+## 后续：版本管理与权限控制
 
 - `status: "beta"` → 前端面板显示 Beta 标签
 - `status: "deprecated"` → 阻止新建，存量节点显示弃用提示
@@ -445,24 +435,10 @@ export const nodeRegistry = new NodeRegistry();
 
 ---
 
-## 实施路径（约 6–8 周）
-
-```
-Week 1–2  Phase 1  定义协议 + 后端注册中心 + API 接口
-                   现有节点迁移为 descriptor（builtin/）
-Week 3–4  Phase 2  前端 nodeRegistry.ts + schemaToPanel 转换器
-                   保留 INITIAL_WORKFLOW_PANELS 作为 fallback
-Week 5    Phase 3  替换 5 个硬编码文件，跑通现有全部节点
-Week 6    Phase 4  版本字段 + 权限过滤接入
-Week 7+   持续     路径 A（JSON）/ 路径 B（代码）新增节点，前端零改动
-```
-
----
-
 ## 关键收益
 
 - **路径 A 新增节点**：写一个 JSON descriptor，零代码
-- **路径 B 新增节点**：首期接入 HTTP 插件服务 + descriptor，后续可演进为本地进程插件
+- **路径 B 新增节点**：首期接入 HTTP 插件服务 + descriptor，中期演进为 gRPC，中后期支持本地进程插件
 - **面板表单**：configSchema + x-* 声明，无需写 Vue 组件
 - **向后兼容**：version 字段保证旧工作流可正确导入
 - **权限治理**：节点可见性由后端按 token 过滤，前端无感

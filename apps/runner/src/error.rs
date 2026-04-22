@@ -20,8 +20,6 @@ pub enum RunnerError {
     InvalidShellConfig(String),
     #[error("shell node execution failed: {0}")]
     ShellExecution(String),
-    #[error("task handler not found: {0}")]
-    MissingTaskHandler(String),
     #[error("code node execution failed: {0}")]
     CodeExecution(String),
     #[error("sub-workflow definition not found: {0}")]

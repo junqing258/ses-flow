@@ -388,7 +388,7 @@ fn recovery_hint(code: &str) -> Option<String> {
         "HTTP_ERROR" => Some("检查目标服务是否可用，并确认 HTTP 状态码与响应体".to_string()),
         "TIMEOUT" => Some("检查网络延迟、超时阈值和目标服务响应时间".to_string()),
         "VALIDATION_FAILED" => Some("检查节点配置、输入映射和 schema 是否匹配".to_string()),
-        "RESUME_MISMATCH" => Some("回调 requestId 或 taskId 不匹配，确认外部系统没有重复或串单回调".to_string()),
+        "RESUME_MISMATCH" => Some("回调 event 或 correlationKey/requestId 不匹配，确认外部系统没有重复或串单回调".to_string()),
         "TRANSITION_ERROR" => Some("检查当前节点分支配置，确认 branchKey 能命中下游连线".to_string()),
         "SUB_WORKFLOW_FAILED" | "SUB_WORKFLOW_ERROR" => {
             Some("继续查看子工作流 timeline，确认失败节点与上下游入参".to_string())

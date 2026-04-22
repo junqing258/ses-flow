@@ -11,11 +11,11 @@ title SES Flow — Container Diagram
 
 Person(user, "用户 / 开发者", "在浏览器中编辑工作流、触发运行、查看结果")
 
-System_Boundary(ses, "SES Flow Monorepo  (pnpm workspace + Cargo workspace)") {
+System_Boundary(ses, "SES Flow Monorepo") {
 
     Container(frontend, "Frontend SPA", "Vue 3 + Vite\napps/frontend", "工作流可视化编辑器，运行监控面板")
 
-    Container(backend, "Backend Service", "Rust + Axum\napps/backend  :6302", "统一对外入口：静态资源托管 / REST API / SSE / AI 代理")
+    Container(backend, "Backend Service", "Rust + Axum\napps/backend  :6302", "统一对外入口：静态资源托管 / REST API / SSE / 登录认证 /AI 代理")
 
     Container(runner_lib, "Runner Library", "Rust crate\napps/runner", "嵌入 backend 进程，负责工作流调度与执行；\n含 WorkflowApp / WorkflowEngine / Executors\n并发控制（ConcurrencyGate）")
 

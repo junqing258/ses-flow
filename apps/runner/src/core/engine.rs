@@ -295,35 +295,6 @@ impl WorkflowEngine {
 
                 Ok(())
             }
-            NodeType::Task => {
-                let expected_event = waiting_node
-                    .config
-                    .get("completeEvent")
-                    .and_then(Value::as_str)
-                    .unwrap_or("task.completed");
-                let actual_event =
-                    extract_value_by_key(resume_input, "event").or_else(|| extract_value_by_key(resume_input, "type"));
-
-                match actual_event.and_then(|value| value.as_str().map(str::to_string)) {
-                    Some(actual) if actual == expected_event => {}
-                    Some(actual) => {
-                        return Err(RunnerError::ResumeValidation(format!(
-                            "task node {} expected event {}, got {}",
-                            waiting_node.id, expected_event, actual
-                        )));
-                    }
-                    None => {
-                        return Err(RunnerError::ResumeValidation(format!(
-                            "task node {} is missing event/type in resume payload",
-                            waiting_node.id
-                        )));
-                    }
-                }
-
-                validate_field_match(waiting_node, snapshot, resume_input, "taskId", &["taskId", "id"])?;
-
-                Ok(())
-            }
             NodeType::SubWorkflow => Ok(()),
             other => Err(RunnerError::ResumeValidation(format!(
                 "node {} of type {} is not resumable",
@@ -992,7 +963,6 @@ fn error_code_for_runner_error(error: &RunnerError) -> String {
         RunnerError::MissingExecutor(_) | RunnerError::MissingNode(_) => "WORKFLOW_CONFIG_ERROR".to_string(),
         RunnerError::Store(_) => "STORE_ERROR".to_string(),
         RunnerError::Io(_) | RunnerError::Json(_) => "INTERNAL_ERROR".to_string(),
-        RunnerError::MissingTaskHandler(_) => "TASK_HANDLER_MISSING".to_string(),
         RunnerError::InvalidShellConfig(_) => "VALIDATION_FAILED".to_string(),
         RunnerError::MissingRunSnapshot(_) => "MISSING_SNAPSHOT".to_string(),
     }

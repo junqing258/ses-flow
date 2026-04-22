@@ -1,6 +1,6 @@
 {
-  "event": "task.completed",
-  "taskId": "task-run-demo",
+  "event": "manual_review.completed",
+  "correlationKey": "req-run-demo",
   "status": "approved",
   "operatorId": "reviewer-1"
 }

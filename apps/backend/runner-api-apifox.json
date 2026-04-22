@@ -28,9 +28,9 @@
       "default": "run-1775885937139-1",
       "description": "Wait 类型运行 ID"
     },
-    "taskRunId": {
+    "manualReviewRunId": {
       "default": "run-1775885937139-2",
-      "description": "Task 类型运行 ID"
+      "description": "人工复核等待类型运行 ID"
     }
   },
   "paths": {
@@ -134,14 +134,14 @@
                           }
                         },
                         {
-                          "id": "manual_review_task",
-                          "type": "task",
-                          "name": "Manual Review Task",
+                          "id": "wait_manual_review_callback",
+                          "type": "wait",
+                          "name": "Wait Manual Review Callback",
                           "config": {
-                            "taskType": "manual_review",
-                            "completeEvent": "task.completed"
+                            "event": "manual_review.completed"
                           },
                           "inputMapping": {
+                            "correlationKey": "{{trigger.headers.requestId}}",
                             "orderNo": "{{trigger.body.orderNo}}",
                             "reason": "created by runner-api.http"
                           }
@@ -165,8 +165,8 @@
                         },
                         {
                           "from": "mode_switch",
-                          "to": "manual_review_task",
-                          "label": "task",
+                          "to": "wait_manual_review_callback",
+                          "label": "manual_review",
                           "priority": 90
                         },
                         {
@@ -180,7 +180,7 @@
                           "to": "end_1"
                         },
                         {
-                          "from": "manual_review_task",
+                          "from": "wait_manual_review_callback",
                           "to": "end_1"
                         }
                       ],
@@ -247,7 +247,7 @@
     "/runner-api/workflows/{workflowId}/run": {
       "post": {
         "summary": "启动工作流运行",
-        "description": "启动一个 wait 类型或 task 类型的运行",
+        "description": "启动一个 wait 类型的运行",
         "operationId": "startRun",
         "parameters": [
           {
@@ -287,16 +287,16 @@
                     }
                   }
                 },
-                "task": {
-                  "summary": "Task 类型运行",
+                "manual_review": {
+                  "summary": "人工复核等待类型运行",
                   "value": {
                     "trigger": {
                       "headers": {
-                        "requestId": "req-rest-task-1"
+                        "requestId": "req-rest-review-1"
                       },
                       "body": {
-                        "mode": "task",
-                        "orderNo": "SO-REST-TASK-1"
+                        "mode": "manual_review",
+                        "orderNo": "SO-REST-REVIEW-1"
                       }
                     }
                   }
@@ -416,12 +416,12 @@
                     }
                   }
                 },
-                "task_completed": {
-                  "summary": "恢复 Task 完成",
+                "manual_review_completed": {
+                  "summary": "恢复人工复核结果",
                   "value": {
                     "event": {
-                      "event": "task.completed",
-                      "taskId": "task-xxx",
+                      "event": "manual_review.completed",
+                      "correlationKey": "req-rest-review-1",
                       "status": "approved",
                       "operatorId": "reviewer-1"
                     }
@@ -549,7 +549,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["start", "end", "switch", "wait", "task"],
+            "enum": ["start", "end", "switch", "wait"],
             "example": "start"
           },
           "name": {
@@ -560,9 +560,7 @@
             "type": "object",
             "example": {
               "expression": "{{trigger.body.mode}}",
-              "event": "rcs.callback",
-              "taskType": "manual_review",
-              "completeEvent": "task.completed"
+              "event": "rcs.callback"
             }
           },
           "inputMapping": {
@@ -673,12 +671,12 @@
             "properties": {
               "event": {
                 "type": "string",
-                "example": "task.created"
+                "example": "rcs.callback"
               },
               "payload": {
                 "type": "object",
                 "example": {
-                  "taskId": "task-xxx"
+                  "correlationKey": "req-rest-wait-1"
                 }
               }
             }

@@ -8,7 +8,6 @@ mod shell_executor;
 mod start_executor;
 mod sub_workflow_executor;
 mod switch_executor;
-mod task_executor;
 mod wait_executor;
 mod webhook_trigger_executor;
 
@@ -35,7 +34,6 @@ use self::shell_executor::ShellExecutor;
 use self::start_executor::StartExecutor;
 use self::sub_workflow_executor::SubWorkflowExecutor;
 use self::switch_executor::SwitchExecutor;
-use self::task_executor::TaskExecutor;
 use self::wait_executor::WaitExecutor;
 use self::webhook_trigger_executor::WebhookTriggerExecutor;
 
@@ -68,9 +66,6 @@ impl ExecutorRegistry {
         registry.register(ShellExecutor);
         registry.register(RespondExecutor);
         registry.register(WaitExecutor);
-        registry.register(TaskExecutor {
-            services: services.clone(),
-        });
         registry.register(SubWorkflowExecutor { services });
         registry
     }

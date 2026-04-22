@@ -208,7 +208,6 @@ pub enum NodeType {
     Switch,
     Shell,
     Wait,
-    Task,
     Respond,
     Code,
     #[serde(alias = "subworkflow")]
@@ -229,7 +228,6 @@ impl NodeType {
             Self::Switch => "switch",
             Self::Shell => "shell",
             Self::Wait => "wait",
-            Self::Task => "task",
             Self::Respond => "respond",
             Self::Code => "code",
             Self::SubWorkflow => "sub_workflow",

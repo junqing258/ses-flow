@@ -317,7 +317,7 @@ fn upgrades_legacy_action_nodes_in_nested_sub_workflow_definitions() {
 }
 
 #[test]
-fn waits_on_task_branch_for_manual_review() {
+fn waits_on_manual_review_callback_branch() {
     let definition = load_sorting_flow_definition(&spawn_echo_http_server());
     let engine = WorkflowEngine::new();
     let summary = engine
@@ -332,7 +332,7 @@ fn waits_on_task_branch_for_manual_review() {
         .expect("workflow run should succeed");
 
     assert!(matches!(summary.status, WorkflowRunStatus::Waiting));
-    assert_eq!(summary.current_node_id.as_deref(), Some("manual_review_task"));
+    assert_eq!(summary.current_node_id.as_deref(), Some("wait_manual_review_callback"));
 }
 
 #[test]
@@ -597,7 +597,7 @@ fn shell_node_executes_command_and_parses_json_stdout() {
 }
 
 #[test]
-fn resumes_task_branch_when_event_and_task_id_match() {
+fn resumes_manual_review_wait_branch_when_event_and_correlation_key_match() {
     let definition = load_sorting_flow_definition(&spawn_echo_http_server());
     let engine = WorkflowEngine::new();
     let waiting_summary = engine
@@ -611,13 +611,6 @@ fn resumes_task_branch_when_event_and_task_id_match() {
         )
         .expect("workflow run should succeed");
 
-    let task_id = waiting_summary
-        .last_signal
-        .as_ref()
-        .and_then(|signal| signal.payload.get("taskId"))
-        .cloned()
-        .expect("task id should exist");
-
     let resumed = engine
         .resume(
             &definition,
@@ -625,8 +618,8 @@ fn resumes_task_branch_when_event_and_task_id_match() {
                 .resume_state
                 .expect("waiting run should expose resume state"),
             json!({
-                "event": "task.completed",
-                "taskId": task_id,
+                "event": "manual_review.completed",
+                "correlationKey": "req-5",
                 "status": "approved"
             }),
         )
@@ -639,8 +632,8 @@ fn resumes_task_branch_when_event_and_task_id_match() {
             .timeline
             .iter()
             .rev()
-            .find(|record| record.node_id == "manual_review_task")
-            .expect("resumed task node should exist in timeline")
+            .find(|record| record.node_id == "wait_manual_review_callback")
+            .expect("resumed wait node should exist in timeline")
             .status,
         crate::core::runtime::ExecutionStatus::Success
     );
