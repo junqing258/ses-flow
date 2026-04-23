@@ -98,6 +98,8 @@
 前端：自动出现节点、面板字段由 configSchema 驱动，零改动
 ```
 
+> **人工工作台场景**：当插件对应的执行方是移动 App / PDA（无 HTTP Server，无法被 runner 直接调用），需要在 runner 与 App 之间引入一个 Bridge 服务。Bridge 对 runner 暴露完整 HTTP 插件协议，对 App 提供 SSE 推送 + HTTP POST 回传。详见 [human-workstation-bridge.md](./human-workstation-bridge.md)。
+
 #### 插件调用协议
 
 路径 B 统一使用一个插件请求/响应模型，不同 transport 只影响传输方式，不影响语义。
@@ -107,6 +109,14 @@
 - `runId`：工作流运行实例 id，用于定位本次执行、终止、恢复和日志归档。
 - `requestId`：业务请求幂等/联查 id，优先透传 trigger payload 或上游节点上下文中的 `requestId`；首次执行、恢复执行、取消执行都必须保持同一个值。
 - `traceId`：跨服务链路追踪 id，来源于入站 HTTP Header `X-Trace-Id`（由 Java 侧或网关注入），runner 在调用插件时必须通过请求 Header `X-Trace-Id` 原样透传；插件侧将其注入 MDC/日志上下文，在响应 Header 中原样回传；runner 收到响应后从 Header 读取并注入到归档日志的 `traceId` 字段。全链路三段日志（Java → runner → 插件）因此共享同一个 `traceId`，可在 ELK/Loki 中以单个字段过滤出完整调用链。
+
+除了 runner 调插件，系统还应向插件暴露一层**受控的宿主能力（Host API）**，用于长事务、异步回调和多阶段交互场景。设计原则是：
+
+- **同步优先**：能在 `POST /execute` 响应里一次性返回 `output/statePatch/logs` 的，不额外调用 Host API。
+- **能力收口**：插件不能直接访问数据库、runner 内部 store，也不直接复用面向前端/运维的公共 run API。
+- **最小权限**：插件只拿到当前节点执行期内、当前 run 范围内、声明过的能力和状态路径权限。
+- **版本化更新**：插件更新状态要带 `revision` / `baseRevision`，避免并发覆盖其他节点写入。
+- **可审计**：所有 Host API 调用都落审计日志，保留 `runId/requestId/nodeId/traceId/pluginId`。
 
 响应的 `status` 对应 runner 内部 `NodeExecutionResult` 的三种状态（`success`/`waiting`/`failed`）：
 
@@ -124,6 +134,21 @@
     "state": { ... },
     "env": { ... },
     "resumeSignal": null   // 首次执行为 null；恢复时携带外部回调的 payload
+  },
+  "hostApi": {
+    "baseUrl": "https://ses.example.com/runner-api/plugin-host",
+    "executionId": "pe-789",
+    "token": "phx_xxx",          // 短期执行令牌，只对当前 executionId 生效
+    "capabilities": [
+      "state.read",
+      "state.write",
+      "run.resume",
+      "run.emit_event"
+    ],
+    "stateScope": {
+      "read": ["station", "wave", "plugins.barcode_scan"],
+      "write": ["plugins.barcode_scan", "station.scanResult"]
+    }
   }
 }
 
@@ -152,6 +177,222 @@
   }
 }
 ```
+
+#### 宿主反向能力（Host API）
+
+对于 HTTP 插件，建议由 backend 暴露一组**插件专用宿主接口**，runner/app 仍然是最终状态变更的唯一 owner。插件需要获取、更新状态时，不直接读写内部存储，而是调用这组 Host API。
+
+##### 为什么不让插件直接调公共 Run API
+
+- 公共 Run API 面向前端和人工运维，权限粒度通常是“某个工作流/某个租户”，对插件来说过宽。
+- 插件需要的是“当前这次节点执行能做什么”，而不是“系统里有哪些对象”。
+- 一旦后面引入 `process` / `grpc` transport，Host API 仍可保持同一套语义，插件实现不会被 transport 绑死。
+
+##### NodeDescriptor 中显式声明插件可用宿主能力
+
+插件描述符增加 `hostCapabilities`，作为注册校验、令牌签发和运行时鉴权依据：
+
+```json
+{
+  "id": "barcode_scan",
+  "runnerType": "plugin:barcode_scan",
+  "version": "1.0.0",
+  "displayName": "条码扫描",
+  "transport": "http",
+  "supportsCancel": true,
+  "supportsResume": true,
+  "hostCapabilities": {
+    "state": {
+      "read": ["station", "wave", "plugins.barcode_scan"],
+      "write": ["plugins.barcode_scan", "station.scanResult"]
+    },
+    "run": ["resume", "emit_event"]
+  },
+  "configSchema": { ... }
+}
+```
+
+约束建议：
+
+- `plugins.<pluginId>` 或 `plugins.<nodeId>` 命名空间默认允许插件读写，避免插件把共享 state 写散。
+- 共享路径（如 `station.scanResult`）必须在 descriptor 中显式声明，注册时由平台审核。
+- 没声明 `state.write` 的插件，只能通过同步响应里的 `statePatch` 回传结果，不能主动调 Host API 改状态。
+
+##### Host API 接口建议
+
+| 接口 | 说明 | 典型场景 |
+|---|---|---|
+| `GET /plugin-host/executions/:executionId/context` | 获取当前执行的最新上下文快照，可按路径裁剪 state | 插件被外部回调唤醒后，重新读取最新状态 |
+| `PATCH /plugin-host/executions/:executionId/state` | 按路径增量更新 state，要求 `baseRevision` | 插件记录任务单号、设备心跳、阶段进度 |
+| `POST /plugin-host/executions/:executionId/events` | 发送进度事件/日志，由宿主转发到 run timeline/SSE | 扫码中、设备连接中、等待人工确认 |
+| `POST /plugin-host/executions/:executionId/resume` | 插件把外部事件交回宿主，驱动 waiting run 恢复 | 插件收到扫码回调、RCS 到站通知 |
+
+推荐请求头：
+
+```http
+Authorization: Bearer phx_xxx
+X-Trace-Id: a1b2c3d4e5f6
+Content-Type: application/json
+```
+
+##### 1. 读取上下文
+
+```http
+GET /runner-api/plugin-host/executions/pe-789/context?statePaths=station,wave
+```
+
+```json
+{
+  "pluginId": "barcode_scan",
+  "runId": "run-abc",
+  "nodeId": "node-123",
+  "workflowKey": "wf-001",
+  "revision": 42,
+  "input": { ... },
+  "state": {
+    "station": { "id": "S01", "status": "waiting_scan" },
+    "wave": { "waveNo": "W20260423001" }
+  }
+}
+```
+
+说明：
+
+- `statePaths` 只能请求 descriptor 声明过的 `hostCapabilities.state.read` 路径。
+- 不带 `statePaths` 时，宿主只返回允许范围内的完整裁剪视图，不返回整个 run state。
+
+##### 2. 更新状态
+
+推荐使用路径级 patch，而不是整棵 state 覆盖：
+
+```http
+PATCH /runner-api/plugin-host/executions/pe-789/state
+```
+
+```json
+{
+  "baseRevision": 42,
+  "operations": [
+    {
+      "op": "merge",
+      "path": "plugins.barcode_scan",
+      "value": {
+        "taskId": "t-001",
+        "status": "waiting_callback"
+      }
+    },
+    {
+      "op": "set",
+      "path": "station.scanResult",
+      "value": {
+        "taskId": "t-001"
+      }
+    }
+  ]
+}
+```
+
+返回：
+
+```json
+{
+  "applied": true,
+  "revision": 43
+}
+```
+
+约束建议：
+
+- `op` 首期只支持 `set` / `merge` / `remove`，避免把 JSON Patch 全量语义一次性引入。
+- `path` 必须命中 `state.write` 白名单。
+- `baseRevision` 不匹配时返回 `409 Conflict`，插件需要先重新读取 context 再重试。
+- 宿主内部仍复用 runner 的 `statePatch` 合并逻辑，避免出现第二套状态语义。
+
+##### 3. 发送进度事件
+
+```http
+POST /runner-api/plugin-host/executions/pe-789/events
+```
+
+```json
+{
+  "type": "plugin.progress",
+  "level": "info",
+  "message": "等待扫码回调",
+  "fields": {
+    "taskId": "t-001"
+  }
+}
+```
+
+建议行为：
+
+- backend 将其写入 run timeline，并通过 SSE 推给前端。
+- 这类事件不改变 run 状态，只承担可观测性和进度反馈。
+
+##### 4. 恢复 waiting run
+
+当前文档里 HTTP 插件有自己的 `POST /resume` 入口，外部系统先把事件推给插件，再由插件调用宿主恢复工作流。建议把“插件回调 runner”标准化为：
+
+```http
+POST /runner-api/plugin-host/executions/pe-789/resume
+```
+
+```json
+{
+  "signal": {
+    "type": "barcode_scanned",
+    "payload": {
+      "barcode": "1234567890"
+    }
+  },
+  "statePatch": {
+    "plugins": {
+      "barcode_scan": {
+        "lastBarcode": "1234567890"
+      }
+    }
+  },
+  "logs": [
+    {
+      "level": "info",
+      "message": "收到扫码结果"
+    }
+  ]
+}
+```
+
+这里的 `resume` 语义是：
+
+1. 插件收到外部系统回调。
+2. 插件可先用 `PATCH /state` 写入阶段状态，或直接在 `resume` 请求里附带一次 `statePatch`。
+3. 宿主校验 `executionId + token + waitSignal` 后，调用 runner 现有 `resume_workflow` 能力继续执行。
+4. 节点恢复后仍走同一个插件节点的正常执行语义，保持与未来 `process/grpc` transport 一致。
+
+##### 令牌与安全模型
+
+- runner 在调用 `POST /execute` 时签发一个**短期执行令牌**，放入 `hostApi.token`。
+- 令牌绑定 `pluginId + runId + nodeId + executionId + allowedCapabilities + stateScope`，TTL 建议 15 分钟到当前等待态结束为止。
+- 节点执行完成、被取消、或 run 终止后，令牌立即失效。
+- `supportsResume = false` 的插件不签发 `run.resume` 能力。
+
+##### SDK 建议
+
+不要让每个插件团队自己拼 URL 和 header，建议提供一个轻量 SDK：
+
+```ts
+const host = createPluginHostClient(req.hostApi);
+
+const snapshot = await host.getContext(["station", "wave"]);
+await host.patchState({
+  baseRevision: snapshot.revision,
+  operations: [{ op: "set", path: "plugins.barcode_scan.taskId", value: "t-001" }]
+});
+await host.emitEvent({ level: "info", message: "等待扫码回调" });
+await host.resume({ signal: { type: "barcode_scanned", payload: { barcode: "1234567890" } } });
+```
+
+这样可以把鉴权、重试、`409 Conflict` 处理、审计字段透传都固化在 SDK 里，避免插件实现发散。
 
 **终止（Terminate）**
 
@@ -235,6 +476,8 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 | `POST /cancel` | runner | 工作流被终止时调用，插件清理资源 |
 | `POST /resume` | 外部系统 | 外部回调入口，插件收到后主动通知 runner 继续 |
 
+其中 `POST /resume` 是**插件自己的对外入口**；插件把外部回调转交给宿主时，走上文定义的 `POST /plugin-host/executions/:executionId/resume`，两者职责不要混淆。
+
 `GET /descriptor` 返回示例：
 
 ```json
@@ -247,7 +490,14 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
   "configSchema": { ... },
   "timeoutMs": 5000,
   "supportsCancel": true,
-  "supportsResume": true
+  "supportsResume": true,
+  "hostCapabilities": {
+    "state": {
+      "read": ["plugins.barcode_scan"],
+      "write": ["plugins.barcode_scan"]
+    },
+    "run": ["resume", "emit_event"]
+  }
 }
 ```
 
@@ -428,6 +678,13 @@ interface NodeDescriptor {
   endpoint?: string;              // transport=http 时必填
   binary?: string;                // transport=process 时必填
   timeoutMs?: number;
+  hostCapabilities?: {
+    state?: {
+      read?: string[];
+      write?: string[];
+    };
+    run?: Array<"resume" | "emit_event">;
+  };
 
   configSchema: JSONSchema7;       // 面板表单 + x-* UI 扩展
   defaults?: Record<string, unknown>; // 节点创建时的默认配置值
@@ -491,6 +748,7 @@ executor/
 
 - **路径 A 新增节点**：写一个 JSON descriptor，零代码
 - **路径 B 新增节点**：首期接入 HTTP 插件服务 + descriptor，中期演进为 gRPC，中后期支持本地进程插件
+- **人工工作台**：通过 Bridge 服务对接移动 App / PDA，runner 零改动，见 [human-workstation-bridge.md](./human-workstation-bridge.md)
 - **面板表单**：configSchema + x-* 声明，无需写 Vue 组件
 - **向后兼容**：version 字段保证旧工作流可正确导入
 - **权限治理**：节点可见性由后端按 token 过滤，前端无感
