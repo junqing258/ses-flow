@@ -28,6 +28,12 @@ plugin-apps/hello-world
 cargo run -p hello-world-plugin -- --host 127.0.0.1 --port 9101
 ```
 
+或使用仓库内置命令：
+
+```bash
+just dev-plugin-hello-world
+```
+
 ## 接口
 
 ### `GET /descriptor`
@@ -158,3 +164,9 @@ curl -X POST http://127.0.0.1:6302/runner-api/plugin-registrations \
 ```
 
 注册成功后，backend 会回拉 `GET /descriptor` 并把该插件节点注册到 node registry。
+
+如果希望 backend 启动时自动注册该插件，也可以直接设置：
+
+```bash
+BACKEND_AUTO_REGISTER_PLUGIN_URLS=http://127.0.0.1:9101 just dev-backend
+```

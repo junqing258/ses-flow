@@ -20,7 +20,13 @@ pub async fn register_http_plugin(
     state: &ApiState,
     request: RegisterHttpPluginRequest,
 ) -> Result<(StatusCode, RegisterHttpPluginResponse), ApiError> {
-    let base_url = request.base_url.trim();
+    let descriptor = register_http_plugin_base_url(state, &request.base_url).await?;
+
+    Ok((StatusCode::CREATED, RegisterHttpPluginResponse { descriptor }))
+}
+
+pub async fn register_http_plugin_base_url(state: &ApiState, base_url: &str) -> Result<NodeDescriptor, ApiError> {
+    let base_url = base_url.trim();
     if base_url.is_empty() {
         return Err(ApiError::BadRequest("plugin baseUrl is required".to_string()));
     }
@@ -44,9 +50,21 @@ pub async fn register_http_plugin(
         .await
         .map_err(|error| ApiError::BadRequest(format!("failed to parse plugin descriptor: {error}")))?;
     let registered = RegisteredHttpPluginDescriptor::new(descriptor, base_url.to_string()).map_err(ApiError::Runner)?;
-    let descriptor = state.app.register_node_descriptor(registered.descriptor)?;
+    state
+        .app
+        .register_node_descriptor(registered.descriptor)
+        .map_err(ApiError::from)
+}
 
-    Ok((StatusCode::CREATED, RegisterHttpPluginResponse { descriptor }))
+pub async fn register_http_plugin_base_urls(
+    state: &ApiState,
+    base_urls: &[String],
+) -> Result<Vec<NodeDescriptor>, ApiError> {
+    let mut descriptors = Vec::with_capacity(base_urls.len());
+    for base_url in base_urls {
+        descriptors.push(register_http_plugin_base_url(state, base_url).await?);
+    }
+    Ok(descriptors)
 }
 
 pub fn list_node_descriptors(state: &ApiState) -> Result<Vec<NodeDescriptor>, ApiError> {

@@ -7,13 +7,16 @@ import {
   WORKFLOW_PALETTE_CATEGORIES,
   createDefaultSwitchBranches,
   createSwitchBranchHandleId,
+  createWorkflowPaletteItemMap,
   createWorkflowNodeDraft,
   getSwitchBranches,
   getSwitchFallbackHandle,
+  resolvePaletteItemForRunnerType,
   setSwitchBranches,
   setSwitchFallbackHandle,
   syncBranchHandlesForNode,
   type WorkflowFlowNode,
+  type WorkflowPaletteCategory,
   type WorkflowNodeKind,
   type WorkflowNodePanel,
   type WorkflowPaletteItem,
@@ -24,15 +27,16 @@ import {
 } from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 
-const paletteItemById = [
-  ...WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items),
-  LEGACY_TASK_PALETTE_ITEM,
-].reduce<Record<string, WorkflowPaletteItem>>((accumulator, item) => {
-  accumulator[item.id] = item;
-  return accumulator;
-}, {});
+const createStaticPaletteItemMap = () => ({
+  ...createWorkflowPaletteItemMap(WORKFLOW_PALETTE_CATEGORIES),
+  [LEGACY_TASK_PALETTE_ITEM.id]: LEGACY_TASK_PALETTE_ITEM,
+});
 
 const getPaletteIdForRunnerNodeType = (nodeType: string) => {
+  if (nodeType.startsWith("plugin:")) {
+    return `palette-${nodeType.replace(/^plugin:/, "").replace(/_/g, "-")}`;
+  }
+
   switch (nodeType) {
     case "start":
       return "palette-start";
@@ -66,6 +70,10 @@ const getPaletteIdForRunnerNodeType = (nodeType: string) => {
 };
 
 const getNodeTitle = (nodeType: string) => {
+  if (nodeType.startsWith("plugin:")) {
+    return nodeType.replace(/^plugin:/, "");
+  }
+
   switch (nodeType) {
     case "start":
       return "Start";
@@ -99,6 +107,10 @@ const getNodeTitle = (nodeType: string) => {
 };
 
 const getNodeKind = (nodeType: string): WorkflowNodeKind => {
+  if (nodeType.startsWith("plugin:")) {
+    return "effect";
+  }
+
   switch (nodeType) {
     case "start":
       return "start";
@@ -242,17 +254,27 @@ const createImportedNode = (
   node: RunnerWorkflowDefinition["nodes"][number],
   index: number,
   existingNodes: WorkflowFlowNode[],
+  paletteCategories: WorkflowPaletteCategory[],
 ) => {
   const paletteId = getPaletteIdForRunnerNodeType(node.type);
+  const paletteItemById = {
+    ...createWorkflowPaletteItemMap(paletteCategories),
+    [LEGACY_TASK_PALETTE_ITEM.id]: LEGACY_TASK_PALETTE_ITEM,
+  };
   const paletteItem =
-    paletteItemById[paletteId] ?? paletteItemById["palette-shell"];
+    paletteItemById[paletteId] ??
+    (node.type.startsWith("plugin:")
+      ? resolvePaletteItemForRunnerType(node.type, paletteCategories)
+      : createStaticPaletteItemMap()["palette-shell"]);
   const { node: draftNode, panel } = createWorkflowNodeDraft(
     paletteItem,
     readEditorPosition(node, index),
     existingNodes,
   );
   const nextPanel = clonePanel(panel);
-  const nodeTitle = getNodeTitle(node.type);
+  const nodeTitle = node.type.startsWith("plugin:")
+    ? paletteItem.label
+    : getNodeTitle(node.type);
   const isTerminal = node.type === "start" || node.type === "end";
   const nextNode: WorkflowFlowNode = {
     ...draftNode,
@@ -264,6 +286,7 @@ const createImportedNode = (
       ...draftNode.data,
       kind: getNodeKind(node.type),
       nodeKey: node.id,
+      runnerType: node.type.startsWith("plugin:") ? node.type : draftNode.data.runnerType,
       subtitle: isTerminal ? undefined : node.name,
       title: nodeTitle,
     },
@@ -404,6 +427,19 @@ const createImportedNode = (
     );
   }
 
+  if (node.type.startsWith("plugin:")) {
+    Object.entries(node.config ?? {}).forEach(([key, value]) => {
+      setPanelFieldValue(nextPanel, `config:${key}`, serializeMappingValue(value));
+      setPanelFieldValue(nextPanel, key, serializeMappingValue(value));
+    });
+    setPanelFieldValue(nextPanel, "runnerType", node.type);
+    setPanelFieldValue(
+      nextPanel,
+      "payload",
+      serializeMappingValue(node.inputMapping),
+    );
+  }
+
   if (node.retryPolicy?.max_attempts !== undefined) {
     setPanelFieldValue(
       nextPanel,
@@ -425,6 +461,7 @@ const createImportedNode = (
 
 export const createWorkflowEditorStateFromRunnerDefinition = (
   definition: RunnerWorkflowDefinition,
+  paletteCategories: WorkflowPaletteCategory[] = WORKFLOW_PALETTE_CATEGORIES,
 ): WorkflowEditorState => {
   const fallbackState = createNewWorkflowEditorState();
   const nodes: WorkflowFlowNode[] = [];
@@ -437,6 +474,7 @@ export const createWorkflowEditorStateFromRunnerDefinition = (
       nodeDefinition,
       index,
       nodes,
+      paletteCategories,
     );
 
     nodes.push(imported.node);

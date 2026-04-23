@@ -247,4 +247,110 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
         ?.value,
     ).toBe('{\n  "orderId": "{{input.orderId}}"\n}');
   });
+
+  it("restores plugin nodes from dynamic descriptors", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "plugin-flow",
+        name: "Plugin Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: {
+        type: "manual",
+      },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "hello_world_1",
+          type: "plugin:hello_world",
+          name: "Say Hello",
+          config: {
+            target: "SES",
+            prefix: "Hi",
+          },
+          inputMapping: {
+            name: "{{input.name}}",
+          },
+        },
+        {
+          id: "end_1",
+          type: "end",
+          name: "End",
+        },
+      ],
+      transitions: [
+        { from: "start_1", to: "hello_world_1" },
+        { from: "hello_world_1", to: "end_1" },
+      ],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition, [
+      {
+        id: "dynamic-biz",
+        label: "业务节点",
+        icon: "activity",
+        defaultOpen: false,
+        items: [
+          {
+            id: "palette-hello-world",
+            kind: "effect",
+            label: "Hello World",
+            icon: "activity",
+            accent: "#0EA5E9",
+            runnerType: "plugin:hello_world",
+            nodeDescriptor: {
+              id: "hello_world",
+              kind: "effect",
+              runnerType: "plugin:hello_world",
+              version: "1.0.0",
+              category: "业务节点",
+              displayName: "Hello World",
+              status: "stable",
+              transport: "http",
+              timeoutMs: 5000,
+              configSchema: {
+                type: "object",
+                properties: {
+                  target: { type: "string", title: "默认问候对象" },
+                  prefix: { type: "string", title: "问候前缀" },
+                },
+              },
+              defaults: {
+                target: "World",
+                prefix: "Hello",
+              },
+            },
+          },
+        ],
+      },
+    ]);
+    const pluginNode = state.nodes.find((node) => node.id === "hello_world_1");
+    const pluginPanel = state.panelByNodeId.hello_world_1;
+
+    expect(pluginNode?.data.title).toBe("Hello World");
+    expect(pluginNode?.data.runnerType).toBe("plugin:hello_world");
+    expect(
+      pluginPanel.fieldsByTab.base?.find((field) => field.key === "runnerType")
+        ?.value,
+    ).toBe("plugin:hello_world");
+    expect(
+      pluginPanel.fieldsByTab.base?.find((field) => field.key === "config:target")
+        ?.value,
+    ).toBe("SES");
+    expect(
+      pluginPanel.fieldsByTab.mapping?.find((field) => field.key === "payload")
+        ?.value,
+    ).toBe('{\n  "name": "{{input.name}}"\n}');
+  });
 });

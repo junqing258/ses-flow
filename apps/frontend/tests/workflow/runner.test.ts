@@ -610,6 +610,113 @@ describe("buildRunnerWorkflowDefinition", () => {
       },
     });
   });
+
+  it("exports plugin nodes with descriptor runner type and config", () => {
+    const baseNodes = createExampleWorkflowNodes().filter(
+      (node) => node.id !== "assign_task",
+    );
+    const { node: pluginNode, panel: pluginPanel } = createWorkflowNodeDraft(
+      {
+        id: "palette-hello-world",
+        kind: "effect",
+        label: "Hello World",
+        icon: "activity",
+        accent: "#0EA5E9",
+        runnerType: "plugin:hello_world",
+        nodeDescriptor: {
+          id: "hello_world",
+          kind: "effect",
+          runnerType: "plugin:hello_world",
+          version: "1.0.0",
+          category: "业务节点",
+          displayName: "Hello World",
+          status: "stable",
+          transport: "http",
+          timeoutMs: 5000,
+          configSchema: {
+            type: "object",
+            properties: {
+              target: { type: "string", title: "默认问候对象" },
+              prefix: { type: "string", title: "问候前缀" },
+            },
+          },
+          defaults: {
+            target: "World",
+            prefix: "Hello",
+          },
+        },
+      },
+      { x: 1184, y: 88 },
+      baseNodes,
+    );
+
+    pluginNode.id = "hello_world_1";
+    pluginNode.data.nodeKey = "hello_world_1";
+
+    (pluginPanel.fieldsByTab.base ?? []).forEach((field) => {
+      if (field.key === "nodeId") {
+        field.value = "hello_world_1";
+      }
+      if (field.key === "nodeName") {
+        field.value = "Say Hello";
+      }
+      if (field.key === "config:target") {
+        field.value = "SES";
+      }
+      if (field.key === "config:prefix") {
+        field.value = "Hi";
+      }
+    });
+
+    const payloadField = (pluginPanel.fieldsByTab.mapping ?? []).find(
+      (field) => field.key === "payload",
+    );
+
+    if (!payloadField) {
+      throw new Error("plugin payload field should exist");
+    }
+
+    payloadField.value = "{\n  name: input.name\n}";
+
+    const panels = createWorkflowPanels();
+    panels.hello_world_1 = pluginPanel;
+
+    const definition = buildRunnerWorkflowDefinition(
+      [...baseNodes, pluginNode],
+      createWorkflowEdges().map((edge) =>
+        edge.id === "switch->assign"
+          ? {
+              ...edge,
+              id: "switch->plugin",
+              target: "hello_world_1",
+            }
+          : edge,
+      ),
+      panels,
+      {
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+        workflowVersion: "v3",
+      },
+    );
+
+    const pluginDefinition = definition.nodes.find(
+      (node) => node.id === "hello_world_1",
+    );
+
+    expect(pluginDefinition).toMatchObject({
+      id: "hello_world_1",
+      name: "Say Hello",
+      type: "plugin:hello_world",
+      config: {
+        target: "SES",
+        prefix: "Hi",
+      },
+      inputMapping: {
+        name: "{{input.name}}",
+      },
+    });
+  });
 });
 
 describe("shouldPollWorkflowRunSummary", () => {

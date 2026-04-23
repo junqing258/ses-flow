@@ -3,6 +3,7 @@ import { request as sendRequest } from "@/lib/request";
 import type { RunnerWorkflowDefinition } from "./runner";
 import type { PersistedWorkflowDocument } from "./persistence";
 import type { WorkflowRunStatus } from "./runner";
+import type { WorkflowNodeDescriptor } from "./model";
 
 export interface WorkflowSummary {
   createdAt: string;
@@ -50,6 +51,7 @@ export const getRunnerBaseUrl = () => {
 export const RUNNER_BASE_URL = getRunnerBaseUrl();
 
 const CATALOG_API_BASE_URL = RUNNER_BASE_URL + "/catalog";
+const NODE_DESCRIPTOR_API_BASE_URL = RUNNER_BASE_URL + "/node-descriptors";
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";
 
 const parseResponse = async <T>(
@@ -102,4 +104,14 @@ export const fetchWorkflowRuns = async (
 export const refreshWorkflowCatalog = async (): Promise<void> => {
   const response = await sendRequest(`${CATALOG_API_BASE_URL}/refresh`);
   await parseResponse<{ status: string }>(response, "刷新工作流目录失败");
+};
+
+export const fetchNodeDescriptors = async (): Promise<
+  WorkflowNodeDescriptor[]
+> => {
+  const response = await sendRequest(NODE_DESCRIPTOR_API_BASE_URL);
+  return parseResponse<WorkflowNodeDescriptor[]>(
+    response,
+    "获取动态节点列表失败",
+  );
 };

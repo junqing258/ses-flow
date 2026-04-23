@@ -15,6 +15,7 @@ use tower::ServiceExt;
 use runner::app::WorkflowApp;
 use runner::store::{InMemoryRunStore, WorkflowRunStore};
 
+use crate::modules::node_registry::register_http_plugin_base_urls;
 use crate::modules::{ApiState, RUNNER_API_BASE_PATH, build_router};
 
 fn build_app() -> axum::Router {
@@ -360,6 +361,56 @@ async fn registers_http_plugin_and_lists_node_descriptors() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["runnerType"], json!("plugin:barcode_scan"));
     assert_eq!(items[0]["endpoint"], json!(plugin_base_url));
+}
+
+#[tokio::test]
+async fn auto_registers_http_plugins_from_base_urls() {
+    let descriptor_body = json!({
+        "id": "hello_world",
+        "kind": "effect",
+        "runnerType": "plugin:hello_world",
+        "version": "1.0.0",
+        "category": "业务节点",
+        "displayName": "Hello World",
+        "transport": "http",
+        "configSchema": {
+            "type": "object"
+        },
+        "supportsCancel": false,
+        "supportsResume": false
+    })
+    .to_string();
+    let upstream_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        descriptor_body.len(),
+        descriptor_body
+    );
+    let (plugin_base_url, captured_request_receiver) = spawn_single_response_http_server(upstream_response);
+    let state = ApiState {
+        app: Arc::new(WorkflowApp::new()),
+        ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
+        ai_gateway_client: reqwest::Client::new(),
+    };
+
+    let descriptors = register_http_plugin_base_urls(&state, std::slice::from_ref(&plugin_base_url))
+        .await
+        .expect("auto registration should succeed");
+
+    assert_eq!(descriptors.len(), 1);
+    assert_eq!(descriptors[0].id, "hello_world");
+    assert_eq!(descriptors[0].endpoint.as_deref(), Some(plugin_base_url.as_str()));
+
+    let captured = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("plugin descriptor request should be captured");
+    assert!(captured.request_line.starts_with("GET /descriptor "));
+
+    let registered = state
+        .app
+        .list_node_descriptors()
+        .expect("descriptor list should be available");
+    assert_eq!(registered.len(), 1);
+    assert_eq!(registered[0].runner_type, "plugin:hello_world");
 }
 
 #[tokio::test]

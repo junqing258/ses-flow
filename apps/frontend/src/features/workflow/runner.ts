@@ -402,7 +402,39 @@ const getSwitchBranchPriority = (
   return Math.max(100 - branchIndex * 10, 10);
 };
 
+const COMMON_PLUGIN_FIELD_KEYS = new Set([
+  "nodeName",
+  "timeout",
+  "runnerType",
+  "nodeId",
+  "note",
+]);
+
+const extractPluginConfig = (
+  panel: WorkflowNodePanel | undefined,
+): Record<string, unknown> => {
+  const baseFields = panel?.fieldsByTab.base ?? [];
+  const configEntries = baseFields
+    .filter((field) => field.key.startsWith("config:"))
+    .map((field) => [field.key.replace(/^config:/, ""), parseScalarValue(field.value)] as const);
+
+  if (configEntries.length > 0) {
+    return Object.fromEntries(configEntries);
+  }
+
+  return baseFields
+    .filter((field) => !COMMON_PLUGIN_FIELD_KEYS.has(field.key))
+    .reduce<Record<string, unknown>>((accumulator, field) => {
+      accumulator[field.key] = parseScalarValue(field.value);
+      return accumulator;
+    }, {});
+};
+
 const extractNodeType = (node: WorkflowFlowNode) => {
+  if (node.data.runnerType?.trim()) {
+    return node.data.runnerType.trim();
+  }
+
   if (node.data.kind === "start") {
     return "start";
   }
@@ -612,6 +644,13 @@ const buildNodeDefinition = (
     definition.config = {
       mode: "body",
     };
+  }
+
+  if (type.startsWith("plugin:")) {
+    definition.config = extractPluginConfig(panel);
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "payload"),
+    );
   }
 
   return definition;

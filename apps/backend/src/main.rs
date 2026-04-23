@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use backend::modules::node_registry::register_http_plugin_base_urls;
 use backend::modules::{ApiState, ai_gateway, build_router};
 use runner::app::WorkflowApp;
 use runner::config::RunnerConfig;
@@ -39,7 +40,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let catalog_store = Arc::new(PostgresCatalogStore::new(run_store.get_pool()).await?);
     let edit_session_store = Arc::new(PostgresEditSessionStore::new(run_store.get_pool()).await?);
 
-    let router = build_router(ApiState {
+    let state = ApiState {
         app: Arc::new(WorkflowApp::with_store_catalog_sessions_and_concurrency(
             run_store,
             catalog_store,
@@ -48,7 +49,20 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         )),
         ai_gateway_base_url: ai_gateway::resolve_ai_gateway_base_url(),
         ai_gateway_client: reqwest::Client::new(),
-    });
+    };
+    let auto_register_plugin_base_urls = resolve_auto_register_plugin_base_urls();
+    if !auto_register_plugin_base_urls.is_empty() {
+        let descriptors = register_http_plugin_base_urls(&state, &auto_register_plugin_base_urls)
+            .await
+            .map_err(|error| std::io::Error::other(format!("failed to auto-register plugins: {error:?}")))?;
+        info!(
+            count = descriptors.len(),
+            plugin_ids = ?descriptors.iter().map(|descriptor| descriptor.id.clone()).collect::<Vec<_>>(),
+            "auto-registered http plugins"
+        );
+    }
+
+    let router = build_router(state);
     let listener = tokio::net::TcpListener::bind(address).await?;
     info!(address = %address, "backend listening");
     axum::serve(listener, router).await?;
@@ -60,4 +74,18 @@ fn parse_arg(flag: &str) -> Option<String> {
     args.windows(2)
         .find(|window| window[0] == flag)
         .map(|window| window[1].clone())
+}
+
+fn resolve_auto_register_plugin_base_urls() -> Vec<String> {
+    env::var("BACKEND_AUTO_REGISTER_PLUGIN_URLS")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
 }

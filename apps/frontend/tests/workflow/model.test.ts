@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   WORKFLOW_PALETTE_CATEGORIES,
+  createWorkflowPaletteCategories,
   createWorkflowNodeDraft,
   getWorkflowFieldSelectOptions,
   resolveWorkflowReferenceId,
@@ -175,5 +176,46 @@ describe("createWorkflowNodeDraft", () => {
         },
       ]),
     ).toBe("child-flow");
+  });
+
+  it("creates plugin palette items from node descriptors", () => {
+    const categories = createWorkflowPaletteCategories([
+      {
+        id: "hello_world",
+        kind: "effect",
+        runnerType: "plugin:hello_world",
+        version: "1.0.0",
+        category: "业务节点",
+        displayName: "Hello World",
+        status: "stable",
+        transport: "http",
+        timeoutMs: 5000,
+        description: "hello world plugin",
+        configSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              title: "默认问候对象",
+              "x-component": "input",
+            },
+          },
+        },
+        defaults: {
+          target: "World",
+        },
+      },
+    ]);
+
+    const pluginCategory = categories.find(
+      (category) => category.label === "业务节点",
+    );
+    const pluginItem = pluginCategory?.items.find(
+      (item) => item.runnerType === "plugin:hello_world",
+    );
+
+    expect(pluginItem).toBeDefined();
+    expect(pluginItem?.label).toBe("Hello World");
+    expect(pluginItem?.kind).toBe("effect");
   });
 });

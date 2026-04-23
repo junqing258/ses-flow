@@ -105,6 +105,7 @@ const cloneNodeData = (
   icon: data.icon,
   kind: data.kind,
   nodeKey: data.nodeKey,
+  runnerType: data.runnerType,
   status: data.status,
   subtitle: data.subtitle,
   title: data.title,
@@ -199,6 +200,10 @@ const clonePanels = (
             (fields ?? []).map((field) => ({
               key: field.key,
               label: field.label,
+              options: field.options?.map((option) => ({
+                label: option.label,
+                value: option.value,
+              })),
               type: field.type,
               value: field.value,
             })),

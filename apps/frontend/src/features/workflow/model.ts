@@ -86,6 +86,7 @@ export interface WorkflowNodeData {
   icon: WorkflowIconKey;
   kind: WorkflowNodeKind;
   nodeKey: string;
+  runnerType?: string;
   status?: "draft" | "published";
   subtitle?: string;
   title: string;
@@ -116,6 +117,8 @@ export interface WorkflowPaletteItem {
   id: string;
   kind: WorkflowNodeKind;
   label: string;
+  nodeDescriptor?: WorkflowNodeDescriptor;
+  runnerType?: string;
 }
 
 export interface WorkflowPaletteCategory {
@@ -140,6 +143,36 @@ export type CreateWorkflowNodeDraft = (
   position: WorkflowNodePosition,
   existingNodes: readonly WorkflowExistingNode[],
 ) => WorkflowNodeDraft;
+
+export interface WorkflowJsonSchemaProperty {
+  default?: unknown;
+  enum?: unknown[];
+  title?: string;
+  type?: string;
+  ["x-component"]?: string;
+  ["x-options"]?: unknown[];
+  ["x-tab"]?: string;
+}
+
+export interface WorkflowNodeDescriptor {
+  category: string;
+  configSchema?: {
+    properties?: Record<string, WorkflowJsonSchemaProperty>;
+    required?: string[];
+    type?: string;
+  };
+  defaults?: Record<string, unknown> | null;
+  description?: string;
+  displayName: string;
+  icon?: string | null;
+  id: string;
+  kind: WorkflowNodeKind | string;
+  runnerType: string;
+  status: "stable" | "beta" | "deprecated";
+  timeoutMs?: number;
+  transport?: "builtin" | "http" | "grpc" | "process";
+  version: string;
+}
 
 export type WorkflowFlowNode = Node<
   WorkflowNodeData,
@@ -216,6 +249,161 @@ const DEFAULT_SELECT_FIELD_OPTIONS: Partial<
     { label: "use_default_branch", value: "use_default_branch" },
   ],
 };
+
+const isWorkflowNodeKind = (value: string): value is WorkflowNodeKind =>
+  [
+    "start",
+    "trigger",
+    "sub-workflow",
+    "fetch",
+    "set-state",
+    "if-else",
+    "switch",
+    "shell",
+    "effect",
+    "wait",
+    "end",
+    "branch-label",
+  ].includes(value);
+
+const toWorkflowIconKey = (value: string | null | undefined): WorkflowIconKey =>
+  value && value in WORKFLOW_ICON_MAP
+    ? (value as WorkflowIconKey)
+    : "activity";
+
+const toWorkflowFieldType = (
+  property: WorkflowJsonSchemaProperty,
+): WorkflowFieldType => {
+  const component = property["x-component"];
+
+  if (
+    component === "select" ||
+    component === "radio" ||
+    Array.isArray(property.enum) ||
+    Array.isArray(property["x-options"])
+  ) {
+    return "select";
+  }
+
+  if (component === "textarea" || property.type === "object") {
+    return "textarea";
+  }
+
+  return "input";
+};
+
+const toFieldOptions = (
+  property: WorkflowJsonSchemaProperty,
+): WorkflowFieldOption[] | undefined => {
+  const options = Array.isArray(property["x-options"])
+    ? property["x-options"]
+    : property.enum;
+
+  if (!Array.isArray(options)) {
+    return undefined;
+  }
+
+  return options.map((option) => ({
+    label: String(option),
+    value: String(option),
+  }));
+};
+
+const stringifyFieldValue = (value: unknown): string => {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return JSON.stringify(value, null, 2);
+};
+
+const createDescriptorConfigFields = (
+  descriptor: WorkflowNodeDescriptor,
+): WorkflowField[] =>
+  Object.entries(descriptor.configSchema?.properties ?? {}).map(
+    ([key, property]) => ({
+      key: `config:${key}`,
+      label: property.title ?? key,
+      options: toFieldOptions(property),
+      type: toWorkflowFieldType(property),
+      value: stringifyFieldValue(
+        descriptor.defaults?.[key] ?? property.default ?? "",
+      ),
+    }),
+  );
+
+const createPluginNodePanel = (
+  descriptor: WorkflowNodeDescriptor,
+  nodeId: string,
+  subtitle: string,
+): WorkflowNodePanel => ({
+  tabs: ["base", "mapping", "retry"],
+  fieldsByTab: {
+    base: [
+      ...createDescriptorConfigFields(descriptor),
+      {
+        key: "nodeName",
+        label: "节点名称",
+        type: "input",
+        value: subtitle,
+      },
+      {
+        key: "timeout",
+        label: "超时时间 (ms)",
+        type: "input",
+        value: descriptor.timeoutMs ? String(descriptor.timeoutMs) : "5000",
+      },
+      {
+        key: "runnerType",
+        label: "Runner 类型",
+        type: "readonly",
+        value: descriptor.runnerType,
+      },
+      {
+        key: "nodeId",
+        label: "节点 ID",
+        type: "readonly",
+        value: nodeId,
+      },
+      {
+        key: "note",
+        label: "备注",
+        type: "textarea",
+        value: descriptor.description ?? "",
+      },
+    ],
+    mapping: [
+      {
+        key: "payload",
+        label: "插件输入",
+        type: "textarea",
+        value: "{{input}}",
+      },
+    ],
+    retry: [
+      {
+        key: "retryPolicy",
+        label: "失败重试",
+        type: "select",
+        value: "exponential_backoff",
+      },
+      {
+        key: "maxAttempts",
+        label: "最大重试次数",
+        type: "input",
+        value: "3",
+      },
+    ],
+  },
+});
 
 export const createSwitchBranchHandleId = (index: number) => {
   if (index < 26) {
@@ -564,6 +752,84 @@ export const LEGACY_TASK_PALETTE_ITEM: WorkflowPaletteItem = {
   label: "Task",
   icon: "listTodo",
   accent: "#8B5CF6",
+};
+
+const getDynamicPaletteAccent = (descriptor: WorkflowNodeDescriptor) => {
+  if (descriptor.transport === "http") {
+    return "#0EA5E9";
+  }
+
+  if (descriptor.transport === "grpc") {
+    return "#14B8A6";
+  }
+
+  return "#8B5CF6";
+};
+
+const toPaletteCategoryId = (label: string) =>
+  `dynamic-${label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "plugins"}`;
+
+const toPaletteItemKind = (descriptor: WorkflowNodeDescriptor): WorkflowNodeKind => {
+  if (typeof descriptor.kind === "string" && isWorkflowNodeKind(descriptor.kind)) {
+    return descriptor.kind;
+  }
+
+  if (descriptor.runnerType.startsWith("plugin:")) {
+    return "effect";
+  }
+
+  return "effect";
+};
+
+const createDynamicPaletteItem = (
+  descriptor: WorkflowNodeDescriptor,
+): WorkflowPaletteItem => ({
+  accent: getDynamicPaletteAccent(descriptor),
+  icon: toWorkflowIconKey(descriptor.icon),
+  id: `palette-${descriptor.id.replace(/_/g, "-")}`,
+  kind: toPaletteItemKind(descriptor),
+  label: descriptor.displayName,
+  nodeDescriptor: descriptor,
+  runnerType: descriptor.runnerType,
+});
+
+export const createWorkflowPaletteCategories = (
+  descriptors: WorkflowNodeDescriptor[] = [],
+): WorkflowPaletteCategory[] => {
+  const categories = structuredClone(
+    WORKFLOW_PALETTE_CATEGORIES,
+  ) as WorkflowPaletteCategory[];
+  const dynamicDescriptors = descriptors
+    .filter((descriptor) => descriptor.status !== "deprecated")
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+
+  dynamicDescriptors.forEach((descriptor) => {
+    const categoryLabel = descriptor.category.trim() || "动态节点";
+    const categoryId = toPaletteCategoryId(categoryLabel);
+    const existingCategory = categories.find(
+      (category) => category.id === categoryId,
+    );
+    const item = createDynamicPaletteItem(descriptor);
+
+    if (existingCategory) {
+      existingCategory.items.push(item);
+      return;
+    }
+
+    categories.push({
+      defaultOpen: false,
+      icon: "activity",
+      id: categoryId,
+      items: [item],
+      label: categoryLabel,
+    });
+  });
+
+  return categories;
 };
 
 const INITIAL_WORKFLOW_EDGES: Edge[] = [
@@ -1240,6 +1506,72 @@ const getPaletteBaseNodeId = (item: WorkflowPaletteItem) => {
 const clonePanel = (nodeId: keyof typeof INITIAL_WORKFLOW_PANELS) =>
   structuredClone(INITIAL_WORKFLOW_PANELS[nodeId]) as WorkflowNodePanel;
 
+export const createWorkflowPaletteItemMap = (
+  categories: WorkflowPaletteCategory[],
+) =>
+  categories.flatMap((category) => category.items).reduce<
+    Record<string, WorkflowPaletteItem>
+  >((accumulator, item) => {
+    accumulator[item.id] = item;
+    return accumulator;
+  }, {});
+
+const createFallbackPluginPaletteItem = (runnerType: string): WorkflowPaletteItem => ({
+  accent: "#8B5CF6",
+  icon: "activity",
+  id: `palette-${runnerType.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+  kind: "effect",
+  label: runnerType.replace(/^plugin:/, "") || runnerType,
+  runnerType,
+});
+
+export const resolvePaletteItemForRunnerType = (
+  runnerType: string,
+  categories: WorkflowPaletteCategory[] = WORKFLOW_PALETTE_CATEGORIES,
+): WorkflowPaletteItem => {
+  const items = categories.flatMap((category) => category.items);
+  const matchedItem = items.find((item) => item.runnerType === runnerType);
+
+  if (matchedItem) {
+    return matchedItem;
+  }
+
+  if (runnerType.startsWith("plugin:")) {
+    return createFallbackPluginPaletteItem(runnerType);
+  }
+
+  switch (runnerType) {
+    case "start":
+      return items.find((item) => item.id === "palette-start") ?? items[0];
+    case "end":
+      return items.find((item) => item.id === "palette-end") ?? items[0];
+    case "fetch":
+      return items.find((item) => item.id === "palette-fetch") ?? items[0];
+    case "set_state":
+      return items.find((item) => item.id === "palette-set-state") ?? items[0];
+    case "switch":
+      return items.find((item) => item.id === "palette-switch") ?? items[0];
+    case "if_else":
+      return items.find((item) => item.id === "palette-if-else") ?? items[0];
+    case "wait":
+      return items.find((item) => item.id === "palette-wait") ?? items[0];
+    case "task":
+      return LEGACY_TASK_PALETTE_ITEM;
+    case "respond":
+      return items.find((item) => item.id === "palette-respond") ?? items[0];
+    case "sub_workflow":
+      return items.find((item) => item.id === "palette-subflow") ?? items[0];
+    case "code":
+      return items.find((item) => item.id === "palette-code") ?? items[0];
+    case "shell":
+      return items.find((item) => item.id === "palette-shell") ?? items[0];
+    case "webhook_trigger":
+      return items.find((item) => item.id === "palette-webhook") ?? items[0];
+    default:
+      return items.find((item) => item.id === "palette-shell") ?? items[0];
+  }
+};
+
 const setFieldValue = (
   panel: WorkflowNodePanel,
   fieldKey: string,
@@ -1279,6 +1611,7 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
   existingNodes,
 ) => {
   const baseNodeId = getPaletteBaseNodeId(item);
+  const descriptor = item.nodeDescriptor;
 
   switch (item.id) {
     case "palette-start": {
@@ -1556,6 +1889,32 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
     }
     default: {
       const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const pluginSubtitle = `新建${item.label}`;
+
+      if (descriptor && item.runnerType?.startsWith("plugin:")) {
+        const panel = createPluginNodePanel(descriptor, nodeId, pluginSubtitle);
+
+        return {
+          node: {
+            id: nodeId,
+            type: "workflow-card",
+            position,
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+            data: {
+              accent: item.accent,
+              icon: item.icon,
+              kind: item.kind,
+              nodeKey: nodeId,
+              runnerType: item.runnerType,
+              subtitle: pluginSubtitle,
+              title: item.label,
+            },
+          },
+          panel,
+        };
+      }
+
       const panel = clonePanel("assign_task");
       const subtitle = `新建${item.label}`;
       const titleMap: Partial<Record<WorkflowPaletteItem["id"], string>> = {
@@ -1583,6 +1942,7 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
               icon: item.icon,
               kind: item.kind,
               nodeKey: nodeId,
+              runnerType: item.runnerType,
               subtitle,
               title,
             },
@@ -1606,6 +1966,7 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
             icon: item.icon,
             kind: item.kind,
             nodeKey: nodeId,
+            runnerType: item.runnerType,
             subtitle,
             title,
           },

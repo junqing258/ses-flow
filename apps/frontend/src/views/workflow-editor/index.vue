@@ -197,11 +197,11 @@
               draggable="true"
               class="flex w-full cursor-grab items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition-colors active:cursor-grabbing"
               :class="
-                selectedNodeId && selectedNodeData?.kind === item.kind
+                isPaletteItemSelected(item)
                   ? 'bg-[var(--app-accent-soft)]/70'
                   : 'hover:bg-[var(--panel-soft)]'
               "
-              @click="focusPaletteItem(item.kind)"
+              @click="focusPaletteItem(item)"
               @dragstart="handlePaletteDragStart($event, item.id)"
               @dragend="handlePaletteDragEnd"
             >
@@ -843,6 +843,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  fetchNodeDescriptors,
   fetchWorkflowList,
   fetchWorkflowRuns,
   fetchWorkflowDetail,
@@ -891,6 +892,8 @@ import {
   WORKFLOW_ICON_MAP,
   WORKFLOW_PALETTE_CATEGORIES,
   WORKFLOW_TAB_LABELS,
+  createWorkflowPaletteCategories,
+  createWorkflowPaletteItemMap,
   createSwitchBranchHandleId,
   createWorkflowNodeDraft,
   getWorkflowFieldSelectOptions,
@@ -905,8 +908,10 @@ import {
   type WorkflowFlowNode,
   type WorkflowIconKey,
   type WorkflowNodeData,
+  type WorkflowNodeDescriptor,
   type WorkflowNodeKind,
   type WorkflowNodePanel,
+  type WorkflowPaletteCategory,
   type WorkflowPaletteItem,
   type WorkflowTabId,
 } from "@/features/workflow/model";
@@ -955,6 +960,7 @@ const activeRunId = ref("");
 const activeRunWorkflowId = ref("");
 const workflowRunCount = ref(0);
 const workflowSummaries = ref<WorkflowSummary[]>([]);
+const nodeDescriptors = ref<WorkflowNodeDescriptor[]>([]);
 const runErrorMessage = ref("");
 let runSummaryPollTimer: number | null = null;
 let assistantSessionPollTimer: number | null = null;
@@ -993,6 +999,9 @@ const expandedCategories = reactive<Record<string, boolean>>(
       category.defaultOpen,
     ]),
   ),
+);
+const paletteCategories = computed<WorkflowPaletteCategory[]>(() =>
+  createWorkflowPaletteCategories(nodeDescriptors.value),
 );
 const WORKFLOW_FLOW_ID = "workflow-editor-flow";
 const { fitView, onPaneReady, screenToFlowCoordinate } =
@@ -1187,7 +1196,7 @@ const runOutputPreview = computed(() => {
 const filteredCategories = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
 
-  return WORKFLOW_PALETTE_CATEGORIES.map((category) => ({
+  return paletteCategories.value.map((category) => ({
     ...category,
     items: keyword
       ? category.items.filter((item) =>
@@ -1198,12 +1207,7 @@ const filteredCategories = computed(() => {
 });
 
 const paletteItemMap = computed<Record<string, WorkflowPaletteItem>>(() =>
-  WORKFLOW_PALETTE_CATEGORIES.flatMap((category) => category.items).reduce<
-    Record<string, WorkflowPaletteItem>
-  >((acc, item) => {
-    acc[item.id] = item;
-    return acc;
-  }, {}),
+  createWorkflowPaletteItemMap(paletteCategories.value),
 );
 
 watch(
@@ -1792,17 +1796,22 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
   }
 
   try {
+    await loadNodeDescriptorRegistry(false);
     const workflow = await fetchWorkflowDetail(workflowId);
     const nextState =
       requestedRunId.trim().length > 0
         ? workflow.document
           ? createWorkflowEditorStateFromDocument(workflow.document)
-          : createWorkflowEditorStateFromRunnerDefinition(workflow.workflow)
+          : createWorkflowEditorStateFromRunnerDefinition(
+              workflow.workflow,
+              paletteCategories.value,
+            )
         : clearWorkflowEditorSelection(
             workflow.document
               ? createWorkflowEditorStateFromDocument(workflow.document)
               : createWorkflowEditorStateFromRunnerDefinition(
                   workflow.workflow,
+                  paletteCategories.value,
                 ),
           );
 
@@ -1852,6 +1861,18 @@ const loadSelectableWorkflows = async (silent = true) => {
     if (!silent) {
       toast.error(
         error instanceof Error ? error.message : "获取工作流列表失败",
+      );
+    }
+  }
+};
+
+const loadNodeDescriptorRegistry = async (silent = true) => {
+  try {
+    nodeDescriptors.value = await fetchNodeDescriptors();
+  } catch (error) {
+    if (!silent) {
+      toast.error(
+        error instanceof Error ? error.message : "获取动态节点列表失败",
       );
     }
   }
@@ -2276,13 +2297,39 @@ const isCategoryOpen = (categoryId: string) => {
   return expandedCategories[categoryId];
 };
 
-const focusPaletteItem = (kind: WorkflowNodeKind) => {
+const matchesPaletteItem = (
+  item: WorkflowPaletteItem,
+  node: WorkflowFlowNode | WorkflowNodeData,
+) => {
+  const nodeData = "data" in node ? node.data : node;
+
+  if (item.runnerType || nodeData.runnerType) {
+    return (
+      !!item.runnerType &&
+      !!nodeData.runnerType &&
+      nodeData.runnerType === item.runnerType
+    );
+  }
+
+  return nodeData.title === item.label;
+};
+
+const isPaletteItemSelected = (item: WorkflowPaletteItem) => {
+  if (!selectedNodeId.value) {
+    return false;
+  }
+
+  return matchesPaletteItem(item, selectedNodeData.value);
+};
+
+const focusPaletteItem = (item: WorkflowPaletteItem) => {
   if (!isEditMode.value) {
     return;
   }
 
   const targetNode = nodes.value.find(
-    (node) => node.data.kind === kind && node.type !== "branch-chip",
+    (node) =>
+      node.type !== "branch-chip" && matchesPaletteItem(item, node),
   );
 
   if (targetNode) {
@@ -3035,6 +3082,7 @@ const handlePublish = async () => {
 
 onMounted(() => {
   void loadSelectableWorkflows();
+  void loadNodeDescriptorRegistry();
 });
 
 onPaneReady(() => {

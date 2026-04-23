@@ -7,10 +7,14 @@ dev:
   #!/usr/bin/env bash
   set -euo pipefail
   trap 'kill 0' EXIT INT TERM
+  just dev-plugin-hello-world &
   just dev-ai-gateway &
   just dev-backend &
   just dev-frontend &
   wait
+
+dev-plugin-hello-world:
+  cargo run -p hello-world-plugin -- --host 127.0.0.1 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
 
 dev-ai-gateway:
   pnpm --filter ai-gateway dev
@@ -40,6 +44,9 @@ start:
   just start-backend &
   just start-frontend &
   wait
+
+start-plugin-hello-world:
+  cargo run --release -p hello-world-plugin -- --host 127.0.0.1 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
 
 start-ai-gateway:
   pnpm --filter ai-gateway start
