@@ -13,7 +13,7 @@ use tracing::{error, info};
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-    init_tracing();
+    let _log_guard = init_tracing();
 
     if let Err(error) = run().await {
         error!(error = %error, "backend failed");

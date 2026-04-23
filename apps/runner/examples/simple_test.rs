@@ -5,7 +5,7 @@ use serde_json::json;
 
 fn main() {
     // 初始化日志系统
-    runner::utils::telemetry::init_tracing();
+    let _log_guard = runner::utils::telemetry::init_tracing();
 
     println!("\n========================================");
     println!("工作流节点输入输出日志演示");

@@ -6,6 +6,7 @@ use chrono::Local;
 use tracing::Level;
 use tracing::field::Field;
 use tracing::{Event, Subscriber};
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::field::Visit;
 use tracing_subscriber::fmt;
@@ -17,15 +18,57 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 static TRACING_INIT: Once = Once::new();
 
-pub fn init_tracing() {
+// 持有 guard 防止后台写入线程提前退出，调用方需保持其生命周期到进程结束
+pub fn init_tracing() -> Option<WorkerGuard> {
+    let mut guard = None;
+
     TRACING_INIT.call_once(|| {
         let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter()));
+        let use_json = env::var("LOG_FORMAT").map(|v| v.eq_ignore_ascii_case("json")).unwrap_or(false);
 
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(fmt::layer().event_format(BracketedEventFormatter))
-            .init();
+        tracing_log::LogTracer::init().ok();
+
+        let registry = tracing_subscriber::registry().with(env_filter);
+
+        let file_writer = env::var("LOG_FILE_DIR")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .and_then(|log_dir| {
+                std::fs::create_dir_all(&log_dir).ok()?;
+                let prefix = env::var("LOG_FILE_PREFIX").unwrap_or_else(|_| "runner.log".to_string());
+                let file_appender = tracing_appender::rolling::daily(&log_dir, &prefix);
+                let (non_blocking, worker_guard) = tracing_appender::non_blocking(file_appender);
+                Some((non_blocking, worker_guard))
+            });
+
+        match file_writer {
+            Some((non_blocking, worker_guard)) => {
+                if use_json {
+                    registry
+                        .with(fmt::layer().event_format(BracketedEventFormatter))
+                        .with(fmt::layer().json().with_ansi(false).with_writer(non_blocking))
+                        .try_init()
+                        .ok();
+                } else {
+                    registry
+                        .with(fmt::layer().event_format(BracketedEventFormatter))
+                        .with(fmt::layer().with_ansi(false).with_writer(non_blocking))
+                        .try_init()
+                        .ok();
+                }
+                guard = Some(worker_guard);
+            }
+            None => {
+                if use_json {
+                    registry.with(fmt::layer().json()).try_init().ok();
+                } else {
+                    registry.with(fmt::layer().event_format(BracketedEventFormatter)).try_init().ok();
+                }
+            }
+        }
     });
+
+    guard
 }
 
 fn default_filter() -> String {

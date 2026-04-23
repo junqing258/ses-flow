@@ -171,7 +171,57 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 }
 ```
 
-#### HTTP 插件标准接口
+#### 日志约束
+
+##### 统一日志格式
+
+插件响应体中 `logs` 数组的每条记录，以及 runner 落库/输出时的每条结构化日志，**统一使用以下格式**：
+
+```jsonc
+{
+  // ── 插件填写（plugin → runner）──────────────────────────────
+  "level":   "info",               // 必填：trace | debug | info | warn | error
+  "message": "等待扫码中",          // 必填：人类可读的事件描述
+
+  "fields": {                      // 可选：与本条日志直接相关的业务字段
+    "taskId":   "t-001",
+    "duration": 120                // 单位 ms
+  },
+
+  // ── runner 注入（归档/转发时自动补充，插件禁止填写）────────────
+  "runId":     "run-abc",          // 工作流运行实例
+  "requestId": "req-001",          // 业务幂等键，贯穿首次/恢复/取消全链路
+  "nodeId":    "node-123",         // 节点定位
+  "traceId":   "a1b2c3d4e5f6",     // 跨服务链路 ID，来自 HTTP Header X-Trace-Id
+  "timestamp": "2026-04-23T10:00:00.123Z"  // ISO 8601，runner 记录接收时间
+}
+```
+
+**字段职责说明**
+
+| 字段 | 填写方 | 说明 |
+|---|---|---|
+| `level` | 插件 | 见下方级别语义 |
+| `message` | 插件 | 信息 |
+| `fields` | 插件 | 任意 KV |
+| `runId` | runner | 来自请求 `context.runId` |
+| `requestId` | runner | 来自请求 `context.requestId` |
+| `nodeId` | runner | 来自请求 `nodeId` |
+| `traceId` | runner | 来自请求 HTTP Header `X-Trace-Id`；HTTP 插件须在响应 Header 中原样回传 |
+| `timestamp` | runner | runner 收到日志的时刻，不依赖插件侧时钟 |
+
+##### 级别语义
+
+| 级别 | 适用场景 |
+|---|---|
+| `trace` | 内部循环、逐帧/逐条数据处理，生产默认不输出 |
+| `debug` | 关键中间状态，联调时开启 |
+| `info` | 节点开始、结束、挂起等关键生命周期事件 |
+| `warn` | 可降级处理的异常（重试、超时降级等） |
+| `error` | 导致 `status: "failed"` 的根因；必须与响应体 `error.code` 对应 |
+
+`status: "failed"` 时，`error.message` 与 `logs` 末尾的 `error` 级别日志 `message` **语义必须一致**，runner 以此作为 UI 展示和采集的唯一来源。
+
 
 首期不做 runner 侧的"自动扫网段发现服务"，而采用**注册中心 + 标准插件 API**的模式。每个 HTTP 插件暴露 **5 个固定接口**：
 
