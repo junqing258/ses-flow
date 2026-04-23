@@ -348,32 +348,6 @@ runner ──▶ Bridge /execute (targetWorkerId = worker-42)
 | runner resume 入口 | ✅ 复用（commit `132d478` 已具备）|
 | 日志格式 | ✅ 复用，`traceId` 贯穿 runner → Bridge → App |
 
----
-
-## 实施阶段
-
-### P0（MVP，~1 人周）
-
-- Bridge 进程骨架（技术栈建议与 runner 对齐，用 Rust + axum）。
-- `POST /execute` → `waiting` + Pending Queue + SSE 推送。
-- App 侧：登录 + SSE 订阅 + `/complete`。
-- Bridge → runner resume 回灌。
-- 单实例、Postgres 持久化。
-
-### P1（生产可用，~2 人周）
-
-- `/cancel` 完整链路。
-- SSE 断线续传（`since` 参数 + eventId 连续性）。
-- Host API 代理（state/logs/progress）。
-- 鉴权与 audit log。
-- Prometheus 指标。
-
-### P2（规模化）
-
-- 多实例 + Redis pub/sub。
-- 动态路由策略（按仓库、按区域分片）。
-- App 端 SDK 统一封装（PDA / 移动端 / Web 复用）。
-- gRPC 版本（与 runner 动态节点方案的 grpc transport 演进对齐）。
 
 ---
 
@@ -386,3 +360,313 @@ runner ──▶ Bridge /execute (targetWorkerId = worker-42)
 | resume 路径 | Bridge 主动调 runner resume | 与 [dynamic-node-registry.md](./dynamic-node-registry.md) 已有约定一致 |
 | 持久化存储 | Postgres | 与平台主库共用连接池；Pending Queue 体量小，不需要 Kafka/Redis Streams |
 | 一个 Bridge 多种人工节点 | ✅ | `pluginType` + `configSchema` 区分，Bridge 核心与具体业务节点解耦 |
+
+---
+
+## Bridge 替代 WCS 的 App 接口设计
+
+> Bridge **完整替代旧 WCS**。App 迁移后只与 Bridge 通信，不再连接旧 WCS 后端。本节描述 Bridge 对 App 暴露的接口，以及与旧 WCS 接口的对应关系，降低 App 侧迁移成本。
+
+### 旧 WCS 通信模式（迁移前）
+
+```
+工作站 App                WCS HTTP API            WCS SSE Stream
+    │                         │                         │
+    │── POST /connect ────────┼────────────────────────▶│ 建立 SSE 长连接
+    │── POST /login ─────────▶│                         │
+    │◀─ { Authorization: JWT }│                         │
+    │◀────────────────────────┼── Heart_Beat ───────────│ 心跳（15s）
+    │◀────────────────────────┼── Agv_Arrived ──────────│ AGV到达推送
+    │── POST /verifyNotify ──▶│                         │ ack 确认
+    │── POST /scanBarcode ───▶│                         │ 扫码
+    │── POST /getTaskInfo ───▶│                         │ 获取任务
+    │── POST /robotDeparture ▶│                         │ 投递确认
+    │◀────────────────────────┼── AGV_DEPART ───────────│ AGV离开推送
+```
+
+**旧 WCS 关键特征**（Bridge 保持兼容）：
+- SSE 连接用 `HTTP POST`（而非标准 GET），body 携带鉴权和站点信息
+- `RequestId`（GUID）贯穿整个作业链路，SSE 事件 → ack → 业务操作全程透传
+- `VerifyNotify` 是显式 ack：收到重要 SSE 事件后必须立即 HTTP 确认
+- 断线重连在客户端侧内置 `while` 循环，等待几秒后自动重新 POST `/connect`
+- 统一响应结构 `BaseResult<T>`：`{ Code, Message, Data }`，字段 PascalCase
+
+### 接口映射总览
+
+| 旧 WCS 端点 | Bridge 端点 | 变化说明 |
+|---|---|---|
+| `POST /station/operation/connect` | `POST /station/operation/connect` | **路径不变**；SSE 事件新增 SES task 类型 |
+| `POST /station/operation/login` | `POST /station/operation/login` | **路径不变**；Token 改由 Bridge 签发 |
+| `POST /station/operation/verifyNotify` | `POST /station/operation/verifyNotify` | **路径不变**；兼容旧 ack 格式，新增 `ExecutionId` 字段 |
+| `POST /station/operation/scanBarcode` | `POST /station/operation/scanBarcode` | **路径不变**；Bridge 内部调 AGV 系统 |
+| `POST /station/operation/getTaskInfo` | `POST /station/operation/getTaskInfo` | **路径不变**；Bridge 内部查业务数据 |
+| `POST /station/operation/robotDeparture` | `POST /station/operation/robotDeparture` | **路径不变**；同时触发 SES resume |
+| `POST /station/operation/driveOutRobot` | `POST /station/operation/driveOutRobot` | **路径不变**；强制空 AGV 出站 |
+| `POST /station/operation/noBarcodeForceDepart` | `POST /station/operation/noBarcodeForceDepart` | **路径不变**；无码强制完成 |
+| — | `POST /station/operation/tasks/:executionId/fail` | **新增**；人工任务显式失败上报 |
+
+> App 迁移只需将请求目标从旧 WCS 地址切换到 Bridge 地址，接口路径、字段结构、响应格式均保持一致。
+
+### 统一响应结构
+
+```jsonc
+{
+  "Code": 0,          // 0 = 成功；非零 = 业务错误码
+  "Message": "Success",
+  "Data": { ... }     // 具体数据，错误时可为 null
+}
+```
+
+### SSE 连接
+
+```http
+POST /station/operation/connect
+Content-Type: application/json
+Accept: text/event-stream
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "ClientId": "nlwW-3g8",      // 即 workerId / StationId
+  "PlatformId": "5Z7fVd...",
+  "StationIds": ["nlwW-3g8"]
+}
+```
+
+返回持续开放的 SSE 数据流。Bridge 在同一条流上推送**所有事件**（设备事件 + SES 任务事件），以 `messageType` 区分：
+
+| messageType | 来源 | 含义 | 关键字段 |
+|---|---|---|---|
+| `Heart_Beat` | Bridge | 心跳，15s 周期 | `RcsStatus`, `StationList` |
+| `Agv_Arrived` | Bridge（对接 AGV 系统） | AGV 到达站点 | `AgvId`, `StationId`, `RequestId` |
+| `AGV_DEPART` | Bridge（对接 AGV 系统） | AGV 离开站点 | `AgvId`, `StationId`, `RequestId` |
+| `WAVE_CLOSE` | Bridge（对接业务系统） | 波次结束 | `WaveId` |
+| `task.dispatch` | Bridge（来自 SES workflow） | 人工节点任务派发 | `ExecutionId`, `PluginType`, `Payload`, `ExpiresAt` |
+| `task.cancel` | Bridge（来自 SES workflow） | 任务取消 | `ExecutionId`, `Reason` |
+| `sync.snapshot` | Bridge | 重连后活跃任务全量快照 | `Tasks: [ExecutionTask]` |
+
+断线重连时带 `since` 参数，Bridge 回放所有未 ack 事件：
+
+```http
+POST /station/operation/connect?since=<lastEventId>
+```
+
+### 登录
+
+```http
+POST /station/operation/login
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "PlatformId": "5Z7fVd...",
+  "StationId": "nlwW-3g8",
+  "Username": "admin",
+  "Password": "123456"
+}
+```
+
+```jsonc
+{
+  "Code": 0,
+  "Message": "Success",
+  "Data": {
+    "Authorization": "Bearer eyJhbGciOi..."
+  }
+}
+```
+
+Token 由 Bridge 签发，绑定 `workerId`，有效期 12h。
+
+### 消息确认（VerifyNotify）
+
+收到 `Agv_Arrived`、`task.dispatch` 等重要事件后，App 必须立即 ack：
+
+```http
+POST /station/operation/verifyNotify
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "RequestId": "evt-guid-or-agv-requestId",   // SSE 事件中的 RequestId / eventId
+  "ExecutionId": "exec-uuid"                  // SES 任务事件时必填，设备事件时可省略
+}
+```
+
+Bridge 收到后将 PendingEvent 标记为已 ack，停止重推。
+
+### 扫码
+
+```http
+POST /station/operation/scanBarcode
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "Barcode": "690123456789"
+}
+```
+
+Bridge 内部调用商品/库存服务查询条码信息并返回，同时可选写入对应 ExecutionTask 的 state。
+
+### 获取任务信息
+
+```http
+POST /station/operation/getTaskInfo
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "StationId": "nlwW-3g8",
+  "Sku": "SKU001",
+  "Barcode": "690123456789",
+  "Completed": 0,
+  "WaveType": 1,
+  "LockId": "lock-uuid"
+}
+```
+
+```jsonc
+{
+  "Code": 0,
+  "Message": "Success",
+  "Data": {
+    "TaskId": "T20231027001",
+    "ChuteId": "C03",
+    "WaveId": "W2023001",
+    "OrderId": "O20231027001",
+    "Count": 5
+  }
+}
+```
+
+### 投递确认（robotDeparture）
+
+操作员完成投递后调用，Bridge 同时触发 SES workflow resume：
+
+```http
+POST /station/operation/robotDeparture
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "TaskId": "T20231027001",
+  "AgvId": "AGV001",
+  "Completed": 1,
+  "RequestId": "uuid-gen-here"   // 幂等键，对应 Agv_Arrived 中的 RequestId
+}
+```
+
+Bridge 处理逻辑：
+1. 校验 `token.workerId == task.targetWorkerId`
+2. 更新 ExecutionTask.state → `succeeded`
+3. 调 runner resume 端点，携带 `{ output: { taskId, agvId, completed }, statePatch }`
+4. 通知 AGV 系统 AGV 离站，触发 `AGV_DEPART` SSE 事件
+
+### 强制空 AGV 出站
+
+```http
+POST /station/operation/driveOutRobot
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "AgvId": "AGV001",
+  "StationId": "nlwW-3g8"
+}
+```
+
+### 无码强制完成
+
+```http
+POST /station/operation/noBarcodeForceDepart
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "TaskId": "T20231027001",
+  "AgvId": "AGV001",
+  "RequestId": "uuid-gen-here"
+}
+```
+
+### 任务失败上报（新增）
+
+App 遇到不可恢复异常（扫码超时、操作员主动放弃）时显式上报：
+
+```http
+POST /station/operation/tasks/:executionId/fail
+Authorization: Bearer <appToken>
+requestId: <GUID>
+```
+
+```jsonc
+{
+  "RequestId": "uuid-gen-here",
+  "Error": {
+    "Code": "SCAN_FAILED",
+    "Message": "扫码超时"
+  }
+}
+```
+
+Bridge 收到后调 runner resume 上报失败，ExecutionTask.state → `failed`。
+
+### RequestId 关联链路
+
+```
+Bridge SSE: Agv_Arrived.RequestId（Bridge 生成，与 AGV 系统对齐）
+    ↓ App 记录，后续操作透传
+Bridge HTTP: verifyNotify.RequestId / robotDeparture.RequestId
+    ↓ Bridge 追踪整条 AGV 作业链路
+ExecutionTask.executionId（SES workflow 侧主键）
+    ↓ Bridge → Runner resume
+Runner: runId + requestId 定位工作流节点
+```
+
+Bridge 日志每条记录携带 `runId + executionId + workerId + agvRequestId`，实现 AGV 作业与 SES workflow 的全链路可观测。
+
+### 断线重连保证
+
+工作站客户端侧已有 `while` 循环断线重连（`SseRequest.cs`）。Bridge 侧对应保证：
+
+1. **Pending Queue 持久化**：Bridge 重启期间 PendingEvent 不丢失。
+2. **`since` 续传**：App 重连带上最后收到的 `eventId`，Bridge 回放所有 `eventId > since` 且未 ack 的事件。
+3. **`sync.snapshot` 兜底**：重连后推送当前工作站所有活跃 ExecutionTask 全量快照，即使 `since` 丢失也能恢复。
+4. **VerifyNotify 幂等**：同一 `RequestId` 多次 ack 安全，Bridge 只写一次 `ackedAt`。
+
+### 完整作业循环（迁移后）
+
+```
+SES Runner      Bridge                    工作站 App
+    │              │                           │
+    │─ /execute ──▶│                           │
+    │◀─ waiting ───│                           │
+    │              │                           │── POST /connect ──▶ Bridge（SSE 建立）
+    │              │── SSE: Agv_Arrived ───────▶│  (Bridge 对接 AGV 系统后推送)
+    │              │── SSE: task.dispatch ──────▶│  (SES 任务派发)
+    │              │◀── verifyNotify ────────────│  (两个事件分别 ack)
+    │              │◀── verifyNotify ────────────│
+    │              │◀── POST /scanBarcode ───────│  (Bridge 内部查商品信息)
+    │              │── scanBarcode 返回 ─────────▶│
+    │              │◀── POST /getTaskInfo ────────│
+    │              │── getTaskInfo 返回 ──────────▶│
+    │              │◀── POST /robotDeparture ─────│  (操作员投递完成)
+    │◀─ resume ────│   (Bridge 触发 SES resume)   │
+    │   (workflow  │── SSE: AGV_DEPART ───────────▶│  (Bridge 通知 AGV 离站后推送)
+    │    恢复推进) │                           │   [界面重置]
+```
