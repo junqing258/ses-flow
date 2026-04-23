@@ -9,6 +9,7 @@ use runner::app::WorkflowStreamNotification;
 
 pub mod ai_gateway;
 pub mod edit_session;
+pub mod node_registry;
 pub mod routes;
 pub mod run;
 pub mod system;

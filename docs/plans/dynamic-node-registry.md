@@ -102,10 +102,11 @@
 
 路径 B 统一使用一个插件请求/响应模型，不同 transport 只影响传输方式，不影响语义。
 
-动态节点调用时，runner 必须透传两类链路标识：
+动态节点调用时，runner 必须透传三类链路标识：
 
 - `runId`：工作流运行实例 id，用于定位本次执行、终止、恢复和日志归档。
 - `requestId`：业务请求幂等/联查 id，优先透传 trigger payload 或上游节点上下文中的 `requestId`；首次执行、恢复执行、取消执行都必须保持同一个值。
+- `traceId`：跨服务链路追踪 id，来源于入站 HTTP Header `X-Trace-Id`（由 Java 侧或网关注入），runner 在调用插件时必须通过请求 Header `X-Trace-Id` 原样透传；插件侧将其注入 MDC/日志上下文，在响应 Header 中原样回传；runner 收到响应后从 Header 读取并注入到归档日志的 `traceId` 字段。全链路三段日志（Java → runner → 插件）因此共享同一个 `traceId`，可在 ELK/Loki 中以单个字段过滤出完整调用链。
 
 响应的 `status` 对应 runner 内部 `NodeExecutionResult` 的三种状态（`success`/`waiting`/`failed`）：
 
@@ -117,6 +118,7 @@
   "context": {
     "runId": "run-abc",
     "requestId": "req-001",
+    "traceId": "a1b2c3d4e5f6",    // HTTP 插件同时通过 Header X-Trace-Id 传递；process 插件只走此字段
     "workflowKey": "wf-001",
     "input": { ... },
     "state": { ... },
@@ -291,7 +293,7 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 
 #### 服务发现策略
 
-路径 B 的 HTTP 插件需要标准化接口，但**首期不建议让 runner 自己去做网络级自动发现**（如扫端口、扫网段、直连 Consul/etcd）。推荐策略是：
+路径 B 的 HTTP 插件需要标准化接口，推荐策略：
 
 1. 插件服务实现标准接口：`/descriptor`、`/health`、`/execute`
 2. 运维/实施在平台注册插件 `baseUrl`

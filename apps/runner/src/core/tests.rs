@@ -10,6 +10,7 @@ use serde_json::json;
 use super::definition::{NodeType, WorkflowDefinition, deserialize_workflow_definition};
 use super::engine::WorkflowEngine;
 use super::runtime::{RunEnvironment, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary};
+use crate::services::{NodeDescriptor, NodeTransport, WorkflowServices};
 
 #[derive(Default)]
 struct RecordingObserver {
@@ -173,6 +174,188 @@ fn split_target(target: &str) -> (String, serde_json::Value) {
     (path.to_string(), serde_json::Value::Object(query))
 }
 
+#[derive(Clone, Copy)]
+enum TestPluginMode {
+    Success,
+}
+
+#[derive(Default)]
+struct TestPluginCapture {
+    execute_requests: Vec<serde_json::Value>,
+}
+
+fn spawn_test_plugin_server(mode: TestPluginMode) -> (String, Arc<Mutex<TestPluginCapture>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("plugin test server should bind");
+    let address = listener.local_addr().expect("plugin test server should expose address");
+    let capture = Arc::new(Mutex::new(TestPluginCapture::default()));
+    let shared_capture = capture.clone();
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+
+            let request = read_raw_http_request(&mut stream);
+            let body = if request.body.trim().is_empty() {
+                json!(null)
+            } else {
+                serde_json::from_str::<serde_json::Value>(&request.body)
+                    .expect("plugin test request body should be valid json")
+            };
+            let response_body = match request.path.as_str() {
+                "/execute" => {
+                    shared_capture
+                        .lock()
+                        .expect("plugin capture lock should not be poisoned")
+                        .execute_requests
+                        .push(body.clone());
+                    build_plugin_execute_response(mode, &body)
+                }
+                _ => json!({ "status": "ok" }).to_string(),
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("plugin test server should write response");
+        }
+    });
+
+    (format!("http://{address}"), capture)
+}
+
+struct RawHttpRequest {
+    path: String,
+    body: String,
+}
+
+fn read_raw_http_request(stream: &mut std::net::TcpStream) -> RawHttpRequest {
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 1024];
+    let mut headers_end = None;
+    let mut content_length = 0usize;
+
+    loop {
+        let read = stream.read(&mut chunk).expect("plugin test server should read request");
+        if read == 0 {
+            break;
+        }
+
+        buffer.extend_from_slice(&chunk[..read]);
+        if headers_end.is_none() {
+            headers_end = buffer
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|index| index + 4);
+            if let Some(end) = headers_end {
+                content_length = parse_content_length(&String::from_utf8_lossy(&buffer[..end]));
+            }
+        }
+
+        if let Some(end) = headers_end {
+            if buffer.len() >= end + content_length {
+                break;
+            }
+        }
+    }
+
+    let headers_end = headers_end.expect("plugin request should include headers");
+    let request_head = String::from_utf8_lossy(&buffer[..headers_end]).to_string();
+    let mut lines = request_head.lines();
+    let request_line = lines.next().unwrap_or_default();
+    let path = request_line.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let body = String::from_utf8_lossy(&buffer[headers_end..]).to_string();
+
+    RawHttpRequest { path, body }
+}
+
+fn build_plugin_execute_response(mode: TestPluginMode, body: &serde_json::Value) -> String {
+    match mode {
+        TestPluginMode::Success => json!({
+            "status": "success",
+            "output": {
+                "receivedInput": body["context"]["input"]
+            },
+            "statePatch": {
+                "plugin": {
+                    "status": "done"
+                }
+            },
+            "logs": [
+                { "level": "info", "message": "plugin-executed", "fields": { "kind": "success" } }
+            ]
+        })
+        .to_string(),
+    }
+}
+
+fn plugin_workflow_definition(runner_type: &str) -> WorkflowDefinition {
+    serde_json::from_value(json!({
+        "meta": {
+            "key": "plugin-flow",
+            "name": "Plugin Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": { "type": "object" },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "plugin_1",
+                "type": runner_type,
+                "name": "Plugin Node",
+                "config": {
+                    "bizCode": "scan"
+                },
+                "inputMapping": {
+                    "requestId": "{{ trigger.headers.requestId }}",
+                    "orderNo": "{{ trigger.body.orderNo }}"
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "plugin_1" },
+            { "from": "plugin_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("plugin workflow should deserialize")
+}
+
+fn plugin_services(base_url: &str) -> WorkflowServices {
+    let mut services = WorkflowServices::with_defaults();
+    services.node_descriptors.register(NodeDescriptor {
+        id: "barcode_scan".to_string(),
+        kind: "effect".to_string(),
+        runner_type: "plugin:barcode_scan".to_string(),
+        version: "1.0.0".to_string(),
+        category: "业务节点".to_string(),
+        display_name: "条码扫描".to_string(),
+        description: None,
+        icon: None,
+        status: Default::default(),
+        required_permissions: Vec::new(),
+        transport: Some(NodeTransport::Http),
+        endpoint: Some(base_url.to_string()),
+        binary: None,
+        timeout_ms: Some(1_000),
+        supports_cancel: false,
+        supports_resume: false,
+        config_schema: json!({ "type": "object" }),
+        defaults: None,
+        input_mapping_schema: None,
+        output_mapping_schema: None,
+    });
+    services
+}
+
 fn load_sorting_flow_definition(fetch_base_url: &str) -> WorkflowDefinition {
     let mut definition: WorkflowDefinition =
         serde_json::from_str(include_str!("../../examples/sorting-main-flow.json"))
@@ -237,7 +420,7 @@ fn upgrades_legacy_action_node_type_during_definition_deserialization() {
     .expect("legacy action definition should deserialize");
 
     assert_eq!(
-        definition.node("legacy_node").map(|node| node.node_type),
+        definition.node("legacy_node").map(|node| node.node_type.clone()),
         Some(NodeType::Shell)
     );
 }
@@ -311,7 +494,9 @@ fn upgrades_legacy_action_nodes_in_nested_sub_workflow_definitions() {
         deserialize_workflow_definition(nested).expect("nested definition should deserialize after normalization");
 
     assert_eq!(
-        nested_definition.node("child_action").map(|node| node.node_type),
+        nested_definition
+            .node("child_action")
+            .map(|node| node.node_type.clone()),
         Some(NodeType::Shell)
     );
 }
@@ -406,6 +591,51 @@ fn resumes_waiting_callback_to_completion() {
             "orderNo": "SO-1003"
         })
     );
+}
+
+#[test]
+fn executes_registered_http_plugin_node() {
+    let (plugin_url, capture) = spawn_test_plugin_server(TestPluginMode::Success);
+    let definition = plugin_workflow_definition("plugin:barcode_scan");
+    let engine = WorkflowEngine::with_services(plugin_services(&plugin_url));
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "headers": {
+                    "requestId": "req-plugin-1",
+                    "X-Trace-Id": "trace-plugin-1"
+                },
+                "body": {
+                    "orderNo": "SO-PLUGIN-1"
+                }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("plugin workflow should succeed");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Completed));
+    assert_eq!(summary.state["plugin"]["status"], json!("done"));
+    let plugin_record = summary
+        .timeline
+        .iter()
+        .find(|record| record.node_id == "plugin_1")
+        .expect("plugin node record should exist");
+    assert_eq!(
+        plugin_record.node_type,
+        NodeType::Plugin("plugin:barcode_scan".to_string())
+    );
+    assert_eq!(plugin_record.logs[0].request_id.as_deref(), Some("req-plugin-1"));
+    assert_eq!(plugin_record.logs[0].trace_id.as_deref(), Some("trace-plugin-1"));
+
+    let execute_requests = capture
+        .lock()
+        .expect("plugin capture lock should not be poisoned")
+        .execute_requests
+        .clone();
+    assert_eq!(execute_requests.len(), 1);
+    assert_eq!(execute_requests[0]["context"]["input"]["orderNo"], json!("SO-PLUGIN-1"));
+    assert_eq!(execute_requests[0]["context"]["requestId"], json!("req-plugin-1"));
 }
 
 #[test]

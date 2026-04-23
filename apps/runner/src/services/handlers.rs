@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use crate::core::definition::WorkflowDefinition;
+use crate::services::NodeDescriptorRegistry;
 
 #[derive(Default, Clone)]
 pub struct WorkflowServices {
     pub workflow_definitions: WorkflowDefinitionRegistry,
+    pub node_descriptors: NodeDescriptorRegistry,
 }
 
 impl WorkflowServices {

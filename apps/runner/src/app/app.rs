@@ -17,7 +17,7 @@ use crate::core::runtime::{
     RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunStatus, WorkflowRunSummary,
 };
 use crate::error::RunnerError;
-use crate::services::WorkflowServices;
+use crate::services::{NodeDescriptor, NodeDescriptorRegistry, WorkflowServices};
 use crate::store::{
     InMemoryCatalogStore, InMemoryEditSessionStore, InMemoryRunStore, StoredWorkflowDefinition, WorkflowCatalogStore,
     WorkflowDetailRecord, WorkflowEditSessionRecord, WorkflowEditSessionStore, WorkflowRunLookup, WorkflowRunRecord,
@@ -86,6 +86,7 @@ pub struct WorkflowApp {
     store: Arc<dyn WorkflowRunStore>,
     catalog: Arc<dyn WorkflowCatalogStore>,
     edit_sessions: Arc<dyn WorkflowEditSessionStore>,
+    node_descriptors: Arc<Mutex<NodeDescriptorRegistry>>,
     run_registry: RunRegistry,
     concurrency_gate: Arc<ConcurrencyGate>,
     events: WorkflowEventStreams,
@@ -166,6 +167,7 @@ impl WorkflowApp {
             store,
             catalog,
             edit_sessions,
+            node_descriptors: Arc::new(Mutex::new(NodeDescriptorRegistry::default())),
             run_registry,
             concurrency_gate,
             events,
@@ -182,7 +184,46 @@ impl WorkflowApp {
             services.workflow_definitions.register(workflow.id, workflow.definition);
         }
 
+        let node_descriptors = self
+            .node_descriptors
+            .lock()
+            .map_err(|_| {
+                AppError::Runner(RunnerError::Store(
+                    "failed to lock node descriptor registry".to_string(),
+                ))
+            })?
+            .clone();
+        services.node_descriptors = node_descriptors;
+
         Ok(services)
+    }
+
+    pub fn register_node_descriptor(&self, descriptor: NodeDescriptor) -> Result<NodeDescriptor, AppError> {
+        let mut registry = self.node_descriptors.lock().map_err(|_| {
+            AppError::Runner(RunnerError::Store(
+                "failed to lock node descriptor registry".to_string(),
+            ))
+        })?;
+        registry.register(descriptor.clone());
+        Ok(descriptor)
+    }
+
+    pub fn list_node_descriptors(&self) -> Result<Vec<NodeDescriptor>, AppError> {
+        let registry = self.node_descriptors.lock().map_err(|_| {
+            AppError::Runner(RunnerError::Store(
+                "failed to lock node descriptor registry".to_string(),
+            ))
+        })?;
+        Ok(registry.list())
+    }
+
+    pub fn list_node_descriptor_versions(&self, descriptor_id: &str) -> Result<Vec<NodeDescriptor>, AppError> {
+        let registry = self.node_descriptors.lock().map_err(|_| {
+            AppError::Runner(RunnerError::Store(
+                "failed to lock node descriptor registry".to_string(),
+            ))
+        })?;
+        Ok(registry.versions(descriptor_id))
     }
 
     fn build_runner(&self) -> Result<WorkflowRunner, AppError> {
@@ -661,6 +702,12 @@ impl WorkflowApp {
         target_record.logs.push(crate::core::runtime::NodeLogRecord {
             level: "manual".to_string(),
             message: message.clone(),
+            fields: Value::Null,
+            run_id: None,
+            request_id: None,
+            node_id: None,
+            trace_id: None,
+            timestamp: None,
         });
 
         if matches!(summary.status, WorkflowRunStatus::Waiting) {
@@ -669,6 +716,12 @@ impl WorkflowApp {
                     snapshot_record.logs.push(crate::core::runtime::NodeLogRecord {
                         level: "manual".to_string(),
                         message,
+                        fields: Value::Null,
+                        run_id: None,
+                        request_id: None,
+                        node_id: None,
+                        trace_id: None,
+                        timestamp: None,
                     });
                 }
                 self.store.save_snapshot(snapshot)?;

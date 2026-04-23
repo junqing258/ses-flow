@@ -2,6 +2,7 @@ mod code_executor;
 mod end_executor;
 mod fetch_executor;
 mod if_else_executor;
+mod plugin_executor;
 mod respond_executor;
 mod set_state_executor;
 mod shell_executor;
@@ -28,6 +29,7 @@ use self::code_executor::CodeExecutor;
 use self::end_executor::EndExecutor;
 use self::fetch_executor::FetchExecutor;
 use self::if_else_executor::IfElseExecutor;
+use self::plugin_executor::PluginExecutor;
 use self::respond_executor::RespondExecutor;
 use self::set_state_executor::SetStateExecutor;
 use self::shell_executor::ShellExecutor;
@@ -50,6 +52,7 @@ pub trait NodeExecutor: Send + Sync {
 #[derive(Default)]
 pub struct ExecutorRegistry {
     executors: HashMap<NodeType, Arc<dyn NodeExecutor>>,
+    plugin_executor: Option<Arc<dyn NodeExecutor>>,
 }
 
 impl ExecutorRegistry {
@@ -66,7 +69,10 @@ impl ExecutorRegistry {
         registry.register(ShellExecutor);
         registry.register(RespondExecutor);
         registry.register(WaitExecutor);
-        registry.register(SubWorkflowExecutor { services });
+        registry.register(SubWorkflowExecutor {
+            services: services.clone(),
+        });
+        registry.register_plugin(PluginExecutor { services });
         registry
     }
 
@@ -77,8 +83,19 @@ impl ExecutorRegistry {
         self.executors.insert(executor.node_type(), Arc::new(executor));
     }
 
-    pub fn resolve(&self, node_type: NodeType) -> Option<Arc<dyn NodeExecutor>> {
-        self.executors.get(&node_type).cloned()
+    pub fn register_plugin<E>(&mut self, executor: E)
+    where
+        E: NodeExecutor + 'static,
+    {
+        self.plugin_executor = Some(Arc::new(executor));
+    }
+
+    pub fn resolve(&self, node_type: &NodeType) -> Option<Arc<dyn NodeExecutor>> {
+        if node_type.is_plugin() {
+            return self.plugin_executor.clone();
+        }
+
+        self.executors.get(node_type).cloned()
     }
 }
 // endregion 执行器抽象与注册表

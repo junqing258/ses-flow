@@ -148,7 +148,7 @@ impl WorkflowEngine {
                 snapshot.timeline,
                 Some(build_node_record_from_error(
                     waiting_node.id.clone(),
-                    waiting_node.node_type,
+                    waiting_node.node_type.clone(),
                     resume_input.clone(),
                     error,
                     started_at,
@@ -165,7 +165,7 @@ impl WorkflowEngine {
         let mut timeline = snapshot.timeline.clone();
         timeline.push(build_node_record(
             waiting_node.id.clone(),
-            waiting_node.node_type,
+            waiting_node.node_type.clone(),
             ExecutionStatus::Success,
             resume_input.clone(),
             resume_input.clone(),
@@ -259,7 +259,7 @@ impl WorkflowEngine {
         snapshot: &WorkflowRunSnapshot,
         resume_input: &Value,
     ) -> Result<(), RunnerError> {
-        match waiting_node.node_type {
+        match &waiting_node.node_type {
             NodeType::Wait => {
                 let expected_event = waiting_node
                     .config
@@ -360,7 +360,7 @@ impl WorkflowEngine {
         });
         timeline.push(build_node_record(
             waiting_node.id.clone(),
-            waiting_node.node_type,
+            waiting_node.node_type.clone(),
             map_workflow_status_to_execution(&child_summary.status),
             resume_input.clone(),
             child_output.clone(),
@@ -514,7 +514,7 @@ impl WorkflowEngine {
             );
             let executor = self
                 .registry
-                .resolve(node.node_type)
+                .resolve(&node.node_type)
                 .ok_or_else(|| RunnerError::MissingExecutor(node.node_type.as_str().to_string()))?;
             let context = NodeExecutionContext {
                 run_id: &run_id,
@@ -560,7 +560,7 @@ impl WorkflowEngine {
                         timeline,
                         Some(build_node_record_from_error(
                             node.id.clone(),
-                            node.node_type,
+                            node.node_type.clone(),
                             current_input.clone(),
                             error,
                             started_at,
@@ -596,7 +596,7 @@ impl WorkflowEngine {
 
             timeline.push(build_node_record_from_result(
                 node.id.clone(),
-                node.node_type,
+                node.node_type.clone(),
                 current_input.clone(),
                 &result,
                 started_at,
@@ -684,7 +684,7 @@ impl WorkflowEngine {
                     "workflow execution completed",
                 );
                 let completion_signal =
-                    self.resolve_completion_signal(definition, node.node_type, &result.output, last_signal);
+                    self.resolve_completion_signal(definition, node.node_type.clone(), &result.output, last_signal);
                 let summary = WorkflowRunSummary {
                     run_id,
                     workflow_key,
@@ -962,6 +962,8 @@ fn error_code_for_runner_error(error: &RunnerError) -> String {
         RunnerError::SubWorkflow(_) | RunnerError::MissingSubWorkflow(_) => "SUB_WORKFLOW_ERROR".to_string(),
         RunnerError::MissingExecutor(_) | RunnerError::MissingNode(_) => "WORKFLOW_CONFIG_ERROR".to_string(),
         RunnerError::Store(_) => "STORE_ERROR".to_string(),
+        RunnerError::PluginRegistration(_) => "PLUGIN_REGISTRATION_ERROR".to_string(),
+        RunnerError::PluginExecution(_) => "PLUGIN_EXECUTION_ERROR".to_string(),
         RunnerError::Io(_) | RunnerError::Json(_) => "INTERNAL_ERROR".to_string(),
         RunnerError::InvalidShellConfig(_) => "VALIDATION_FAILED".to_string(),
         RunnerError::MissingRunSnapshot(_) => "MISSING_SNAPSHOT".to_string(),

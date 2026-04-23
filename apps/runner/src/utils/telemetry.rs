@@ -24,7 +24,9 @@ pub fn init_tracing() -> Option<WorkerGuard> {
 
     TRACING_INIT.call_once(|| {
         let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter()));
-        let use_json = env::var("LOG_FORMAT").map(|v| v.eq_ignore_ascii_case("json")).unwrap_or(false);
+        let use_json = env::var("LOG_FORMAT")
+            .map(|v| v.eq_ignore_ascii_case("json"))
+            .unwrap_or(false);
 
         tracing_log::LogTracer::init().ok();
 
@@ -62,7 +64,10 @@ pub fn init_tracing() -> Option<WorkerGuard> {
                 if use_json {
                     registry.with(fmt::layer().json()).try_init().ok();
                 } else {
-                    registry.with(fmt::layer().event_format(BracketedEventFormatter)).try_init().ok();
+                    registry
+                        .with(fmt::layer().event_format(BracketedEventFormatter))
+                        .try_init()
+                        .ok();
                 }
             }
         }

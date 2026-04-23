@@ -68,7 +68,6 @@ impl PostgresRunStore {
         .execute(&self.pool)
         .await
         .map_err(|e| RunnerError::Store(format!("Failed to create workflow_snapshots table: {}", e)))?;
-
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)

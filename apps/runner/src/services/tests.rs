@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use crate::core::definition::WorkflowDefinition;
-use crate::services::WorkflowServices;
+use crate::services::{NodeDescriptor, NodeTransport, WorkflowServices};
 
 #[test]
 fn workflow_definition_registry_round_trips_registered_definition() {
@@ -41,4 +41,39 @@ fn workflow_definition_registry_round_trips_registered_definition() {
             .key,
         definition.meta.key
     );
+}
+
+#[test]
+fn node_descriptor_registry_round_trips_registered_plugin_descriptor() {
+    let mut services = WorkflowServices::with_defaults();
+    services.node_descriptors.register(NodeDescriptor {
+        id: "barcode_scan".to_string(),
+        kind: "effect".to_string(),
+        runner_type: "plugin:barcode_scan".to_string(),
+        version: "1.0.0".to_string(),
+        category: "业务节点".to_string(),
+        display_name: "条码扫描".to_string(),
+        description: None,
+        icon: None,
+        status: Default::default(),
+        required_permissions: Vec::new(),
+        transport: Some(NodeTransport::Http),
+        endpoint: Some("http://127.0.0.1:9001".to_string()),
+        binary: None,
+        timeout_ms: Some(5_000),
+        supports_cancel: false,
+        supports_resume: false,
+        config_schema: json!({"type": "object"}),
+        defaults: None,
+        input_mapping_schema: None,
+        output_mapping_schema: None,
+    });
+
+    let descriptor = services
+        .node_descriptors
+        .resolve_by_runner_type("plugin:barcode_scan")
+        .expect("registered descriptor should exist");
+
+    assert_eq!(descriptor.display_name, "条码扫描");
+    assert_eq!(descriptor.endpoint.as_deref(), Some("http://127.0.0.1:9001"));
 }

@@ -287,6 +287,82 @@ async fn handles_cors_preflight_requests() {
 }
 
 #[tokio::test]
+async fn registers_http_plugin_and_lists_node_descriptors() {
+    let descriptor_body = json!({
+        "id": "barcode_scan",
+        "kind": "effect",
+        "runnerType": "plugin:barcode_scan",
+        "version": "1.0.0",
+        "category": "业务节点",
+        "displayName": "条码扫描",
+        "transport": "http",
+        "configSchema": {
+            "type": "object"
+        },
+        "supportsCancel": true,
+        "supportsResume": true
+    })
+    .to_string();
+    let upstream_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        descriptor_body.len(),
+        descriptor_body
+    );
+    let (plugin_base_url, captured_request_receiver) = spawn_single_response_http_server(upstream_response);
+    let app = build_app();
+
+    let register_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api_path("/plugin-registrations"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "baseUrl": plugin_base_url
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("plugin registration request should succeed");
+
+    assert_eq!(register_response.status(), StatusCode::CREATED);
+    let captured = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("plugin descriptor request should be captured");
+    assert!(captured.request_line.starts_with("GET /descriptor "));
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/node-descriptors"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("descriptor list request should succeed");
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let payload: Value = serde_json::from_slice(
+        &list_response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes(),
+    )
+    .expect("descriptor list should be valid json");
+    let items = payload.as_array().expect("descriptor list should be an array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["runnerType"], json!("plugin:barcode_scan"));
+    assert_eq!(items[0]["endpoint"], json!(plugin_base_url));
+}
+
+#[tokio::test]
 async fn proxies_ai_gateway_json_requests() {
     let response_body = json!({
         "status": "accepted",

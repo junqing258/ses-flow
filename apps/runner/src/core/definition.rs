@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::error::RunnerError;
@@ -198,8 +198,7 @@ pub struct NodeDefinition {
     pub annotations: HashMap<String, Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeType {
     Start,
     End,
@@ -210,16 +209,15 @@ pub enum NodeType {
     Wait,
     Respond,
     Code,
-    #[serde(alias = "subworkflow")]
     SubWorkflow,
-    #[serde(alias = "webhook")]
     WebhookTrigger,
-    #[serde(alias = "if")]
     IfElse,
+    Plugin(String),
+    Custom(String),
 }
 
 impl NodeType {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Start => "start",
             Self::End => "end",
@@ -233,7 +231,46 @@ impl NodeType {
             Self::SubWorkflow => "sub_workflow",
             Self::WebhookTrigger => "webhook_trigger",
             Self::IfElse => "if_else",
+            Self::Plugin(value) | Self::Custom(value) => value.as_str(),
         }
+    }
+
+    pub fn is_plugin(&self) -> bool {
+        matches!(self, Self::Plugin(_))
+    }
+}
+
+impl Serialize for NodeType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for NodeType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        Ok(match raw.as_str() {
+            "start" => Self::Start,
+            "end" => Self::End,
+            "fetch" => Self::Fetch,
+            "set_state" => Self::SetState,
+            "switch" => Self::Switch,
+            "shell" | "action" | "command" => Self::Shell,
+            "wait" => Self::Wait,
+            "respond" => Self::Respond,
+            "code" => Self::Code,
+            "sub_workflow" | "subworkflow" => Self::SubWorkflow,
+            "webhook_trigger" | "webhook" => Self::WebhookTrigger,
+            "if_else" | "if" => Self::IfElse,
+            _ if raw.starts_with("plugin:") => Self::Plugin(raw),
+            _ => Self::Custom(raw),
+        })
     }
 }
 

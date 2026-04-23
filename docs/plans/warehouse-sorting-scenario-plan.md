@@ -2,17 +2,50 @@
 
 ## 1. 场景描述
 
-目标流程：
+目标流程（细化）：
 
+```mermaid
+flowchart LR
+    A[创建订单] --> B[组波次<br/>绑定 platformId + 目的 chute]
+    B --> C[人工工作台扫码子流程]
+    C --> D[RCS 分拣子流程]
+    D --> E{格口满?}
+    E -- 否 --> F[等待后续订单]
+    E -- 是 --> G[集包]
+    G --> H[完结]
+
+    classDef manual fill:#fef3c7,stroke:#d97706
+    classDef system fill:#dbeafe,stroke:#2563eb
+    classDef rcs fill:#dcfce7,stroke:#16a34a
+    class A,B system
+    class C,G manual
+    class D rcs
 ```
-创建订单 --> 组波次（多个订单） --> 人工工作台扫商品码（关联波次） --> RCS分拣系统调度分拣至格口 --> 集包（格口满）
-```
+
+关键实体与标识：
+
+- **platformId**：平台侧工作站编号，关联 RCS 地图中的站点 ID，波次绑定 platformId 决定从哪个工作站发车
+- **chute（格口）**：分拣目的地，组波时确定目标格口，RCS 按 chute 调度小车
+- **小车**：RCS 调度的实际载货设备，工作站扫码后需等待指定小车到达再发车
+
+### 实现前提（已就绪能力）
+
+本规划以下述能力**已实现**为前提，不在"缺失能力"中列出：
+
+- **HTTP 插件机制**（`plugin:*` 节点类型、PluginExecutor、标准接口 `/descriptor` `/execute` `/resume` `/cancel`、插件注册中心、`requestId`/`runId` 透传、insertInput/statePatch/waitSignal 协议）
+- **动态节点注册**（NodeDescriptor 协议，前端面板 / runner 执行器按 descriptor 路由）
+- **wait 节点多阶段事件挂起与 resume**、`fetch` 节点、`code` 节点、`if_else`/`switch`/`set_state` 等编排原语
+- **工作流运行观测**（SSE 事件流、run 状态机、重试、超时、终止）
+- **业务插件服务本身**（`scan_task` / `dispatch_task` / `pack_task` 插件服务的具体实现由插件团队交付，本规划仅定义其契约）
+
+因此，以下讨论聚焦**场景编排**与**平台侧需补充的业务能力**，不再重复 HTTP 插件的实现工作。
 
 触发与交互约束：
 
 - 订单创建支持 **webhook 推送**或**接口轮询**两种触发模式
-- 组波次支持**客户规则自动组波**或**人工表单输入**
-- 人工工作台为 **App**，需与系统进行双向数据交互（拉取任务 + 提交结果）
+- 组波次支持**客户规则自动组波**或**人工表单输入**，需同时决定 platformId 与目的 chute
+- 人工工作台为 **App**，与系统双向数据交互（拉取任务 + 提交扫码结果 + 发车指令）
+- 小车到达工作站状态由 **RCS 主动推送**（事件回调），非工作站主动查询
 - RCS 为**独立系统**，内部包含完整机器人调度逻辑，通过 HTTP 接口与本系统对接
 - 集包目前为**人工处理**
 
@@ -39,41 +72,134 @@
 |---|---|---|
 | 按规则将多订单聚合为一个波次 | 无跨实例聚合能力，每次 `/run` 是独立实例 | ❌ 核心缺失 |
 | 定时 / 阈值 / 人工触发组波 | `plugin` 节点可承接人工触发；定时无内建支持 | ⚠️ 部分支持 |
-| 人工表单输入组波参数 | `plugin` 节点下发人工任务（HTTP 插件协议）+ resume 回执 | ✅ 框架支持，需实现插件 |
+| 人工表单输入组波参数 | `plugin` 节点下发人工任务（HTTP 插件协议）+ resume 回执 | ✅ 前提已实现 |
 | 调用外部组波系统 | `fetch` 节点 HTTP 调用 | ✅ 已支持 |
 | 波次生命周期管理 | `WorkflowRunRecord` 有 `wave_no` 字段，无聚合对象和状态机 | ❌ 缺少波次模块 |
 | 波次与多工作流实例关联 | 无多实例聚合关系 | ❌ 缺失 |
 | 规则组波 | 无内建分拨规则引擎；可通过 `code` 节点内联实现，但不可配置 | ⚠️  缺少规则引擎 |
-
+| 波次绑定 platformId（工作站/RCS 地图 ID） | 无 platformId 字段与绑定逻辑 | ❌ 缺失 |
+| 波次绑定目的 chute（分拣格口） | 无 chute 字段与分配逻辑 | ❌ 缺失 |
+| platformId ↔ chute 映射关系维护 | 无工作站与格口的映射配置 | ❌ 缺失 |
 
 **备注**：组波是**多订单 → 一波次**的聚合操作，本质上需要"等待多个工作流实例就绪后合并"的能力，单实例 workflow 无法独立完成。不同客户的分拨维度差异显著（品类、地区、日期、优先级等），规则必须可配置、可热更新，不能硬编码在流程节点中。
+
+**波次与物理资源绑定**：组波完成后，波次必须携带两个物理标识才能驱动后续 RCS 调度：
+
+- `platformId`：平台工作站编号，关联 RCS 地图站点 ID，决定从哪个工作站发车（扫码工位）
+- `chute` / `chuteId`：分拣目的格口，RCS 按此 ID 调度小车至目标位置
+- 同一波次可绑定一个或多个 chute（大波次分拨到多格口）；platformId 通常为单一工作站
 
 ---
 
 ### 2.3 人工工作台扫码（App 交互）
 
+工作站侧为**三步子流程**：
+
+```
+扫商品码 → 等待小车到达（RCS 推送） → 发车（通知 RCS 启动调度）
+```
+
 | 能力需求 | 当前支撑 | 状态 |
 |---|---|---|
-| 下发扫码任务给工作台 | `plugin:scan_task` 插件节点，`POST /execute` 触发 | ✅ 框架支持，需实现插件服务 |
-| 流程挂起等待 App 回执 | 插件返回 `status: "waiting"` + `waitSignal`，runner 挂起 run | ✅ 已支持 |
-| App 提交扫码结果唤醒流程 | App → 插件 `POST /resume` → 插件通知 runner 继续 | ✅ 已支持（插件路由回调） |
-| App 拉取待处理任务列表 | 插件服务自维护任务队列，暴露任务查询接口 | ✅ 插件内自建，不依赖 runner |
-| 扫码结果关联波次 / 订单 / 分拣框 | 插件通过 `statePatch` 返回，runner 合并到 run state | ✅ 可实现 |
-| 插件实现 | 需实现 `/descriptor`、`/execute`、`/resume`、`/cancel` 接口 | ⚠️ 需实现插件服务 |
+| 步骤1：下发扫码任务 + 接收扫码结果 | `plugin:scan_task` 节点 | ✅ 前提已实现 |
+| 步骤2：等待 RCS 推送"小车到达"事件 | `wait` 节点 + `POST /runs/{run_id}/resume` | ✅ 已支持 |
+| 步骤3：下发发车指令 + 工人确认发车 | `plugin:dispatch_task` 节点 | ✅ 前提已实现 |
+| 扫码结果关联波次 / 订单 / platformId | 插件通过 `statePatch` 返回，runner 合并到 run state | ✅ 已支持 |
+| 小车到达事件路由 | RCS → 平台 webhook → 定位到等待中的 run → resume | ❌ 需实现 RCS 事件接入端点 |
+| 工作站并发：多订单共享同一 platformId 的小车 | 无工作站级共享状态，多 run 独立等待 | ❌ 需工作站状态服务 |
+| App 实时接收 RCS 小车状态（SSE 推送） | backend 有 `GET /runs/{run_id}/events` SSE；但 RCS 状态未纳入 run 事件流 | ⚠️ 需打通 RCS 事件 → App SSE 广播 |
+| App 按工位维度订阅状态（多订单聚合推送） | 当前 SSE 只按 run_id 维度，无 platformId/工位聚合视图 | ❌ 需新增工位维度 SSE 端点 |
+| App 断线重连 + 事件回放 | backend SSE 未实现 `Last-Event-ID` 回放机制 | ❌ 需补齐 |
+
+**子流程映射到节点**（Mermaid）：
+
+```mermaid
+flowchart LR
+    S1[plugin:scan_task<br/>挂起等待扫码] -.App 扫码.-> S1R["/resume"]
+    S1R --> S2[set_state<br/>记录商品码/波次/platformId]
+    S2 --> S3[fetch<br/>通知 RCS 派小车至 platformId]
+    S3 --> S4[wait<br/>event=car_arrived]
+    S4 -.RCS 推送小车到达<br/>POST /api/rcs/events.-> S4R["/resume carId"]
+    S4R --> S5[plugin:dispatch_task<br/>挂起等待工人确认发车]
+    S5 -.App 点击发车.-> S5R["/resume"]
+    S5R --> S6[fetch<br/>通知 RCS 启动载货调度]
+    S6 --> OUT([进入 RCS 分拣子流程])
+
+    APP(["App 工作台<br/>SSE 订阅"])
+    APP -.订阅 /stations/:platformId/events.-> S3
+    S3 -.car_dispatched 事件.-> APP
+    S4R -.car_arrived 事件.-> APP
+    S6 -.car_departed 事件.-> APP
+
+    classDef plugin fill:#fef3c7,stroke:#d97706
+    classDef wait fill:#fee2e2,stroke:#dc2626
+    classDef fetch fill:#dbeafe,stroke:#2563eb
+    classDef state fill:#ede9fe,stroke:#7c3aed
+    classDef app fill:#fae8ff,stroke:#a855f7
+    class S1,S5 plugin
+    class S4 wait
+    class S3,S6 fetch
+    class S2 state
+    class APP app
+```
+
+**App SSE 订阅模型**：
+
+- 订阅端点：`GET /api/stations/{platformId}/events`（工位维度，一个工人只订一个工位即可看到该工位全部订单的小车状态）
+- 事件类型：`car_dispatched`（派车成功）/ `car_position`（可选，小车移动中）/ `car_arrived`（到站）/ `car_departed`（发车后）/ `scan_required`（当前等待扫码的订单）/ `dispatch_required`（当前等待发车的订单）
+- 事件载荷：`{ platformId, runId, orderId, carId, chute, timestamp, payload }`
+- 来源：RCS webhook 进来 → 既触发 `POST /runs/{run_id}/resume`，也**广播到 `station-events` 总线**供 App 订阅
+- 断线重连：SSE `Last-Event-ID` 回放最近 N 条事件（需后端维护事件缓冲窗口，建议 Redis stream 或内存环形队列）
 
 ---
 
 ### 2.4 RCS 调度分拣
 
+发车后 RCS 侧执行**三子步骤**，每一步都需要平台接收对应事件：
+
+```
+发车 → 调度至格口（小车移动中）→ 确认卸货（翻板抬起）→ 货物进入格口
+```
+
 | 能力需求 | 当前支撑 | 状态 |
 |---|---|---|
-| 调用 RCS HTTP 接口下发调度指令 | `fetch` 节点 | ✅ 已支持 |
-| 等待 RCS 异步回调（分拣完成） | `wait` 节点 + `POST /runs/{run_id}/resume` | ✅ 已支持 |
-| RCS 回调结果写入工作流状态 | resume payload → `set_state` 节点 | ✅ 已支持 |
+| 调用 RCS HTTP 接口下发调度指令（发车） | `fetch` 节点 | ✅ 已支持 |
+| 等待 RCS 回调"已调度至格口" | `wait` 节点 + resume（event=arrived_at_chute） | ✅ 已支持 |
+| 等待 RCS 回调"卸货确认"（翻板抬起） | `wait` 节点 + resume（event=unloaded） | ✅ 已支持 |
+| 等待 RCS 回调"货物进入格口" | `wait` 节点 + resume（event=dropped_in_chute） | ✅ 已支持 |
+| RCS 多阶段事件路由到同一 run | 需按 `run_id` 或 `request_id` 定位等待中的 run | ⚠️ 已有 `runs/search` API 支持 |
+| 单次 fetch + 多次 wait 的编排 | `fetch` 后串联多个 `wait` 节点 | ✅ 已支持 |
 | RCS 调度超时重试 | `retryPolicy` + `timeoutMs` on `fetch` 节点 | ✅ 已支持 |
-| RCS 失败异常分支 | `if_else`/`switch` + `onError` 配置 | ✅ 已支持 |
+| RCS 失败异常分支（卸货失败、小车故障等） | `if_else`/`switch` + `onError` 配置 | ✅ 已支持 |
+| 三事件可合并为一个事件流（可选） | 由 RCS 决定事件粒度，平台需两种编排都支持 | ✅ 已支持 |
 
-**备注**：这是当前系统支撑最完整的环节，fetch + wait + resume 模式完全适配 RCS 异步调度场景。
+**子流程映射到节点**（Mermaid）：
+
+```mermaid
+flowchart LR
+    R1[fetch<br/>POST /rcs/dispatch<br/>carId + chute + orderId] --> R2[wait<br/>event=arrived_at_chute<br/>timeout=60s]
+    R2 -.RCS 推送到达.-> R2R["/resume"] --> R3[set_state<br/>记录到达时间]
+    R3 --> R4[wait<br/>event=unloaded<br/>timeout=30s]
+    R4 -.RCS 推送卸货.-> R4R["/resume"] --> R5[set_state<br/>记录卸货时间]
+    R5 --> R6[wait<br/>event=dropped_in_chute<br/>timeout=10s]
+    R6 -.RCS 推送进格口.-> R6R["/resume"] --> R7[set_state<br/>格口件数+1]
+    R7 --> OUT([进入集包判断])
+
+    R2 -- 超时 --> E1[异常分支<br/>小车故障]
+    R4 -- 超时 --> E2[异常分支<br/>卸货失败]
+    R6 -- 超时 --> E3[异常分支<br/>落货异常]
+
+    classDef wait fill:#fee2e2,stroke:#dc2626
+    classDef fetch fill:#dbeafe,stroke:#2563eb
+    classDef state fill:#ede9fe,stroke:#7c3aed
+    classDef err fill:#fecaca,stroke:#991b1b
+    class R2,R4,R6 wait
+    class R1 fetch
+    class R3,R5,R7 state
+    class E1,E2,E3 err
+```
+
+**备注**：这是当前系统支撑最完整的环节，fetch + 多级 wait + resume 模式完全适配 RCS 多阶段异步事件场景。需要补的是**RCS 事件接入端点**（统一 webhook 入口 + 按 run_id/request_id 路由到对应 wait 节点）。
 
 ---
 
@@ -82,8 +208,8 @@
 | 能力需求 | 当前支撑 | 状态 |
 |---|---|---|
 | 判断格口是否满（条件分支） | `if_else` 节点（基于 state 中格口数据） | ✅ 已支持 |
-| 格口满时触发集包操作 | `plugin:pack_task` 插件节点，`POST /execute` 触发 | ✅ 框架支持，需实现插件服务 |
-| 集包完成后 App 回执 | App → 插件 `POST /resume` → 插件通知 runner 继续 | ✅ 已支持（插件路由回调） |
+| 格口满时触发集包操作 | `plugin:pack_task` 节点 | ✅ 前提已实现 |
+| 集包完成后 App 回执 | App → 插件 `POST /resume` → runner 继续 | ✅ 前提已实现 |
 | 跨多个分拣实例更新同一格口状态 | 无跨实例共享状态存储 | ❌ 核心缺失 |
 | 格口资源并发写保护 | 无 | ❌ 缺失 |
 
@@ -95,7 +221,7 @@
 
 #### A. 波次管理模块
 
-- 波次数据对象（`wave_id`、状态机、关联订单列表、关联分拣框列表）
+- 波次数据对象（`wave_no`、状态机、关联订单列表、关联分拣框列表）
 - 组波触发策略：定时触发、订单数阈值触发、人工触发
 - 波次与多工作流实例的关联关系（一波次 → N 个订单 run）
 - 波次状态 API（创建、激活、完成、异常）
@@ -145,19 +271,49 @@
   2. 在 backend 层提供格口状态资源 API，工作流通过 `fetch` 节点读写
   3. 使用已有 Postgres 增加格口状态表，暴露为内部服务接口
 
-#### C. 插件服务实现
-
-人工交互节点（扫码、集包）均通过**路径 B HTTP 插件**承接，每个插件需实现标准接口：
-
-- `scan_task` 插件：条码扫描 + 关联波次/分拣框，`/execute` 下发任务，`/resume` 接收 App 扫码结果
-- `pack_task` 插件：集包确认，`/execute` 下发集包任务，`/resume` 接收集包完成回执
-- 插件服务自维护任务队列，暴露 App 任务查询接口（不依赖 runner）
-- 回调路由：App → 插件 `/resume` → 插件主动通知 runner，runner 无需暴露额外 webhook 端点
-
-#### D. 定时触发器（`cron` TriggerType）
+#### C. 定时触发器（`cron` TriggerType）
 
 - 用于定时轮询外部系统拉取订单，或定时触发组波
 - 补充 `TriggerType::Cron` 和对应的调度执行器
+
+#### D. RCS 事件接入端点（多阶段事件路由）
+
+RCS 在分拣过程中推送多个事件（小车到达工作站、到达格口、卸货确认、进入格口），每个事件需路由到正在等待的对应 run：
+
+- 统一 webhook 入口：`POST /api/rcs/events`，body 携带 `eventType` + `carId` + `chute` + `platformId` + `requestId`
+- 事件路由逻辑：按 `requestId` 定位 run_id，调用 `POST /runs/{run_id}/resume`，`event` 字段匹配 `wait` 节点声明的 `event`
+- 事件去重与幂等：同一事件重复推送时不触发二次 resume
+- 事件超时：wait 节点设置 `timeoutMs`，超时走异常分支（小车故障、卸货失败等）
+
+#### E. App SSE 推送通道（工作台实时状态订阅）
+
+工作台 App 不仅要**提交**（扫码、发车、集包），还要**接收**实时状态（小车是否到站、格口件数、异常告警），必须提供 SSE 推送。
+
+**需补充**：
+
+- 新增工位维度 SSE 端点：`GET /api/stations/{platformId}/events`
+- 新增订单维度 SSE 端点（可选）：`GET /api/orders/{orderId}/events`，App 展开单订单详情时订阅
+- 事件来源汇聚：
+  1. **RCS webhook 事件**（小车状态）——平台在路由 resume 的同时，把事件写入 `station-events` 总线
+  2. **run 状态变更**（waiting/completed/failed）——复用现有 `WorkflowRunObserver`，过滤出需要推给工位的事件
+  3. **格口状态变更**（件数变化、满/空）——格口服务产出事件
+  4. **业务插件主动推送**（扫码任务下发、发车任务下发）——插件通过平台事件 API 写入总线
+- 事件总线实现：首期用内存（单副本）；多副本 / 持久化阶段用 Redis Stream
+- 断线重连：支持 `Last-Event-ID` header，服务端按事件 ID 回放最近 5 分钟事件
+- 鉴权：SSE 连接携带工位 token，只能订阅 token 授权的 `platformId`
+
+**与现有 SSE 的关系**：
+
+- 现有 `GET /runs/{run_id}/events` 是**单 run 维度**技术事件，面向开发/运维观测
+- 新增的 `/stations/:platformId/events` 是**工位维度业务事件**，面向工人操作界面
+- 两者独立，不互相替代；面向工人的 SSE 更聚焦、载荷更精简
+
+#### F. 工作站与物理资源映射
+
+- `platformId` ↔ RCS 地图站点 ID 映射表
+- `platformId` ↔ chute 可达性映射（某工作站可分拨到哪些格口）
+- 小车资源池状态（空闲/任务中/故障）——由 RCS 维护，平台只读
+- 以上数据作为**独立配置服务**暴露 API，workflow 通过 `fetch` 读取，不硬编码在流程中
 
 ### 3.2 补充（提升可用性，非阻塞）
 
@@ -171,21 +327,52 @@
 
 用现有能力 + 最小补充实现端到端验证（单订单线性路径）：
 
-```
-webhook_trigger → code节点(幂等+标准化) → fetch节点(调外部组波/内联逻辑)
-→ plugin:scan_task(下发扫码任务，挂起等待) → [App→插件/resume→runner继续]
-→ fetch节点(调RCS下发指令) → wait节点(等RCS回调) → [RCS→插件/resume→runner继续]
-→ set_state(更新格口件数) → if_else(格口满?)
-→ plugin:pack_task(集包任务，挂起等待) / end
+```mermaid
+flowchart LR
+    T0([webhook_trigger]) --> T1[code<br/>幂等+标准化]
+    T1 --> T2[fetch<br/>POST /wave-rules/evaluate]
+    T2 --> T3[set_state<br/>wave_no + platformId + chute]
+
+    T3 --> SC1[plugin:scan_task<br/>挂起等扫码]
+    SC1 -.App 扫码.-> SC1R["/resume"]
+    SC1R --> SC2[fetch<br/>RCS 派小车至 platformId]
+    SC2 --> SC3[wait<br/>event=car_arrived]
+    SC3 -.RCS webhook.-> SC3R["/resume"]
+    SC3R --> SC4[plugin:dispatch_task<br/>挂起等发车]
+    SC4 -.App 点击发车.-> SC4R["/resume"]
+
+    SC4R --> RC1[fetch<br/>POST /rcs/dispatch]
+    RC1 --> RC2[wait<br/>arrived_at_chute]
+    RC2 -.RCS webhook.-> RC3[wait<br/>unloaded]
+    RC3 -.RCS webhook.-> RC4[wait<br/>dropped_in_chute]
+    RC4 -.RCS webhook.-> RC5[fetch<br/>GET /chutes/:id/status]
+
+    RC5 --> D{格口满?}
+    D -- 否 --> END1([end])
+    D -- 是 --> P1[plugin:pack_task<br/>挂起等集包]
+    P1 -.App 确认集包.-> P1R["/resume"]
+    P1R --> END2([end])
+
+    classDef plugin fill:#fef3c7,stroke:#d97706
+    classDef wait fill:#fee2e2,stroke:#dc2626
+    classDef fetch fill:#dbeafe,stroke:#2563eb
+    classDef state fill:#ede9fe,stroke:#7c3aed
+    classDef trigger fill:#d1fae5,stroke:#047857
+    class T0 trigger
+    class SC1,SC4,P1 plugin
+    class SC3,RC2,RC3,RC4 wait
+    class T2,SC2,RC1,RC5 fetch
+    class T1,T3 state
 ```
 
-**需新增的最小工作**：
+**需新增的最小工作**（HTTP 插件机制与 `scan_task` / `dispatch_task` / `pack_task` 业务插件作为前提已就绪）：
 
-1. 实现 `scan_task` 插件服务（HTTP，含 `/execute`、`/resume`、`/cancel`、`/descriptor`）
-2. 实现 `pack_task` 插件服务（同上）
-3. 在平台注册上述插件的 `baseUrl`
-4. 波次号暂存在 run 的 `state.wave_no`，不建独立波次对象（验证阶段）
-5. 格口件数暂存在 run 的 `state.slot_count`，不跨实例共享（验证阶段）
+1. 实现 RCS 事件接入端点 `POST /api/rcs/events`（按 requestId 路由 resume，含幂等）
+2. 实现格口状态服务 `GET /chutes/{id}/status` + 件数累加 API
+3. 实现 App SSE 推送端点 `GET /api/stations/{platformId}/events`（内存事件总线 + 基础事件类型）
+4. 配置 RCS 回调地址 + 在平台注册业务插件 `baseUrl`（若尚未注册）
+5. 波次号、platformId、chute 暂存在 run 的 `state`，不建独立波次对象（验证阶段）
+6. 工作站 ↔ 格口映射用硬编码配置表先跑通，后续再做配置化
 
 ---
 
@@ -193,9 +380,13 @@ webhook_trigger → code节点(幂等+标准化) → fetch节点(调外部组波
 
 | 模块 | 工作内容 | 优先级 |
 |---|---|---|
-| 波次管理模块 | 数据模型 + 聚合 API + 状态机 | P0 |
+| 波次管理模块 | 数据模型（含 platformId、chute）+ 聚合 API + 状态机 | P0 |
+| 分拨规则引擎 | 规则模型 + 评估 API + 热更新 + 版本管理 | P0 |
 | 跨实例共享状态 | 格口状态服务 或 shared_state 节点 | P0 |
-| 插件服务实现 | scan_task / pack_task HTTP 插件（含任务队列 + App 查询接口） | P0 |
+| 业务插件契约对齐 | 与插件团队对齐 scan_task / dispatch_task / pack_task 的 configSchema / statePatch / waitSignal 字段 | P0 |
+| RCS 事件接入端点 | 统一 webhook + requestId 路由 + 幂等 | P0 |
+| 工作站资源映射服务 | platformId↔chute 映射 + 小车状态只读 API | P0 |
+| App 事件总线 + SSE | 事件聚合总线 + 工位/订单维度 SSE + 断线重连 + Redis Stream 持久化 | P0 |
 | cron 触发器 | TriggerType::Cron + 调度执行器 | P1 |
 | 订单接入网关 | 幂等 + 标准化独立模块 | P1 |
 | 多客户规则隔离 | 组波规则 / 料口规则按客户/仓配置 | P1 |
@@ -209,41 +400,91 @@ webhook_trigger → code节点(幂等+标准化) → fetch节点(调外部组波
 两种选项：
 
 **选项 A：波次作为独立工作流实例**
+
 - 订单接入后写入"待组波队列"
 - 组波触发器创建一个波次 run，聚合订单列表
 - 波次 run 驱动后续扫码/RCS/集包流程
 
 **选项 B：波次作为共享数据对象，每笔订单独立 run**
+
 - 每笔订单一个 run，run 关联 `wave_no`
 - 波次状态由独立 API 管理
 - 扫码/RCS/集包步骤在各自 run 中执行
 
-推荐 **选项 B**：与当前 runner 单实例模型更契合，波次聚合逻辑收敛在波次管理服务层，不改变 runner 核心。
+**选项 B**：与当前 runner 单实例模型更契合，波次聚合逻辑收敛在波次管理服务层，不改变 runner 核心。
 
 ### 格口满的判断时机
 
-- 每次 RCS 回调（分拣完成）后，run 通过 `fetch` 读取格口服务状态
+- 每次 RCS 回调（货物进入格口）后，run 通过 `fetch` 读取格口服务状态
 - 若格口满，当前 run 触发集包任务；其余 run 在下一次分拣完成时重新检查
 - 避免多 run 并发触发同一格口集包（需格口服务提供 CAS 或锁机制）
 
+### RCS 事件路由方式
+
+RCS 推送多阶段事件（小车到达、卸货、进入格口），需精准路由到对应等待中的 run：
+
+**选项 A：按 run_id 路由**
+- 下发 RCS 指令时，在 body 中携带 `run_id` 作为回调标识
+- RCS 回推事件时带上 `run_id`，平台直接 `POST /runs/{run_id}/resume`
+- 优点：简单直接；缺点：run_id 暴露给外部系统
+
+**选项 B：按 requestId 路由**（推荐）
+- 每次业务请求生成独立 `requestId`，传递给 RCS
+- 平台维护 `requestId → run_id` 映射，按 requestId 定位 run
+- 优点：requestId 是业务语义标识，RCS 侧也用于联查；与插件协议透传的 requestId 一致
+- 缺点：多一层映射，但 `WorkflowRunRecord` 已有 `request_id` 索引字段可直接用
+
+推荐**选项 B**：与现有 `runs/search` API 支持的 `request_id` 查询字段契合，RCS 侧也更符合业务语义。
+
+### 工作站扫码三步的实现方式
+
+"扫码 → 等待小车 → 发车"三步之间有 RCS 异步事件，**不推荐**合并为一个插件节点：
+
+- 合并后插件需长时间挂起并轮询 RCS，状态管理复杂
+- 拆为 `plugin:scan_task` + `wait(car_arrived)` + `plugin:dispatch_task` 三段，职责清晰
+- 每一段都可独立重试、独立观测、独立异常分支
+- 工人在 App 上看到的任务也分为"扫码任务"和"发车任务"两类，语义更清晰
+
 ### 分拨规则的承接方式
 
-三种选项，灵活性递增：
+由于"HTTP 插件机制"已作为前提就绪，分拨规则的首选承接方式调整为**插件节点**。四种选项对比：
 
 **选项 1：`code` 节点内联**（不推荐）
 - 规则逻辑写在流程的 `code` 节点 JS 中
 - 修改规则 = 修改流程定义，需重新发布流程
 - 多客户规则混在同一流程，难以隔离
 
-**选项 2：`fetch` 节点调用外部规则服务**（推荐，近期可行）
-- 流程通过 `fetch` 节点调用独立的**分拨规则服务** `/wave-rules/evaluate`
-- 规则服务按客户/仓维护规则集，支持热更新
-- 流程只关心"给我一个波次分组结果"，不感知规则细节
-- 兼容"客户已有组波系统"：将外部系统接口注册为规则服务端点即可
+**选项 2：`plugin:wave_rule` 插件节点**（✅ **推荐首选**）
 
-**选项 3：平台内建规则中心**（推荐，中期建设）
-- 规则中心提供可视化规则配置界面（条件、分组键、约束、优先级）
-- 规则通过 PRD 第 8.2 节定义的规则模型承接：决策规则 + 计算规则 + 约束规则
-- workflow 调用方式不变（仍通过 `fetch`），规则中心作为规则服务的平台化实现
+把分拨规则按**插件契约**承接，复用已就绪的 HTTP 插件机制：
 
-**关键原则**：无论选哪种方案，分拨规则逻辑都不应内嵌在流程节点中，规则变更不应触发流程重新发布。
+```mermaid
+flowchart LR
+    A[订单入队] --> P["plugin:wave_rule<br/>evaluate 规则"]
+    P -.外部规则库热更新.-> P
+    P --> S[set_state<br/>wave_no / platformId / chute]
+    S --> Next([进入扫码子流程])
+```
+
+- 规则服务实现标准 `/descriptor` + `/execute` 接口：
+  - 输入：当前订单（+ 候选订单池）+ 客户/仓上下文（通过 `context` 字段）
+  - 输出：`statePatch: { wave_no, platformId, chute, rule_version }` + `output: { matched_orders }`
+- 不同客户 / 不同规则集可注册为**同一 `runnerType` 下的多个插件实例**，通过 `config.ruleSetId` 选择
+- 支持 `status: "waiting"` — 需等订单池积攒到阈值再返回分组结果（与人工表单输入 + 阈值触发组波场景天然契合）
+- 天生获得：descriptor 自描述、configSchema 驱动前端面板、`requestId`/`runId` 透传、统一日志与观测、注册中心管理、灰度/版本
+
+**选项 4：平台内建规则中心 + `plugin:wave_rule` 调用**（中期建设）
+- 规则中心提供**可视化规则配置界面**（条件、分组键、约束、优先级），规则通过 PRD 第 8.2 节的规则模型承接（决策规则 + 计算规则 + 约束规则）
+- 规则中心本身以"内置插件"形式暴露给 workflow，runnerType 仍是 `plugin:wave_rule`，workflow 无需变更
+- 把规则中心当作"平台自带的一个特殊插件实例"，与客户自研规则插件共存
+
+**推荐路径**：
+
+- **近期**：实现一个最小的 `wave_rule` 插件服务，承接"同品类 + 同地区 + 今日件"三条件 AND + 阈值触发，跑通端到端
+- **中期**：规则中心上线后，把它注册为平台默认的 `wave_rule` 插件实例；客户可注册自有插件覆盖默认
+- **特殊场景**：客户已有组波系统且不愿改造 → 包一层薄插件 shim（HTTP 插件服务直接调客户接口），不回退到选项 2
+
+**关键原则**：
+
+- 分拨规则不内嵌在流程节点中，规则变更不触发流程重新发布
+- 统一走插件协议，不为规则单独引入一套"规则服务"的 API 规范

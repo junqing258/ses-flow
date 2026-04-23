@@ -16,7 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info};
 
-use crate::modules::{ai_gateway, edit_session, run, system, workflow};
+use crate::modules::{ai_gateway, edit_session, node_registry, run, system, workflow};
 
 pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
 pub const RUNNER_VIEWS_BASE_PATH: &str = "/views";
@@ -39,6 +39,12 @@ pub fn build_router(state: ApiState) -> Router {
 fn build_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(system::health))
+        .route("/node-descriptors", get(node_registry::list_node_descriptors))
+        .route(
+            "/node-descriptors/{descriptor_id}/versions",
+            get(node_registry::get_node_descriptor_versions),
+        )
+        .route("/plugin-registrations", post(node_registry::register_http_plugin))
         .route("/catalog/refresh", get(workflow::refresh_catalog))
         .route("/workflows/events", get(workflow::subscribe_workflows_events))
         .route(
@@ -178,7 +184,9 @@ impl IntoResponse for ApiError {
             | Self::Runner(RunnerError::ResumeValidation(message))
             | Self::Runner(RunnerError::Transition(message))
             | Self::Runner(RunnerError::CodeExecution(message))
-            | Self::Runner(RunnerError::SubWorkflow(message)) => (StatusCode::BAD_REQUEST, message),
+            | Self::Runner(RunnerError::SubWorkflow(message))
+            | Self::Runner(RunnerError::PluginRegistration(message)) => (StatusCode::BAD_REQUEST, message),
+            Self::Runner(RunnerError::PluginExecution(message)) => (StatusCode::BAD_GATEWAY, message),
             Self::Runner(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
         };
 

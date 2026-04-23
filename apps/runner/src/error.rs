@@ -36,4 +36,8 @@ pub enum RunnerError {
     ResumeValidation(String),
     #[error("transition resolution failed: {0}")]
     Transition(String),
+    #[error("plugin registration failed: {0}")]
+    PluginRegistration(String),
+    #[error("plugin execution failed: {0}")]
+    PluginExecution(String),
 }

@@ -210,6 +210,12 @@ fn shell_logs_from_stderr(stderr: &str) -> Vec<NodeLogRecord> {
             Some(NodeLogRecord {
                 level: "warn".to_string(),
                 message: message.to_string(),
+                fields: Value::Null,
+                run_id: None,
+                request_id: None,
+                node_id: None,
+                trace_id: None,
+                timestamp: None,
             })
         })
         .collect()
