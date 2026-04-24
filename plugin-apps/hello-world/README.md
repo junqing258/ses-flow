@@ -1,6 +1,8 @@
 # Hello World Plugin
 
-这是一个按照 `docs/plans/dynamic-node-registry.md` 初始化的最小 HTTP 插件应用，放在 `plugin-apps/hello-world` 下，使用 Rust + Axum 实现。
+这是一个最小 HTTP plugin-app 示例，放在 `plugin-apps/hello-world` 下，使用 Rust + Axum 实现。
+
+当前代码已经按 MVC 风格拆分，适合作为后续新 plugin-app 的参考骨架。
 
 当前实现聚焦首期能力：
 
@@ -9,6 +11,7 @@
 - 同步 `POST /execute`
 - `GET /descriptors` / `GET /descriptor` / `GET /health`
 - `POST /cancel` / `POST /resume` 预留为占位接口，默认返回 `501 Not Implemented`
+- 控制器 / 服务 / 模型 / 视图辅助 已拆分到独立模块目录
 
 ## 目录
 
@@ -17,9 +20,27 @@ plugin-apps/hello-world
 ├── Cargo.toml
 ├── README.md
 └── src
+    ├── controllers
+    │   ├── mod.rs
+    │   └── plugin.rs
+    ├── models
+    │   └── mod.rs
+    ├── services
+    │   └── mod.rs
     ├── lib.rs
-    └── main.rs
+    ├── main.rs
+    ├── router.rs
+    ├── tests.rs
+    └── views.rs
 ```
+
+模块职责：
+
+- `controllers/`：处理 HTTP 请求与响应状态码
+- `models/`：定义 descriptor、execute request/response 等结构
+- `services/`：封装 descriptor 组装和执行逻辑
+- `views.rs`：统一 JSON 响应与 `X-Trace-Id` header 回写
+- `router.rs`：集中声明插件路由
 
 ## 启动
 
@@ -108,6 +129,7 @@ just dev-plugin-hello-world
   "output": {
     "message": "Hello, SES!",
     "pluginId": "hello_world",
+    "runnerType": "plugin:hello_world",
     "nodeId": "node-hello-1",
     "runId": "run-1",
     "requestId": "req-1",
@@ -125,7 +147,14 @@ just dev-plugin-hello-world
   "statePatch": {
     "plugins": {
       "hello_world": {
-        "lastGreeting": "Hello, SES!"
+        "lastGreeting": "Hello, SES!",
+        "lastRunId": "run-1",
+        "lastRequestId": "req-1",
+        "lastNodeId": "node-hello-1",
+        "traceId": "trace-1",
+        "inputEcho": {
+          "name": "SES"
+        }
       }
     }
   },
@@ -134,12 +163,17 @@ just dev-plugin-hello-world
       "level": "info",
       "message": "hello-world executed for SES",
       "fields": {
-        "pluginId": "hello_world"
+        "pluginId": "hello_world",
+        "runnerType": "plugin:hello_world",
+        "nodeId": "node-hello-1",
+        "workflowKey": "wf-hello"
       }
     }
   ]
 }
 ```
+
+如果请求里带了 `context.traceId`，插件会在响应头里原样回写 `X-Trace-Id`。
 
 ## 本地验证
 
