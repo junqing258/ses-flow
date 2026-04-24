@@ -3,7 +3,9 @@ use axum::http::Request;
 use serde_json::json;
 use tower::ServiceExt;
 
-use super::{AppConfig, DEFAULT_CONNECT_WORKER_ID, TaskState, build_router, failure_resume_event, success_resume_event};
+use super::{
+    AppConfig, DEFAULT_CONNECT_WORKER_ID, TaskState, build_router, failure_resume_event, success_resume_event,
+};
 
 fn build_test_app(config: AppConfig) -> (axum::Router, super::AppState) {
     let state = super::AppState::new(config);
@@ -22,8 +24,7 @@ async fn descriptors_route_returns_manual_nodes() {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("descriptors body should be readable");
-    let payload: serde_json::Value =
-        serde_json::from_slice(&body).expect("descriptors response should be valid json");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("descriptors response should be valid json");
     assert_eq!(payload.as_array().expect("descriptors should be an array").len(), 2);
     assert_eq!(payload[0]["runnerType"], json!("plugin:manual_pick"));
     assert_eq!(payload[1]["runnerType"], json!("plugin:manual_weigh"));
@@ -107,8 +108,7 @@ async fn synchronize_returns_success_placeholder() {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("synchronize body should be readable");
-    let payload: serde_json::Value =
-        serde_json::from_slice(&body).expect("synchronize response should be valid json");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("synchronize response should be valid json");
     assert_eq!(payload["Code"], json!(0));
     assert_eq!(payload["Message"], json!("Success"));
 }

@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use async_stream::stream;
 use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::extract::MatchedPath;
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive};
@@ -35,9 +35,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn from_env() -> Self {
         Self {
-            runner_base_url: std::env::var("RUNNER_BASE_URL")
-                .ok()
-                .map(normalize_runner_base_url),
+            runner_base_url: std::env::var("RUNNER_BASE_URL").ok().map(normalize_runner_base_url),
             heartbeat_interval_secs: std::env::var("WCS_HEARTBEAT_INTERVAL_SECS")
                 .ok()
                 .and_then(|value| value.parse::<u64>().ok())
@@ -380,7 +378,11 @@ impl AppState {
         };
         let response = self
             .client
-            .post(format!("{}/runs/{}/resume", base_url.trim_end_matches('/'), task.run_id))
+            .post(format!(
+                "{}/runs/{}/resume",
+                base_url.trim_end_matches('/'),
+                task.run_id
+            ))
             .json(&json!({ "event": event }))
             .send()
             .await
@@ -806,10 +808,7 @@ fn build_router(state: AppState) -> Router {
         .route("/station/operation/getTaskInfo", post(get_task_info))
         .route("/station/operation/robotDeparture", post(robot_departure))
         .route("/station/operation/driveOutRobot", post(drive_out_robot))
-        .route(
-            "/station/operation/noBarcodeForceDepart",
-            post(no_barcode_force_depart),
-        )
+        .route("/station/operation/noBarcodeForceDepart", post(no_barcode_force_depart))
         .route("/station/operation/tasks/{execution_id}/fail", post(fail_task))
         .layer(middleware::from_fn(log_http_requests))
         .layer(DefaultBodyLimit::max(1024 * 1024))
@@ -823,12 +822,7 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
         .headers()
         .get("x-request-id")
         .and_then(|value| value.to_str().ok())
-        .or_else(|| {
-            request
-                .headers()
-                .get("requestId")
-                .and_then(|value| value.to_str().ok())
-        })
+        .or_else(|| request.headers().get("requestId").and_then(|value| value.to_str().ok()))
         .unwrap_or("")
         .to_string();
     let matched_path = request
@@ -1080,7 +1074,13 @@ async fn robot_departure(
         "requestId": request.request_id
     });
     match state
-        .complete_task_with_success(&worker_id, request.request_id, output, state_patch, Some(agv_event_payload))
+        .complete_task_with_success(
+            &worker_id,
+            request.request_id,
+            output,
+            state_patch,
+            Some(agv_event_payload),
+        )
         .await
     {
         Ok(()) => base_result_ok(Value::Null),
@@ -1295,16 +1295,15 @@ fn normalize_runner_base_url(base_url: String) -> String {
 }
 
 fn value_string(value: &Value, candidates: &[&str]) -> Option<String> {
-    candidates
-        .iter()
-        .find_map(|key| {
-            value.get(key).and_then(Value::as_str).map(str::to_string).or_else(|| {
-                value.get("payload")
-                    .and_then(|payload| payload.get(key))
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
+    candidates.iter().find_map(|key| {
+        value.get(key).and_then(Value::as_str).map(str::to_string).or_else(|| {
+            value
+                .get("payload")
+                .and_then(|payload| payload.get(key))
+                .and_then(Value::as_str)
+                .map(str::to_string)
         })
+    })
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<String> {

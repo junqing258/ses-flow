@@ -1104,7 +1104,8 @@ fn validate_plugin_resume(
         .as_ref()
         .map(|signal| signal.signal_type.as_str())
         .unwrap_or("external_callback");
-    let actual_signal = extract_value_by_key(resume_input, "event").or_else(|| extract_value_by_key(resume_input, "type"));
+    let actual_signal =
+        extract_value_by_key(resume_input, "event").or_else(|| extract_value_by_key(resume_input, "type"));
 
     match actual_signal.and_then(|value| value.as_str().map(str::to_string)) {
         Some(actual) if actual == expected_signal => Ok(()),
@@ -1121,14 +1122,14 @@ fn validate_plugin_resume(
 
 fn plugin_resume_result(resume_input: &Value) -> Result<ResolvedResume, RunnerError> {
     let payload = resume_input.get("payload").unwrap_or(resume_input);
-    let status = payload
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or_else(|| if payload.get("error").is_some() { "failed" } else { "success" });
-    let output = payload
-        .get("output")
-        .cloned()
-        .unwrap_or_else(|| payload.clone());
+    let status = payload.get("status").and_then(Value::as_str).unwrap_or_else(|| {
+        if payload.get("error").is_some() {
+            "failed"
+        } else {
+            "success"
+        }
+    });
+    let output = payload.get("output").cloned().unwrap_or_else(|| payload.clone());
     let state_patch = payload.get("statePatch").cloned().unwrap_or(Value::Null);
 
     match status {

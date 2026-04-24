@@ -218,4 +218,59 @@ describe("createWorkflowNodeDraft", () => {
     expect(pluginItem?.label).toBe("Hello World");
     expect(pluginItem?.kind).toBe("effect");
   });
+
+  it("groups plugin palette items by plugin application before category", () => {
+    const categories = createWorkflowPaletteCategories([
+      {
+        id: "hello_world",
+        kind: "effect",
+        runnerType: "plugin:hello_world",
+        version: "1.0.0",
+        category: "人工工作台",
+        displayName: "Hello World",
+        pluginAppId: "hello_world",
+        pluginAppName: "Hello World",
+        endpoint: "http://127.0.0.1:9101",
+        status: "stable",
+        transport: "http",
+      },
+      {
+        id: "manual_pick",
+        kind: "effect",
+        runnerType: "plugin:manual_pick",
+        version: "1.0.0",
+        category: "人工工作台",
+        displayName: "人工拣货",
+        pluginAppId: "wcs_bridge",
+        endpoint: "http://127.0.0.1:9102",
+        status: "stable",
+        transport: "http",
+      },
+      {
+        id: "manual_weigh",
+        kind: "effect",
+        runnerType: "plugin:manual_weigh",
+        version: "1.0.0",
+        category: "人工工作台",
+        displayName: "人工称货",
+        pluginAppId: "wcs_bridge",
+        endpoint: "http://127.0.0.1:9102",
+        status: "stable",
+        transport: "http",
+      },
+    ]);
+
+    const helloWorldCategory = categories.find(
+      (category) => category.label === "Hello World",
+    );
+    const wcsCategory = categories.find((category) => category.label === "WCS");
+
+    expect(helloWorldCategory?.items.map((item) => item.label)).toEqual([
+      "Hello World",
+    ]);
+    expect(wcsCategory?.items.map((item) => item.label)).toEqual([
+      "人工拣货",
+      "人工称货",
+    ]);
+  });
 });

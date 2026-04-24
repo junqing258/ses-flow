@@ -55,6 +55,10 @@ pub struct NodeDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_app_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_app_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binary: Option<String>,
     #[serde(rename = "timeoutMs", default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,

@@ -164,9 +164,12 @@ export interface WorkflowNodeDescriptor {
   defaults?: Record<string, unknown> | null;
   description?: string;
   displayName: string;
+  endpoint?: string | null;
   icon?: string | null;
   id: string;
   kind: WorkflowNodeKind | string;
+  pluginAppId?: string | null;
+  pluginAppName?: string | null;
   runnerType: string;
   status: "stable" | "beta" | "deprecated";
   timeoutMs?: number;
@@ -266,10 +269,10 @@ const isWorkflowNodeKind = (value: string): value is WorkflowNodeKind =>
     "branch-label",
   ].includes(value);
 
-const toWorkflowIconKey = (value: string | null | undefined): WorkflowIconKey =>
-  value && value in WORKFLOW_ICON_MAP
-    ? (value as WorkflowIconKey)
-    : "activity";
+const toWorkflowIconKey = (
+  value: string | null | undefined,
+): WorkflowIconKey =>
+  value && value in WORKFLOW_ICON_MAP ? (value as WorkflowIconKey) : "activity";
 
 const toWorkflowFieldType = (
   property: WorkflowJsonSchemaProperty,
@@ -767,14 +770,109 @@ const getDynamicPaletteAccent = (descriptor: WorkflowNodeDescriptor) => {
 };
 
 const toPaletteCategoryId = (label: string) =>
-  `dynamic-${label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "plugins"}`;
+  `dynamic-${
+    label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "plugins"
+  }`;
 
-const toPaletteItemKind = (descriptor: WorkflowNodeDescriptor): WorkflowNodeKind => {
-  if (typeof descriptor.kind === "string" && isWorkflowNodeKind(descriptor.kind)) {
+const prettifyPluginAppLabel = (value: string) => {
+  const tokens = value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const normalizedTokens =
+    tokens.length > 1 &&
+    ["plugin", "plugins", "bridge", "app"].includes(
+      tokens[tokens.length - 1]?.toLowerCase() ?? "",
+    )
+      ? tokens.slice(0, -1)
+      : tokens;
+
+  return normalizedTokens
+    .map((token) => {
+      if (/^[a-z]{2,4}$/i.test(token)) {
+        return token.toUpperCase();
+      }
+
+      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+    })
+    .join(" ");
+};
+
+const getPluginEndpointGroupId = (descriptor: WorkflowNodeDescriptor) => {
+  if (!descriptor.endpoint) {
+    return null;
+  }
+
+  try {
+    const endpointUrl = new URL(descriptor.endpoint);
+    return `${endpointUrl.host}${endpointUrl.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return descriptor.endpoint;
+  }
+};
+
+const getPluginEndpointGroupLabel = (descriptor: WorkflowNodeDescriptor) => {
+  if (!descriptor.endpoint) {
+    return null;
+  }
+
+  try {
+    const endpointUrl = new URL(descriptor.endpoint);
+    return endpointUrl.host;
+  } catch {
+    return descriptor.endpoint;
+  }
+};
+
+const getDynamicPaletteGroup = (descriptor: WorkflowNodeDescriptor) => {
+  if (!descriptor.runnerType.startsWith("plugin:")) {
+    const categoryLabel = descriptor.category.trim() || "动态节点";
+
+    return {
+      id: toPaletteCategoryId(categoryLabel),
+      label: categoryLabel,
+    };
+  }
+
+  const appId = descriptor.pluginAppId?.trim();
+  const appName = descriptor.pluginAppName?.trim();
+  const endpointGroupId = getPluginEndpointGroupId(descriptor);
+  const endpointGroupLabel = getPluginEndpointGroupLabel(descriptor);
+
+  const groupIdSource =
+    appId || endpointGroupId || descriptor.category || descriptor.id;
+  const groupLabelSource =
+    appName ||
+    (appId ? prettifyPluginAppLabel(appId) : null) ||
+    endpointGroupLabel ||
+    descriptor.category.trim() ||
+    descriptor.displayName;
+
+  return {
+    id: `plugin-app-${
+      groupIdSource
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "plugins"
+    }`,
+    label: groupLabelSource,
+  };
+};
+
+const toPaletteItemKind = (
+  descriptor: WorkflowNodeDescriptor,
+): WorkflowNodeKind => {
+  if (
+    typeof descriptor.kind === "string" &&
+    isWorkflowNodeKind(descriptor.kind)
+  ) {
     return descriptor.kind;
   }
 
@@ -803,31 +901,35 @@ export const createWorkflowPaletteCategories = (
   const categories = structuredClone(
     WORKFLOW_PALETTE_CATEGORIES,
   ) as WorkflowPaletteCategory[];
+  const dynamicCategoryMap = new Map<string, WorkflowPaletteCategory>();
   const dynamicDescriptors = descriptors
     .filter((descriptor) => descriptor.status !== "deprecated")
     .sort((left, right) => left.displayName.localeCompare(right.displayName));
 
   dynamicDescriptors.forEach((descriptor) => {
-    const categoryLabel = descriptor.category.trim() || "动态节点";
-    const categoryId = toPaletteCategoryId(categoryLabel);
-    const existingCategory = categories.find(
-      (category) => category.id === categoryId,
-    );
+    const group = getDynamicPaletteGroup(descriptor);
     const item = createDynamicPaletteItem(descriptor);
+    const existingCategory = dynamicCategoryMap.get(group.id);
 
     if (existingCategory) {
       existingCategory.items.push(item);
       return;
     }
 
-    categories.push({
+    dynamicCategoryMap.set(group.id, {
       defaultOpen: false,
       icon: "activity",
-      id: categoryId,
+      id: group.id,
       items: [item],
-      label: categoryLabel,
+      label: group.label,
     });
   });
+
+  categories.push(
+    ...Array.from(dynamicCategoryMap.values()).sort((left, right) =>
+      left.label.localeCompare(right.label),
+    ),
+  );
 
   return categories;
 };
@@ -1509,14 +1611,16 @@ const clonePanel = (nodeId: keyof typeof INITIAL_WORKFLOW_PANELS) =>
 export const createWorkflowPaletteItemMap = (
   categories: WorkflowPaletteCategory[],
 ) =>
-  categories.flatMap((category) => category.items).reduce<
-    Record<string, WorkflowPaletteItem>
-  >((accumulator, item) => {
-    accumulator[item.id] = item;
-    return accumulator;
-  }, {});
+  categories
+    .flatMap((category) => category.items)
+    .reduce<Record<string, WorkflowPaletteItem>>((accumulator, item) => {
+      accumulator[item.id] = item;
+      return accumulator;
+    }, {});
 
-const createFallbackPluginPaletteItem = (runnerType: string): WorkflowPaletteItem => ({
+const createFallbackPluginPaletteItem = (
+  runnerType: string,
+): WorkflowPaletteItem => ({
   accent: "#8B5CF6",
   icon: "activity",
   id: `palette-${runnerType.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,

@@ -6,6 +6,27 @@ use crate::modules::{ApiError, ApiState};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PluginHealthResponse {
+    #[serde(default)]
+    plugin_id: Option<String>,
+    #[serde(default)]
+    plugin_name: Option<String>,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    app_id: Option<String>,
+    #[serde(default)]
+    app_name: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PluginApplicationMetadata {
+    app_id: Option<String>,
+    app_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterHttpPluginRequest {
     pub base_url: String,
 }
@@ -40,7 +61,16 @@ pub async fn register_http_plugin_base_url(state: &ApiState, base_url: &str) -> 
         return Err(ApiError::BadRequest("plugin baseUrl is required".to_string()));
     }
 
-    let descriptors = fetch_http_plugin_descriptors(state, base_url).await?;
+    let mut descriptors = fetch_http_plugin_descriptors(state, base_url).await?;
+    let app_metadata = fetch_http_plugin_application_metadata(state, base_url).await;
+
+    descriptors.iter_mut().for_each(|descriptor| {
+        if let Some(metadata) = app_metadata.as_ref() {
+            descriptor.plugin_app_id = metadata.app_id.clone();
+            descriptor.plugin_app_name = metadata.app_name.clone();
+        }
+    });
+
     let mut registered_descriptors = Vec::with_capacity(descriptors.len());
 
     for descriptor in descriptors {
@@ -122,6 +152,24 @@ fn parse_plugin_descriptors_response(response_body: &str) -> Result<Vec<NodeDesc
     Err(ApiError::BadRequest(
         "failed to parse plugin descriptors: expected a descriptor object or array".to_string(),
     ))
+}
+
+async fn fetch_http_plugin_application_metadata(state: &ApiState, base_url: &str) -> Option<PluginApplicationMetadata> {
+    let health_url = format!("{}/health", base_url.trim_end_matches('/'));
+    let response = state.ai_gateway_client.get(health_url).send().await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let payload = response.json::<PluginHealthResponse>().await.ok()?;
+    let app_id = payload.app_id.or(payload.plugin_id);
+    let app_name = payload.app_name.or(payload.plugin_name).or(payload.display_name);
+
+    if app_id.is_none() && app_name.is_none() {
+        return None;
+    }
+
+    Some(PluginApplicationMetadata { app_id, app_name })
 }
 
 pub async fn register_http_plugin_base_urls(
