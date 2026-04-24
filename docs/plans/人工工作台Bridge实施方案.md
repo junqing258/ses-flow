@@ -1,6 +1,6 @@
 # 人工工作台 Bridge 实施方案（SSE 版）
 
-> 本文是 [dynamic-node-registry.md](./dynamic-node-registry.md) 路径 B 的子方案。
+> 本文是 [动态业务节点注册机制实施方案.md](./动态业务节点注册机制实施方案.md) 路径 B 的子方案。
 > 面向场景：人工工作台（PDA、手机 App、Web 工作台）没有 HTTP Server，runner 无法直接调用；同时业务要求 runner 能把人工任务派给特定工人，工人完成/挂起/取消后回传结果。
 
 ---
@@ -46,7 +46,7 @@
 
 三段通信：
 
-1. **Runner ↔ Bridge**：标准 HTTP plugin 协议，完全复用 [dynamic-node-registry.md](./dynamic-node-registry.md) 已定义的 request/response 结构。
+1. **Runner ↔ Bridge**：标准 HTTP plugin 协议，完全复用 [动态业务节点注册机制实施方案.md](./动态业务节点注册机制实施方案.md) 已定义的 request/response 结构。
 2. **Bridge → App**：SSE 单向推送（任务派发、取消、恢复事件）。
 3. **App → Bridge**：普通 HTTP POST（登录、心跳、ack、result、Host API 代理调用）。
 
@@ -125,7 +125,7 @@
 
 ### 一、Runner → Bridge（标准 plugin 协议，零扩展）
 
-按 [dynamic-node-registry.md](./dynamic-node-registry.md) 已有约定实现（平台注册时优先调 `GET /descriptors`，`404` 时回退 `GET /descriptor`）。Bridge 行为：
+按 [动态业务节点注册机制实施方案.md](./动态业务节点注册机制实施方案.md) 已有约定实现（平台注册时优先调 `GET /descriptors`，`404` 时回退 `GET /descriptor`）。Bridge 行为：
 
 | 接口 | Bridge 处理逻辑 |
 |---|---|
@@ -166,7 +166,7 @@
 
 **关键点**：人工节点永远走 `waiting` 语义。Bridge 收到 `/execute` 后不等工人完成，立刻返回 `waiting`，runner 挂起 workflow；工人完成后 Bridge **主动调 runner 的 resume 入口**把工作流推进。
 
-> 按 [dynamic-node-registry.md](./dynamic-node-registry.md) 约定，resume 是"插件主动通知 runner"，Bridge 在这里就是这个"插件"。
+> 按 [动态业务节点注册机制实施方案.md](./动态业务节点注册机制实施方案.md) 约定，resume 是"插件主动通知 runner"，Bridge 在这里就是这个"插件"。
 
 ### 二、App → Bridge（App 是 HTTP 客户端）
 
@@ -386,7 +386,7 @@ runner ──▶ Bridge /execute (targetWorkerId = worker-42)
 |---|---|---|
 | App 通信协议 | **SSE + HTTP POST**，不用 WebSocket | App 只需单向接收推送；SSE 天然走 HTTP/HTTPS，穿透 NAT 和企业代理更稳；WebSocket 的全双工是过度设计 |
 | Bridge 响应语义 | `/execute` 立刻返回 `waiting` | 人工任务时长不可预期（秒到小时），不能占用 runner 同步连接 |
-| resume 路径 | Bridge 主动调 runner resume | 与 [dynamic-node-registry.md](./dynamic-node-registry.md) 已有约定一致 |
+| resume 路径 | Bridge 主动调 runner resume | 与 [动态业务节点注册机制实施方案.md](./动态业务节点注册机制实施方案.md) 已有约定一致 |
 | 持久化存储 | Postgres | 与平台主库共用连接池；Pending Queue 体量小，不需要 Kafka/Redis Streams |
 | 一个 Bridge 多种人工节点 | ✅ | `pluginType` + `configSchema` 区分，Bridge 核心与具体业务节点解耦；`GET /descriptors` 一次返回全部注册节点 |
 
