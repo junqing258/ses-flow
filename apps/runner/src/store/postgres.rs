@@ -134,6 +134,141 @@ impl PostgresRunStore {
         .await
         .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
 
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS chute_status (
+                chute_id        TEXT        PRIMARY KEY,
+                platform_id     TEXT        NOT NULL,
+                wave_no         TEXT,
+                current_count   INTEGER     NOT NULL DEFAULT 0,
+                capacity        INTEGER     NOT NULL DEFAULT 100,
+                is_full         BOOLEAN     NOT NULL DEFAULT FALSE,
+                pack_run_id     TEXT,
+                updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create chute_status table: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_chute_status_platform_id ON chute_status (platform_id)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS wave (
+                wave_no         TEXT        PRIMARY KEY,
+                platform_id     TEXT        NOT NULL,
+                chute_id        TEXT        NOT NULL,
+                rule_version    TEXT,
+                status          TEXT        NOT NULL DEFAULT 'active',
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create wave table: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS wave_order (
+                wave_no         TEXT        NOT NULL,
+                run_id          TEXT        NOT NULL,
+                order_id        TEXT        NOT NULL,
+                status          TEXT        NOT NULL DEFAULT 'sorting',
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (wave_no, run_id)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create wave_order table: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_wave_order_wave_no ON wave_order (wave_no)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_wave_order_run_id ON wave_order (run_id)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS sorting_flow (
+                id              BIGSERIAL   PRIMARY KEY,
+                task_id         TEXT        NOT NULL,
+                run_id          TEXT        NOT NULL,
+                platform_id     TEXT        NOT NULL,
+                wave_no         TEXT,
+                order_id        TEXT,
+                chute_id        TEXT        NOT NULL,
+                sku             TEXT,
+                barcode         TEXT,
+                sorting_result  TEXT        NOT NULL DEFAULT 'ok',
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create sorting_flow table: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_sorting_flow_run_id ON sorting_flow (run_id)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_sorting_flow_wave_no ON sorting_flow (wave_no)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_sorting_flow_platform_id ON sorting_flow (platform_id)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_sorting_flow_created_at ON sorting_flow (created_at)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
         Ok(())
     }
 }
