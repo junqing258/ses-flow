@@ -3,12 +3,14 @@ use axum::http::Request;
 use serde_json::json;
 use tower::ServiceExt;
 
-use super::{
-    AppConfig, DEFAULT_CONNECT_WORKER_ID, TaskState, build_router, failure_resume_event, success_resume_event,
-};
+use crate::models::{ExecutionTask, TaskErrorPayload, TaskState};
+use crate::router::build_router;
+use crate::services::AppState;
+use crate::views::{failure_resume_event, success_resume_event};
+use crate::{AppConfig, DEFAULT_CONNECT_WORKER_ID};
 
-fn build_test_app(config: AppConfig) -> (axum::Router, super::AppState) {
-    let state = super::AppState::new(config);
+fn build_test_app(config: AppConfig) -> (axum::Router, AppState) {
+    let state = AppState::new(config);
     (build_router(state.clone()), state)
 }
 
@@ -238,7 +240,7 @@ async fn robot_departure_completes_active_task() {
 
 #[test]
 fn builds_runner_resume_events() {
-    let task = super::ExecutionTask {
+    let task = ExecutionTask {
         execution_id: "exec-1".to_string(),
         run_id: "run-1".to_string(),
         request_id: "req-1".to_string(),
@@ -263,7 +265,7 @@ fn builds_runner_resume_events() {
     );
     let failure = failure_resume_event(
         &task,
-        &super::TaskErrorPayload {
+        &TaskErrorPayload {
             code: "SCAN_FAILED".to_string(),
             message: "扫码超时".to_string(),
         },
