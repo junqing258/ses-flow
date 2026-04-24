@@ -16,7 +16,7 @@
 
 ### 目标
 
-- **对 runner 透明**：Bridge 对外实现完整 HTTP 插件协议（`/descriptor`、`/health`、`/execute`、`/cancel`、`/resume`），runner 当成普通 HTTP 插件使用。
+- **对 runner 透明**：Bridge 对外实现完整 HTTP 插件协议（`/descriptors`、`/health`、`/execute`、`/cancel`、`/resume`），runner 当成普通 HTTP 插件使用；`/descriptors` 可一次返回多个人工节点 descriptor。
 - **对 App 友好**：App 只需发 outbound HTTP + 订阅一条 SSE 流。
 - **无会话丢失**：App 离线/重连不丢任务，幂等可重投。
 - **一套 Bridge 服务所有人工节点类型**：新增"拣货确认""异常复核""称重录入"等都不需要改 Bridge 核心。
@@ -125,15 +125,44 @@
 
 ### 一、Runner → Bridge（标准 plugin 协议，零扩展）
 
-按 [dynamic-node-registry.md](./dynamic-node-registry.md) 已有约定实现。Bridge 行为：
+按 [dynamic-node-registry.md](./dynamic-node-registry.md) 已有约定实现（平台注册时优先调 `GET /descriptors`，`404` 时回退 `GET /descriptor`）。Bridge 行为：
 
 | 接口 | Bridge 处理逻辑 |
 |---|---|
-| `GET /descriptor` | 返回 `supportsCancel: true, supportsResume: true, timeoutMs: 0`（0 = 不超时，由业务或工作流显式取消）|
+| `GET /descriptors` | 返回所有已注册人工节点的 descriptor 数组；每个 descriptor 均含 `supportsCancel: true, supportsResume: true, timeoutMs: 0`；平台注册时优先调用此接口 |
 | `GET /health` | 检查 DB 可用、在线 App 数；返回 200/503 |
 | `POST /execute` | 创建 ExecutionTask → 解析 `targetWorkerId` → 入 Pending Queue → 推 SSE → **立即返回 `status: "waiting"`**，`waitSignal.type = "human_task_done"` |
 | `POST /cancel` | 查 ExecutionTask → 入 Pending Queue `task.cancel` → 推 SSE → 返回 200 |
 | `POST /resume` | runner 不会直接调（见下）|
+
+`GET /descriptors` 返回示例（Bridge 注册了多个人工节点）：
+
+```json
+[
+  {
+    "id": "manual_pick",
+    "runnerType": "plugin:manual_pick",
+    "version": "1.0.0",
+    "displayName": "人工拣货",
+    "transport": "http",
+    "supportsCancel": true,
+    "supportsResume": true,
+    "timeoutMs": 0,
+    "configSchema": { "...": "..." }
+  },
+  {
+    "id": "manual_weigh",
+    "runnerType": "plugin:manual_weigh",
+    "version": "1.0.0",
+    "displayName": "人工称重",
+    "transport": "http",
+    "supportsCancel": true,
+    "supportsResume": true,
+    "timeoutMs": 0,
+    "configSchema": { "...": "..." }
+  }
+]
+```
 
 **关键点**：人工节点永远走 `waiting` 语义。Bridge 收到 `/execute` 后不等工人完成，立刻返回 `waiting`，runner 挂起 workflow；工人完成后 Bridge **主动调 runner 的 resume 入口**把工作流推进。
 
@@ -343,7 +372,7 @@ runner ──▶ Bridge /execute (targetWorkerId = worker-42)
 | 方面 | 是否改动 |
 |---|---|
 | runner plugin executor | ❌ 零改动，Bridge 就是一个 `transport=http` 的插件 |
-| NodeDescriptor 协议 | ❌ 零改动，人工节点与其他 HTTP 插件用同一份 schema |
+| NodeDescriptor 协议 | ❌ 零改动；`GET /descriptors` 数组格式已在 dynamic-node-registry 协议中定义，Bridge 可注册多个人工节点类型 |
 | Host API | ❌ 零改动，Bridge 作为代理透传 |
 | runner resume 入口 | ✅ 复用（commit `132d478` 已具备）|
 | 日志格式 | ✅ 复用，`traceId` 贯穿 runner → Bridge → App |
@@ -359,7 +388,7 @@ runner ──▶ Bridge /execute (targetWorkerId = worker-42)
 | Bridge 响应语义 | `/execute` 立刻返回 `waiting` | 人工任务时长不可预期（秒到小时），不能占用 runner 同步连接 |
 | resume 路径 | Bridge 主动调 runner resume | 与 [dynamic-node-registry.md](./dynamic-node-registry.md) 已有约定一致 |
 | 持久化存储 | Postgres | 与平台主库共用连接池；Pending Queue 体量小，不需要 Kafka/Redis Streams |
-| 一个 Bridge 多种人工节点 | ✅ | `pluginType` + `configSchema` 区分，Bridge 核心与具体业务节点解耦 |
+| 一个 Bridge 多种人工节点 | ✅ | `pluginType` + `configSchema` 区分，Bridge 核心与具体业务节点解耦；`GET /descriptors` 一次返回全部注册节点 |
 
 ---
 
