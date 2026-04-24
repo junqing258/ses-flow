@@ -28,6 +28,10 @@ async fn descriptors_route_returns_manual_nodes() {
     assert_eq!(payload.as_array().expect("descriptors should be an array").len(), 2);
     assert_eq!(payload[0]["runnerType"], json!("plugin:manual_pick"));
     assert_eq!(payload[1]["runnerType"], json!("plugin:manual_weigh"));
+    assert_eq!(payload[0]["color"], json!("#F97316"));
+    assert_eq!(payload[0]["icon"], json!("package-check"));
+    assert_eq!(payload[1]["color"], json!("#14B8A6"));
+    assert_eq!(payload[1]["icon"], json!("scale"));
 }
 
 #[tokio::test]

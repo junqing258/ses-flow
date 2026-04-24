@@ -212,7 +212,11 @@
                   backgroundColor: `${item.accent}15`,
                 }"
               >
-                <component :is="resolveIcon(item.icon)" class="h-3.5 w-3.5" />
+                <WorkflowIcon
+                  :icon="item.icon"
+                  :alt="item.label"
+                  class="h-3.5 w-3.5"
+                />
               </div>
               <div class="min-w-0 flex-1">
                 <p class="truncate text-[13px] font-medium text-[#354a56]">
@@ -389,7 +393,11 @@
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm"
           :style="{ backgroundColor: selectedNodeData.accent }"
         >
-          <component :is="selectedNodeIcon" class="h-4.5 w-4.5" />
+          <WorkflowIcon
+            :icon="selectedNodeData.icon"
+            :alt="selectedNodeData.title"
+            class="h-4.5 w-4.5"
+          />
         </div>
 
         <div class="min-w-0 flex-1 px-1">
@@ -835,6 +843,7 @@ import { toast } from "vue-sonner";
 import WorkflowAiChatPanel from "@/components/workflow/WorkflowAiChatPanel.vue";
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
+import WorkflowIcon from "@/components/workflow/WorkflowIcon.vue";
 import WorkflowHeaderActionButtons from "@/components/workflow/WorkflowHeaderActionButtons.vue";
 import WorkflowRunTimelineDetail from "@/components/workflow/WorkflowRunTimelineDetail.vue";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
@@ -889,7 +898,6 @@ import {
   WORKFLOW_EMPTY_TAB_TEXT,
   WORKFLOW_EDGE_STYLE,
   WORKFLOW_EDGE_TYPE,
-  WORKFLOW_ICON_MAP,
   WORKFLOW_PALETTE_CATEGORIES,
   WORKFLOW_TAB_LABELS,
   createWorkflowPaletteCategories,
@@ -1037,9 +1045,6 @@ interface WorkflowEditorSnapshot {
 const selectedNodeData = ref<WorkflowNodeData>(EMPTY_NODE_DATA);
 const selectedPanel = computed(() => panelByNodeId.value[selectedNodeId.value]);
 const visibleTabs = computed(() => selectedPanel.value?.tabs ?? ["base"]);
-const selectedNodeIcon = computed(
-  () => WORKFLOW_ICON_MAP[selectedNodeData.value.icon],
-);
 const isEditMode = computed(() => pageMode.value === "edit");
 const isRunMode = computed(() => pageMode.value === "run");
 const isAiMode = computed(() => pageMode.value === "ai");
@@ -1219,8 +1224,6 @@ watch(
   },
   { immediate: true },
 );
-
-const resolveIcon = (icon: WorkflowIconKey) => WORKFLOW_ICON_MAP[icon];
 
 const isSwitchBranchField = (fieldKey: string) =>
   fieldKey.startsWith("branch:");

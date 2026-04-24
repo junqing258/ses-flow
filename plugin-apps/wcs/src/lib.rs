@@ -444,6 +444,10 @@ pub struct PluginDescriptor {
     pub category: String,
     pub display_name: String,
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     pub status: String,
     pub transport: String,
     pub timeout_ms: u64,
@@ -1181,6 +1185,16 @@ fn build_manual_descriptor(id: &str, runner_type: &str, display_name: &str, desc
         category: "人工工作台".to_string(),
         display_name: display_name.to_string(),
         description: description.to_string(),
+        color: Some(if id == "manual_pick" {
+            "#F97316".to_string()
+        } else {
+            "#14B8A6".to_string()
+        }),
+        icon: Some(if id == "manual_pick" {
+            "package-check".to_string()
+        } else {
+            "scale".to_string()
+        }),
         status: "stable".to_string(),
         transport: "http".to_string(),
         timeout_ms: 0,

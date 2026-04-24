@@ -335,6 +335,8 @@ async fn registers_http_plugin_and_lists_node_descriptors() {
             "version": "1.0.0",
             "category": "业务节点",
             "displayName": "条码扫描",
+            "color": "#0EA5E9",
+            "icon": "scan-line",
             "transport": "http",
             "configSchema": {
                 "type": "object"
@@ -419,6 +421,8 @@ async fn registers_http_plugin_and_lists_node_descriptors() {
     assert_eq!(items[1]["runnerType"], json!("plugin:barcode_scan"));
     assert_eq!(items[0]["endpoint"], json!(plugin_base_url));
     assert_eq!(items[1]["endpoint"], json!(plugin_base_url));
+    assert_eq!(items[1]["color"], json!("#0EA5E9"));
+    assert_eq!(items[1]["icon"], json!("scan-line"));
 }
 
 #[tokio::test]

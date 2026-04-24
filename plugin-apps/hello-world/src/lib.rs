@@ -32,6 +32,10 @@ pub struct PluginDescriptor {
     pub category: String,
     pub display_name: String,
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     pub status: String,
     pub transport: String,
     pub timeout_ms: u64,
@@ -257,6 +261,8 @@ fn create_hello_world_descriptor() -> PluginDescriptor {
         category: "业务节点".to_string(),
         display_name: "Hello World".to_string(),
         description: "示例 HTTP 插件节点，返回一条问候消息并回写执行结果。".to_string(),
+        color: Some("#0EA5E9".to_string()),
+        icon: Some("sparkles".to_string()),
         status: "stable".to_string(),
         transport: "http".to_string(),
         timeout_ms: 5_000,
@@ -321,6 +327,8 @@ fn create_formal_hello_world_descriptor() -> PluginDescriptor {
         category: "业务节点".to_string(),
         display_name: "Hello World Formal".to_string(),
         description: "示例 HTTP 插件节点，返回更正式的问候消息。".to_string(),
+        color: Some("#7C3AED".to_string()),
+        icon: Some("badge-check".to_string()),
         status: "stable".to_string(),
         transport: "http".to_string(),
         timeout_ms: 5_000,
@@ -439,6 +447,8 @@ mod tests {
         assert_eq!(descriptor.id, PLUGIN_ID);
         assert_eq!(descriptor.runner_type, PLUGIN_RUNNER_TYPE);
         assert_eq!(descriptor.transport, "http");
+        assert_eq!(descriptor.color.as_deref(), Some("#0EA5E9"));
+        assert_eq!(descriptor.icon.as_deref(), Some("sparkles"));
     }
 
     #[tokio::test]
@@ -454,6 +464,8 @@ mod tests {
         assert_eq!(descriptors.len(), 2);
         assert_eq!(descriptors[0].runner_type, PLUGIN_RUNNER_TYPE);
         assert_eq!(descriptors[1].runner_type, FORMAL_PLUGIN_RUNNER_TYPE);
+        assert_eq!(descriptors[1].color.as_deref(), Some("#7C3AED"));
+        assert_eq!(descriptors[1].icon.as_deref(), Some("badge-check"));
     }
 
     #[tokio::test]

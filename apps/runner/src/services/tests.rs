@@ -54,11 +54,14 @@ fn node_descriptor_registry_round_trips_registered_plugin_descriptor() {
         category: "业务节点".to_string(),
         display_name: "条码扫描".to_string(),
         description: None,
+        color: Some("#0EA5E9".to_string()),
         icon: None,
         status: Default::default(),
         required_permissions: Vec::new(),
         transport: Some(NodeTransport::Http),
         endpoint: Some("http://127.0.0.1:9001".to_string()),
+        plugin_app_id: None,
+        plugin_app_name: None,
         binary: None,
         timeout_ms: Some(5_000),
         supports_cancel: false,
@@ -76,4 +79,5 @@ fn node_descriptor_registry_round_trips_registered_plugin_descriptor() {
 
     assert_eq!(descriptor.display_name, "条码扫描");
     assert_eq!(descriptor.endpoint.as_deref(), Some("http://127.0.0.1:9001"));
+    assert_eq!(descriptor.color.as_deref(), Some("#0EA5E9"));
 }

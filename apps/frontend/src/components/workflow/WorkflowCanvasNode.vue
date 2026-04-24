@@ -7,15 +7,14 @@ import {
 } from "@vue-flow/core";
 
 import {
-  WORKFLOW_ICON_MAP,
   type WorkflowBranchHandle,
   type WorkflowNodeData,
 } from "@/features/workflow/model";
 import { cn } from "@/lib/utils";
+import WorkflowIcon from "./WorkflowIcon.vue";
 
 const props = defineProps<NodeProps<WorkflowNodeData>>();
 
-const IconComponent = computed(() => WORKFLOW_ICON_MAP[props.data.icon]);
 const isActive = computed(() => Boolean(props.data.active || props.selected));
 const executionStatus = computed(() => props.data.executionStatus);
 const isBranchNode = computed(
@@ -123,7 +122,11 @@ const containerClass = computed(() =>
       <div
         class="flex w-14 items-center justify-center bg-(--node-accent) text-white"
       >
-        <component :is="IconComponent" class="h-5 w-5" />
+        <WorkflowIcon
+          :icon="data.icon"
+          :alt="data.title"
+          class="h-5 w-5"
+        />
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col justify-center gap-1 px-4">

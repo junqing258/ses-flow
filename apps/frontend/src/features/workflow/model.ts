@@ -1,9 +1,11 @@
+import type { Component } from "vue";
 import {
   Position,
   type Edge,
   type Node,
   type XYPosition,
 } from "@vue-flow/core";
+import * as LucideIcons from "lucide-vue-next";
 import {
   Activity,
   Code2,
@@ -45,6 +47,7 @@ export const WORKFLOW_ICON_MAP = {
 } as const;
 
 export type WorkflowIconKey = keyof typeof WORKFLOW_ICON_MAP;
+export type WorkflowIconValue = WorkflowIconKey | string;
 export type WorkflowNodeKind =
   | "start"
   | "trigger"
@@ -83,7 +86,7 @@ export interface WorkflowNodeData {
   accent: string;
   branchHandles?: WorkflowBranchHandle[];
   executionStatus?: WorkflowExecutionStatus;
-  icon: WorkflowIconKey;
+  icon: WorkflowIconValue;
   kind: WorkflowNodeKind;
   nodeKey: string;
   runnerType?: string;
@@ -113,7 +116,7 @@ export interface WorkflowNodePanel {
 
 export interface WorkflowPaletteItem {
   accent: string;
-  icon: WorkflowIconKey;
+  icon: WorkflowIconValue;
   id: string;
   kind: WorkflowNodeKind;
   label: string;
@@ -165,6 +168,7 @@ export interface WorkflowNodeDescriptor {
   description?: string;
   displayName: string;
   endpoint?: string | null;
+  color?: string | null;
   icon?: string | null;
   id: string;
   kind: WorkflowNodeKind | string;
@@ -269,10 +273,77 @@ const isWorkflowNodeKind = (value: string): value is WorkflowNodeKind =>
     "branch-label",
   ].includes(value);
 
-const toWorkflowIconKey = (
+const WORKFLOW_ICON_HTTP_URL_PATTERN = /^https?:\/\//i;
+const LUCIDE_ICON_ALIASES: Record<string, WorkflowIconKey> = {
+  http: "webhook",
+};
+const LUCIDE_ICON_LIBRARY = LucideIcons as unknown as Record<string, Component>;
+
+export type ResolvedWorkflowIcon =
+  | { kind: "component"; component: Component }
+  | { kind: "image"; src: string };
+
+const normalizeWorkflowIconName = (value: string) =>
+  value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join("");
+
+const resolveWorkflowIconComponent = (
   value: string | null | undefined,
-): WorkflowIconKey =>
-  value && value in WORKFLOW_ICON_MAP ? (value as WorkflowIconKey) : "activity";
+): Component => {
+  const normalizedValue = value?.trim();
+
+  if (!normalizedValue) {
+    return WORKFLOW_ICON_MAP.activity;
+  }
+
+  if (normalizedValue in WORKFLOW_ICON_MAP) {
+    return WORKFLOW_ICON_MAP[normalizedValue as WorkflowIconKey];
+  }
+
+  const alias =
+    LUCIDE_ICON_ALIASES[
+      normalizedValue.toLowerCase().replace(/[^a-z0-9]+/g, "")
+    ];
+  if (alias) {
+    return WORKFLOW_ICON_MAP[alias];
+  }
+
+  const lucideComponent = LUCIDE_ICON_LIBRARY[
+    normalizeWorkflowIconName(normalizedValue)
+  ];
+  return lucideComponent ?? WORKFLOW_ICON_MAP.activity;
+};
+
+const normalizeWorkflowIconValue = (
+  value: string | null | undefined,
+): WorkflowIconValue => value?.trim() || "activity";
+
+export const resolveWorkflowIcon = (
+  value: string | null | undefined,
+): ResolvedWorkflowIcon => {
+  const normalizedValue = value?.trim();
+
+  if (
+    normalizedValue &&
+    WORKFLOW_ICON_HTTP_URL_PATTERN.test(normalizedValue)
+  ) {
+    return {
+      kind: "image",
+      src: normalizedValue,
+    };
+  }
+
+  return {
+    component: resolveWorkflowIconComponent(normalizedValue),
+    kind: "component",
+  };
+};
 
 const toWorkflowFieldType = (
   property: WorkflowJsonSchemaProperty,
@@ -758,6 +829,11 @@ export const LEGACY_TASK_PALETTE_ITEM: WorkflowPaletteItem = {
 };
 
 const getDynamicPaletteAccent = (descriptor: WorkflowNodeDescriptor) => {
+  const configuredColor = descriptor.color?.trim();
+  if (configuredColor) {
+    return configuredColor;
+  }
+
   if (descriptor.transport === "http") {
     return "#0EA5E9";
   }
@@ -887,7 +963,7 @@ const createDynamicPaletteItem = (
   descriptor: WorkflowNodeDescriptor,
 ): WorkflowPaletteItem => ({
   accent: getDynamicPaletteAccent(descriptor),
-  icon: toWorkflowIconKey(descriptor.icon),
+  icon: normalizeWorkflowIconValue(descriptor.icon),
   id: `palette-${descriptor.id.replace(/_/g, "-")}`,
   kind: toPaletteItemKind(descriptor),
   label: descriptor.displayName,

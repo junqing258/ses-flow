@@ -5,6 +5,7 @@ import {
   createWorkflowPaletteCategories,
   createWorkflowNodeDraft,
   getWorkflowFieldSelectOptions,
+  resolveWorkflowIcon,
   resolveWorkflowReferenceId,
 } from "@/features/workflow/model";
 
@@ -187,6 +188,8 @@ describe("createWorkflowNodeDraft", () => {
         version: "1.0.0",
         category: "业务节点",
         displayName: "Hello World",
+        color: "#2563EB",
+        icon: "message-circle-more",
         status: "stable",
         transport: "http",
         timeoutMs: 5000,
@@ -216,7 +219,22 @@ describe("createWorkflowNodeDraft", () => {
 
     expect(pluginItem).toBeDefined();
     expect(pluginItem?.label).toBe("Hello World");
+    expect(pluginItem?.accent).toBe("#2563EB");
+    expect(pluginItem?.icon).toBe("message-circle-more");
     expect(pluginItem?.kind).toBe("effect");
+  });
+
+  it("resolves lucide icon names, http aliases, and image urls", () => {
+    const lucideIcon = resolveWorkflowIcon("send-horizontal");
+    const httpAliasIcon = resolveWorkflowIcon("http");
+    const imageIcon = resolveWorkflowIcon("https://example.com/icon.svg");
+
+    expect(lucideIcon.kind).toBe("component");
+    expect(httpAliasIcon.kind).toBe("component");
+    expect(imageIcon).toEqual({
+      kind: "image",
+      src: "https://example.com/icon.svg",
+    });
   });
 
   it("groups plugin palette items by plugin application before category", () => {
