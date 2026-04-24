@@ -11,9 +11,9 @@ use super::definition::{
 };
 use super::executors::ExecutorRegistry;
 use super::runtime::{
-    ExecutionStatus, NodeExecutionContext, NodeExecutionRecord, NoopWorkflowRunController, NoopWorkflowRunObserver,
-    RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunSnapshot, WorkflowRunStatus,
-    WorkflowRunSummary,
+    ExecutionStatus, NodeExecutionContext, NodeExecutionError, NodeExecutionRecord, NoopWorkflowRunController,
+    NoopWorkflowRunObserver, RunEnvironment, WorkflowRunController, WorkflowRunObserver, WorkflowRunSnapshot,
+    WorkflowRunStatus, WorkflowRunSummary,
 };
 use super::template::{merge_state, nested_state_patch};
 use crate::error::RunnerError;
@@ -160,6 +160,36 @@ impl WorkflowEngine {
             self.emit_summary(&summary);
             return Ok(summary);
         }
+        let mut state = snapshot.state.clone();
+        let resume_result = match &waiting_node.node_type {
+            NodeType::Plugin(_) => plugin_resume_result(&resume_input)?,
+            _ => ResolvedResume::success(resume_input.clone(), Value::Null),
+        };
+        if !resume_result.state_patch.is_null() {
+            merge_state(&mut state, resume_result.state_patch.clone());
+        }
+        if let Some(error) = resume_result.error {
+            let summary = failed_summary(
+                snapshot.run_id,
+                snapshot.workflow_key,
+                snapshot.workflow_version,
+                Some(waiting_node.id.clone()),
+                state,
+                snapshot.timeline,
+                Some(build_node_record_from_error(
+                    waiting_node.id.clone(),
+                    waiting_node.node_type.clone(),
+                    resume_input,
+                    RunnerError::PluginExecution(format!("{}: {}", error.code, error.message)),
+                    started_at,
+                    Utc::now(),
+                    Vec::new(),
+                )),
+                snapshot.last_signal,
+            );
+            self.emit_summary(&summary);
+            return Ok(summary);
+        }
         let outgoing = definition.transitions_from(&waiting_node.id);
         let next = self.resolve_transition(&outgoing, None)?;
         let mut timeline = snapshot.timeline.clone();
@@ -168,8 +198,8 @@ impl WorkflowEngine {
             waiting_node.node_type.clone(),
             ExecutionStatus::Success,
             resume_input.clone(),
-            resume_input.clone(),
-            Value::Null,
+            resume_result.output.clone(),
+            resume_result.state_patch.clone(),
             None,
             started_at,
             Utc::now(),
@@ -183,10 +213,10 @@ impl WorkflowEngine {
             snapshot.run_id,
             snapshot.trigger,
             snapshot.env,
-            snapshot.state,
+            state,
             timeline,
             next.to.clone(),
-            resume_input,
+            resume_result.output,
         )
     }
 
@@ -295,6 +325,7 @@ impl WorkflowEngine {
 
                 Ok(())
             }
+            NodeType::Plugin(_) => validate_plugin_resume(waiting_node, snapshot, resume_input),
             NodeType::SubWorkflow => Ok(()),
             other => Err(RunnerError::ResumeValidation(format!(
                 "node {} of type {} is not resumable",
@@ -1045,6 +1076,84 @@ pub fn new_run_id() -> String {
         .unwrap_or(0);
     let sequence = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("run-{epoch_ms}-{sequence}")
+}
+
+struct ResolvedResume {
+    output: Value,
+    state_patch: Value,
+    error: Option<NodeExecutionError>,
+}
+
+impl ResolvedResume {
+    fn success(output: Value, state_patch: Value) -> Self {
+        Self {
+            output,
+            state_patch,
+            error: None,
+        }
+    }
+}
+
+fn validate_plugin_resume(
+    waiting_node: &super::definition::NodeDefinition,
+    snapshot: &WorkflowRunSnapshot,
+    resume_input: &Value,
+) -> Result<(), RunnerError> {
+    let expected_signal = snapshot
+        .last_signal
+        .as_ref()
+        .map(|signal| signal.signal_type.as_str())
+        .unwrap_or("external_callback");
+    let actual_signal = extract_value_by_key(resume_input, "event").or_else(|| extract_value_by_key(resume_input, "type"));
+
+    match actual_signal.and_then(|value| value.as_str().map(str::to_string)) {
+        Some(actual) if actual == expected_signal => Ok(()),
+        Some(actual) => Err(RunnerError::ResumeValidation(format!(
+            "plugin node {} expected signal {}, got {}",
+            waiting_node.id, expected_signal, actual
+        ))),
+        None => Err(RunnerError::ResumeValidation(format!(
+            "plugin node {} is missing event/type in resume payload",
+            waiting_node.id
+        ))),
+    }
+}
+
+fn plugin_resume_result(resume_input: &Value) -> Result<ResolvedResume, RunnerError> {
+    let payload = resume_input.get("payload").unwrap_or(resume_input);
+    let status = payload
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| if payload.get("error").is_some() { "failed" } else { "success" });
+    let output = payload
+        .get("output")
+        .cloned()
+        .unwrap_or_else(|| payload.clone());
+    let state_patch = payload.get("statePatch").cloned().unwrap_or(Value::Null);
+
+    match status {
+        "success" => Ok(ResolvedResume::success(output, state_patch)),
+        "failed" => {
+            let error = payload.get("error").cloned().unwrap_or_else(|| {
+                json!({
+                    "code": "plugin_resume_failed",
+                    "message": "plugin resume reported failure",
+                    "retryable": false
+                })
+            });
+            let parsed =
+                serde_json::from_value::<NodeExecutionError>(error).map_err(|error| RunnerError::Json(error))?;
+            Ok(ResolvedResume {
+                output: Value::Null,
+                state_patch,
+                error: Some(parsed),
+            })
+        }
+        other => Err(RunnerError::ResumeValidation(format!(
+            "plugin resume returned unsupported status {}",
+            other
+        ))),
+    }
 }
 
 fn validate_field_match(

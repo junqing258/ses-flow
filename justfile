@@ -7,14 +7,24 @@ dev:
   #!/usr/bin/env bash
   set -euo pipefail
   trap 'kill 0' EXIT INT TERM
-  just dev-plugin-hello-world &
   just dev-ai-gateway &
   just dev-backend &
   just dev-frontend &
   wait
 
+dev-plugins:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  trap 'kill 0' EXIT INT TERM
+  just dev-plugin-hello-world &
+  just dev-plugin-wcs &
+  wait
+
 dev-plugin-hello-world:
-  cargo run -p hello-world-plugin -- --host 127.0.0.1 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
+  cargo run -p hello-world-plugin -- --host 0.0.0.0 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
+
+dev-plugin-wcs:
+  cargo run -p wcs-plugin -- --host 0.0.0.0 --port "${WCS_PLUGIN_PORT:-9102}"
 
 dev-ai-gateway:
   pnpm --filter ai-gateway dev
@@ -26,7 +36,7 @@ dev-backend:
     -w .env \
     -w apps/backend \
     -w apps/runner \
-    -x "run -p backend -- --host 127.0.0.1 --port 6302"
+    -x "run -p backend -- --host 0.0.0.0 --port 6302"
 
 dev-frontend:
   pnpm --filter frontend dev
@@ -46,16 +56,19 @@ start:
   wait
 
 start-plugin-hello-world:
-  cargo run --release -p hello-world-plugin -- --host 127.0.0.1 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
+  cargo run --release -p hello-world-plugin -- --host 0.0.0.0 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
+
+start-plugin-wcs:
+  cargo run --release -p wcs-plugin -- --host 0.0.0.0 --port "${WCS_PLUGIN_PORT:-9102}"
 
 start-ai-gateway:
   pnpm --filter ai-gateway start
 
 start-backend:
-  cargo run --release -p backend -- --host 127.0.0.1 --port 6302
+  cargo run --release -p backend -- --host 0.0.0.0 --port 6302
 
 start-frontend:
-  pnpm --filter frontend preview -- --host 127.0.0.1
+  pnpm --filter frontend preview -- --host 0.0.0.0
 
 test:
   cargo test --workspace
@@ -76,3 +89,6 @@ backend-test:
 
 runner-test:
   cargo test -p runner --lib
+
+wcs-plugin-test:
+  cargo test -p wcs-plugin

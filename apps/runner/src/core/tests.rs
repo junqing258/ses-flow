@@ -177,6 +177,7 @@ fn split_target(target: &str) -> (String, serde_json::Value) {
 #[derive(Clone, Copy)]
 enum TestPluginMode {
     Success,
+    Waiting,
 }
 
 #[derive(Default)]
@@ -287,6 +288,28 @@ fn build_plugin_execute_response(mode: TestPluginMode, body: &serde_json::Value)
             },
             "logs": [
                 { "level": "info", "message": "plugin-executed", "fields": { "kind": "success" } }
+            ]
+        })
+        .to_string(),
+        TestPluginMode::Waiting => json!({
+            "status": "waiting",
+            "output": {
+                "executionId": "exec-plugin-1",
+                "requestId": body["context"]["requestId"]
+            },
+            "statePatch": {
+                "plugin": {
+                    "status": "waiting"
+                }
+            },
+            "waitSignal": {
+                "type": "human_task_done",
+                "payload": {
+                    "requestId": body["context"]["requestId"]
+                }
+            },
+            "logs": [
+                { "level": "info", "message": "plugin-waiting", "fields": { "kind": "waiting" } }
             ]
         })
         .to_string(),
@@ -638,6 +661,94 @@ fn executes_registered_http_plugin_node() {
     assert_eq!(execute_requests[0]["runnerType"], json!("plugin:barcode_scan"));
     assert_eq!(execute_requests[0]["context"]["input"]["orderNo"], json!("SO-PLUGIN-1"));
     assert_eq!(execute_requests[0]["context"]["requestId"], json!("req-plugin-1"));
+}
+
+#[test]
+fn waits_on_registered_http_plugin_node() {
+    let (plugin_url, _) = spawn_test_plugin_server(TestPluginMode::Waiting);
+    let definition = plugin_workflow_definition("plugin:barcode_scan");
+    let engine = WorkflowEngine::with_services(plugin_services(&plugin_url));
+    let summary = engine
+        .run(
+            &definition,
+            json!({
+                "headers": {
+                    "requestId": "req-plugin-wait-1"
+                },
+                "body": {
+                    "orderNo": "SO-PLUGIN-WAIT-1"
+                }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("plugin workflow should enter waiting state");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Waiting));
+    assert_eq!(summary.current_node_id.as_deref(), Some("plugin_1"));
+    assert_eq!(summary.state["plugin"]["status"], json!("waiting"));
+    assert_eq!(
+        summary
+            .last_signal
+            .as_ref()
+            .expect("waiting plugin should expose a signal")
+            .signal_type,
+        "human_task_done"
+    );
+}
+
+#[test]
+fn resumes_waiting_http_plugin_node_to_completion() {
+    let (plugin_url, _) = spawn_test_plugin_server(TestPluginMode::Waiting);
+    let definition = plugin_workflow_definition("plugin:barcode_scan");
+    let engine = WorkflowEngine::with_services(plugin_services(&plugin_url));
+    let waiting = engine
+        .run(
+            &definition,
+            json!({
+                "headers": {
+                    "requestId": "req-plugin-resume-1"
+                },
+                "body": {
+                    "orderNo": "SO-PLUGIN-RESUME-1"
+                }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("plugin workflow should enter waiting state");
+
+    let resumed = engine
+        .resume(
+            &definition,
+            waiting
+                .resume_state
+                .expect("waiting plugin run should expose resume state"),
+            json!({
+                "type": "human_task_done",
+                "payload": {
+                    "status": "success",
+                    "output": {
+                        "barcode": "690123456789"
+                    },
+                    "statePatch": {
+                        "plugin": {
+                            "status": "done",
+                            "barcode": "690123456789"
+                        }
+                    }
+                }
+            }),
+        )
+        .expect("plugin workflow should resume");
+
+    assert!(matches!(resumed.status, WorkflowRunStatus::Completed));
+    assert_eq!(resumed.state["plugin"]["status"], json!("done"));
+    assert_eq!(resumed.state["plugin"]["barcode"], json!("690123456789"));
+    assert_eq!(
+        resumed.timeline.last().expect("timeline should not be empty").output,
+        json!({
+            "barcode": "690123456789"
+        })
+    );
 }
 
 #[test]

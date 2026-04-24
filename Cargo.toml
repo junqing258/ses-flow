@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/backend", "apps/runner", "plugin-apps/hello-world"]
+members = ["apps/backend", "apps/runner", "plugin-apps/hello-world", "plugin-apps/wcs"]
 resolver = "3"
 
 [workspace.dependencies]

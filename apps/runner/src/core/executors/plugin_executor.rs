@@ -90,6 +90,17 @@ impl NodeExecutor for PluginExecutor {
             "success" => Ok(NodeExecutionResult::success(envelope.body.output)
                 .with_state_patch(envelope.body.state_patch)
                 .with_logs(logs)),
+            "waiting" => {
+                let signal = envelope.body.wait_signal.ok_or_else(|| {
+                    RunnerError::PluginExecution(format!(
+                        "plugin {} returned waiting without waitSignal payload",
+                        descriptor.id
+                    ))
+                })?;
+                Ok(NodeExecutionResult::waiting(signal, envelope.body.output)
+                    .with_state_patch(envelope.body.state_patch)
+                    .with_logs(logs))
+            }
             "failed" => {
                 let error = envelope.body.error.ok_or_else(|| {
                     RunnerError::PluginExecution(format!(

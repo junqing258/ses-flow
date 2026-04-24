@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::runtime::{Builder, Handle};
 
-use crate::core::runtime::{NodeExecutionError, NodeLogRecord, RunEnvironment};
+use crate::core::runtime::{NextSignal, NodeExecutionError, NodeLogRecord, RunEnvironment};
 use crate::error::RunnerError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,6 +210,8 @@ pub struct PluginResponseEnvelope {
     pub output: Value,
     #[serde(rename = "statePatch", default)]
     pub state_patch: Value,
+    #[serde(rename = "waitSignal", alias = "nextSignal", default)]
+    pub wait_signal: Option<NextSignal>,
     #[serde(default)]
     pub logs: Vec<PluginLogRecord>,
     #[serde(default)]
