@@ -3,7 +3,7 @@ use axum::http::Request;
 use serde_json::json;
 use tower::ServiceExt;
 
-use super::{AppConfig, TaskState, build_router, failure_resume_event, success_resume_event};
+use super::{AppConfig, DEFAULT_CONNECT_WORKER_ID, TaskState, build_router, failure_resume_event, success_resume_event};
 
 fn build_test_app(config: AppConfig) -> (axum::Router, super::AppState) {
     let state = super::AppState::new(config);
@@ -27,6 +27,90 @@ async fn descriptors_route_returns_manual_nodes() {
     assert_eq!(payload.as_array().expect("descriptors should be an array").len(), 2);
     assert_eq!(payload[0]["runnerType"], json!("plugin:manual_pick"));
     assert_eq!(payload[1]["runnerType"], json!("plugin:manual_weigh"));
+}
+
+#[tokio::test]
+async fn connect_succeeds_without_authorization_header() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "ClientId": "station-1",
+                        "PlatformId": "platform-1",
+                        "StationIds": ["station-1"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    assert!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.starts_with("text/event-stream")),
+        "connect should return an SSE response"
+    );
+}
+
+#[tokio::test]
+async fn connect_succeeds_with_empty_payload() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("connect body should be readable");
+    let body_text = String::from_utf8(body.to_vec()).expect("connect body should be utf-8");
+    assert!(
+        body_text.contains(DEFAULT_CONNECT_WORKER_ID),
+        "empty connect should fall back to the anonymous worker id"
+    );
+}
+
+#[tokio::test]
+async fn synchronize_returns_success_placeholder() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/synchronize")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .expect("synchronize request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("synchronize body should be readable");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("synchronize response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Message"], json!("Success"));
 }
 
 #[tokio::test]

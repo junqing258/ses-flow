@@ -2,10 +2,14 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use async_stream::stream;
+use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::extract::MatchedPath;
+use axum::http::{HeaderMap, Request, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive};
 use axum::response::{IntoResponse, Response, Sse};
 use axum::routing::{get, post};
@@ -15,11 +19,12 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::{RwLock, broadcast};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub const DEFAULT_RUNNER_RESUME_SIGNAL: &str = "human_task_done";
 pub const HEALTH_PLUGIN_ID: &str = "wcs_bridge";
+pub const DEFAULT_CONNECT_WORKER_ID: &str = "anonymous";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -579,6 +584,8 @@ struct ConnectRequest {
     #[serde(default)]
     client_id: Option<String>,
     #[serde(default)]
+    station_id: Option<String>,
+    #[serde(default)]
     platform_id: Option<String>,
     #[serde(default)]
     station_ids: Vec<String>,
@@ -793,6 +800,7 @@ fn build_router(state: AppState) -> Router {
         .route("/resume", post(resume))
         .route("/station/operation/login", post(login))
         .route("/station/operation/connect", post(connect))
+        .route("/station/operation/synchronize", post(synchronize))
         .route("/station/operation/verifyNotify", post(verify_notify))
         .route("/station/operation/scanBarcode", post(scan_barcode))
         .route("/station/operation/getTaskInfo", post(get_task_info))
@@ -803,8 +811,49 @@ fn build_router(state: AppState) -> Router {
             post(no_barcode_force_depart),
         )
         .route("/station/operation/tasks/{execution_id}/fail", post(fail_task))
+        .layer(middleware::from_fn(log_http_requests))
         .layer(DefaultBodyLimit::max(1024 * 1024))
         .with_state(state)
+}
+
+async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let request_id = request
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .or_else(|| {
+            request
+                .headers()
+                .get("requestId")
+                .and_then(|value| value.to_str().ok())
+        })
+        .unwrap_or("")
+        .to_string();
+    let matched_path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str)
+        .unwrap_or(uri.path())
+        .to_string();
+    let start = Instant::now();
+
+    debug!(method = %method, uri = %uri, "started request");
+
+    let response = next.run(request).await;
+
+    info!(
+        method = %method,
+        matched_path = %matched_path,
+        uri = %uri,
+        request_id = %request_id,
+        status = response.status().as_u16(),
+        latency_ms = start.elapsed().as_millis(),
+        "finished request",
+    );
+
+    response
 }
 
 async fn get_descriptors() -> Json<Vec<PluginDescriptor>> {
@@ -893,16 +942,16 @@ async fn login(State(state): State<AppState>, Json(request): Json<LoginRequest>)
     .into_response()
 }
 
+async fn synchronize() -> Response {
+    base_result_ok(Value::Null)
+}
+
 async fn connect(
     State(state): State<AppState>,
     Query(query): Query<ConnectQuery>,
-    headers: HeaderMap,
     Json(request): Json<ConnectRequest>,
 ) -> Response {
-    let worker_id = match worker_id_from_connect(&state, &headers, &request).await {
-        Ok(worker_id) => worker_id,
-        Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
-    };
+    let worker_id = worker_id_from_connect(&request);
 
     let heartbeat_interval_secs = state.config.heartbeat_interval_secs;
     let (mut receiver, backlog, snapshots) = state.connect_context(&worker_id, query.since).await;
@@ -1174,20 +1223,13 @@ async fn worker_id_from_auth(state: &AppState, headers: &HeaderMap) -> Result<St
         .ok_or_else(|| "invalid bearer token".to_string())
 }
 
-async fn worker_id_from_connect(
-    state: &AppState,
-    headers: &HeaderMap,
-    request: &ConnectRequest,
-) -> Result<String, String> {
-    if let Ok(worker_id) = worker_id_from_auth(state, headers).await {
-        return Ok(worker_id);
-    }
-
+fn worker_id_from_connect(request: &ConnectRequest) -> String {
     request
         .client_id
         .clone()
+        .or_else(|| request.station_id.clone())
         .or_else(|| request.station_ids.first().cloned())
-        .ok_or_else(|| "missing client identity for SSE connect".to_string())
+        .unwrap_or_else(|| DEFAULT_CONNECT_WORKER_ID.to_string())
 }
 
 fn sync_snapshot_event(worker_id: &str, tasks: Vec<TaskSnapshot>) -> Event {
