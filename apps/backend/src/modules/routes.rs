@@ -16,6 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{debug, info};
 
+use crate::modules::system::system_store::SystemSettingsStore;
 use crate::modules::{ai_gateway, edit_session, node_registry, run, system, workflow};
 
 pub const RUNNER_API_BASE_PATH: &str = "/runner-api";
@@ -26,6 +27,7 @@ pub struct ApiState {
     pub app: Arc<WorkflowApp>,
     pub ai_gateway_base_url: String,
     pub ai_gateway_client: reqwest::Client,
+    pub system_settings: Arc<dyn SystemSettingsStore>,
 }
 
 pub fn build_router(state: ApiState) -> Router {
@@ -39,6 +41,10 @@ pub fn build_router(state: ApiState) -> Router {
 fn build_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(system::health))
+        .route(
+            "/system/plugin-auto-registration",
+            get(system::get_plugin_auto_registration).put(system::update_plugin_auto_registration),
+        )
         .route("/node-descriptors", get(node_registry::list_node_descriptors))
         .route(
             "/node-descriptors/{descriptor_id}/versions",

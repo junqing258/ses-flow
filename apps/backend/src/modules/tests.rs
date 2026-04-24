@@ -16,6 +16,7 @@ use runner::app::WorkflowApp;
 use runner::store::{InMemoryRunStore, WorkflowRunStore};
 
 use crate::modules::node_registry::register_http_plugin_base_urls;
+use crate::modules::system::system_store::InMemorySystemSettingsStore;
 use crate::modules::{ApiState, RUNNER_API_BASE_PATH, build_router};
 
 fn build_app() -> axum::Router {
@@ -27,6 +28,7 @@ fn build_app_with_ai_gateway_target(target: &str) -> axum::Router {
         app: Arc::new(WorkflowApp::new()),
         ai_gateway_base_url: target.to_string(),
         ai_gateway_client: reqwest::Client::new(),
+        system_settings: Arc::new(InMemorySystemSettingsStore::new()),
     })
 }
 
@@ -35,6 +37,7 @@ fn build_app_with_server(app: Arc<WorkflowApp>) -> axum::Router {
         app,
         ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
         ai_gateway_client: reqwest::Client::new(),
+        system_settings: Arc::new(InMemorySystemSettingsStore::new()),
     })
 }
 
@@ -88,10 +91,47 @@ fn spawn_single_response_http_server(response: String) -> (String, mpsc::Receive
         let (mut stream, _) = listener.accept().expect("proxy test server should accept a request");
 
         let request = read_http_request(&mut stream);
-        sender.send(request).expect("captured proxy request should be sent");
+        let _ = sender.send(request);
         stream
             .write_all(response.as_bytes())
             .expect("proxy test server should write response");
+    });
+
+    (format!("http://{address}"), receiver)
+}
+
+fn spawn_path_response_http_server(
+    responses: Vec<(String, String)>,
+) -> (String, mpsc::Receiver<CapturedHttpRequest>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("path test server should bind to a random port");
+    let address = listener
+        .local_addr()
+        .expect("path test server should expose local address");
+    let (sender, receiver) = mpsc::channel();
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+
+            let request = read_http_request(&mut stream);
+            let path = request
+                .request_line
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("/")
+                .to_string();
+            let _ = sender.send(request);
+            let response = responses
+                .iter()
+                .find(|(candidate, _)| candidate == &path)
+                .map(|(_, response)| response.as_str())
+                .unwrap_or("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            stream
+                .write_all(response.as_bytes())
+                .expect("path test server should write response");
+        }
     });
 
     (format!("http://{address}"), receiver)
@@ -289,20 +329,36 @@ async fn handles_cors_preflight_requests() {
 
 #[tokio::test]
 async fn registers_http_plugin_and_lists_node_descriptors() {
-    let descriptor_body = json!({
-        "id": "barcode_scan",
-        "kind": "effect",
-        "runnerType": "plugin:barcode_scan",
-        "version": "1.0.0",
-        "category": "业务节点",
-        "displayName": "条码扫描",
-        "transport": "http",
-        "configSchema": {
-            "type": "object"
+    let descriptor_body = json!([
+        {
+            "id": "barcode_scan",
+            "kind": "effect",
+            "runnerType": "plugin:barcode_scan",
+            "version": "1.0.0",
+            "category": "业务节点",
+            "displayName": "条码扫描",
+            "transport": "http",
+            "configSchema": {
+                "type": "object"
+            },
+            "supportsCancel": true,
+            "supportsResume": true
         },
-        "supportsCancel": true,
-        "supportsResume": true
-    })
+        {
+            "id": "barcode_bind",
+            "kind": "effect",
+            "runnerType": "plugin:barcode_bind",
+            "version": "1.0.0",
+            "category": "业务节点",
+            "displayName": "条码绑定",
+            "transport": "http",
+            "configSchema": {
+                "type": "object"
+            },
+            "supportsCancel": false,
+            "supportsResume": false
+        }
+    ])
     .to_string();
     let upstream_response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -334,7 +390,9 @@ async fn registers_http_plugin_and_lists_node_descriptors() {
     let captured = captured_request_receiver
         .recv_timeout(Duration::from_secs(1))
         .expect("plugin descriptor request should be captured");
-    assert!(captured.request_line.starts_with("GET /descriptor "));
+    assert!(
+        captured.request_line.starts_with("GET /descriptors ") || captured.request_line.starts_with("GET /descriptor ")
+    );
 
     let list_response = app
         .oneshot(
@@ -358,27 +416,45 @@ async fn registers_http_plugin_and_lists_node_descriptors() {
     )
     .expect("descriptor list should be valid json");
     let items = payload.as_array().expect("descriptor list should be an array");
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["runnerType"], json!("plugin:barcode_scan"));
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["runnerType"], json!("plugin:barcode_bind"));
+    assert_eq!(items[1]["runnerType"], json!("plugin:barcode_scan"));
     assert_eq!(items[0]["endpoint"], json!(plugin_base_url));
+    assert_eq!(items[1]["endpoint"], json!(plugin_base_url));
 }
 
 #[tokio::test]
 async fn auto_registers_http_plugins_from_base_urls() {
-    let descriptor_body = json!({
-        "id": "hello_world",
-        "kind": "effect",
-        "runnerType": "plugin:hello_world",
-        "version": "1.0.0",
-        "category": "业务节点",
-        "displayName": "Hello World",
-        "transport": "http",
-        "configSchema": {
-            "type": "object"
+    let descriptor_body = json!([
+        {
+            "id": "hello_world",
+            "kind": "effect",
+            "runnerType": "plugin:hello_world",
+            "version": "1.0.0",
+            "category": "业务节点",
+            "displayName": "Hello World",
+            "transport": "http",
+            "configSchema": {
+                "type": "object"
+            },
+            "supportsCancel": false,
+            "supportsResume": false
         },
-        "supportsCancel": false,
-        "supportsResume": false
-    })
+        {
+            "id": "hello_world_formal",
+            "kind": "effect",
+            "runnerType": "plugin:hello_world_formal",
+            "version": "1.0.0",
+            "category": "业务节点",
+            "displayName": "Hello World Formal",
+            "transport": "http",
+            "configSchema": {
+                "type": "object"
+            },
+            "supportsCancel": false,
+            "supportsResume": false
+        }
+    ])
     .to_string();
     let upstream_response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -390,27 +466,289 @@ async fn auto_registers_http_plugins_from_base_urls() {
         app: Arc::new(WorkflowApp::new()),
         ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
         ai_gateway_client: reqwest::Client::new(),
+        system_settings: Arc::new(InMemorySystemSettingsStore::new()),
     };
 
     let descriptors = register_http_plugin_base_urls(&state, std::slice::from_ref(&plugin_base_url))
         .await
         .expect("auto registration should succeed");
 
-    assert_eq!(descriptors.len(), 1);
-    assert_eq!(descriptors[0].id, "hello_world");
+    assert_eq!(descriptors.len(), 2);
     assert_eq!(descriptors[0].endpoint.as_deref(), Some(plugin_base_url.as_str()));
+    assert_eq!(descriptors[1].endpoint.as_deref(), Some(plugin_base_url.as_str()));
 
     let captured = captured_request_receiver
         .recv_timeout(Duration::from_secs(1))
         .expect("plugin descriptor request should be captured");
-    assert!(captured.request_line.starts_with("GET /descriptor "));
+    assert!(
+        captured.request_line.starts_with("GET /descriptors ") || captured.request_line.starts_with("GET /descriptor ")
+    );
 
     let registered = state
         .app
         .list_node_descriptors()
         .expect("descriptor list should be available");
-    assert_eq!(registered.len(), 1);
+    assert_eq!(registered.len(), 2);
     assert_eq!(registered[0].runner_type, "plugin:hello_world");
+    assert_eq!(registered[1].runner_type, "plugin:hello_world_formal");
+}
+
+#[tokio::test]
+async fn falls_back_to_legacy_single_descriptor_endpoint() {
+    let descriptor_body = json!({
+        "id": "legacy_plugin",
+        "kind": "effect",
+        "runnerType": "plugin:legacy_plugin",
+        "version": "1.0.0",
+        "category": "业务节点",
+        "displayName": "Legacy Plugin",
+        "transport": "http",
+        "configSchema": {
+            "type": "object"
+        },
+        "supportsCancel": false,
+        "supportsResume": false
+    })
+    .to_string();
+    let descriptor_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        descriptor_body.len(),
+        descriptor_body
+    );
+    let (plugin_base_url, captured_request_receiver) = spawn_path_response_http_server(vec![
+        ("/descriptor".to_string(), descriptor_response),
+    ]);
+    let state = ApiState {
+        app: Arc::new(WorkflowApp::new()),
+        ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
+        ai_gateway_client: reqwest::Client::new(),
+        system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+    };
+
+    let descriptors = register_http_plugin_base_urls(&state, std::slice::from_ref(&plugin_base_url))
+        .await
+        .expect("legacy auto registration should succeed");
+
+    assert_eq!(descriptors.len(), 1);
+    assert_eq!(descriptors[0].runner_type, "plugin:legacy_plugin");
+
+    let first = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("descriptors request should be captured");
+    let second = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("descriptor fallback request should be captured");
+    assert!(first.request_line.starts_with("GET /descriptors "));
+    assert!(second.request_line.starts_with("GET /descriptor "));
+}
+
+#[tokio::test]
+async fn updates_plugin_auto_registration_config_and_registers_plugins() {
+    let descriptor_body = json!([
+        {
+            "id": "auto_plugin",
+            "kind": "effect",
+            "runnerType": "plugin:auto_plugin",
+            "version": "1.0.0",
+            "category": "业务节点",
+            "displayName": "Auto Plugin",
+            "transport": "http",
+            "configSchema": {
+                "type": "object"
+            },
+            "supportsCancel": false,
+            "supportsResume": false
+        }
+    ])
+    .to_string();
+    let upstream_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        descriptor_body.len(),
+        descriptor_body
+    );
+    let (plugin_base_url, captured_request_receiver) = spawn_single_response_http_server(upstream_response);
+    let app = build_app();
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(api_path("/system/plugin-auto-registration"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "baseUrls": [plugin_base_url]
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("system config update request should succeed");
+
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let update_payload: Value = serde_json::from_slice(
+        &update_response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes(),
+    )
+    .expect("system config update response should be valid json");
+    assert_eq!(update_payload["baseUrls"], json!([plugin_base_url]));
+    assert_eq!(
+        update_payload["descriptors"][0]["runnerType"],
+        json!("plugin:auto_plugin")
+    );
+
+    let captured = captured_request_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("plugin descriptor request should be captured");
+    assert!(
+        captured.request_line.starts_with("GET /descriptors ") || captured.request_line.starts_with("GET /descriptor ")
+    );
+
+    let get_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/system/plugin-auto-registration"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("system config get request should succeed");
+
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_payload: Value = serde_json::from_slice(
+        &get_response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes(),
+    )
+    .expect("system config get response should be valid json");
+    assert_eq!(get_payload["baseUrls"], update_payload["baseUrls"]);
+}
+
+#[tokio::test]
+async fn replacing_plugin_auto_registration_config_removes_stale_descriptors() {
+    let first_descriptor_body = json!([{
+        "id": "plugin_a",
+        "kind": "effect",
+        "runnerType": "plugin:plugin_a",
+        "version": "1.0.0",
+        "category": "业务节点",
+        "displayName": "Plugin A",
+        "transport": "http",
+        "configSchema": {
+            "type": "object"
+        },
+        "supportsCancel": false,
+        "supportsResume": false
+    }])
+    .to_string();
+    let second_descriptor_body = json!([{
+        "id": "plugin_b",
+        "kind": "effect",
+        "runnerType": "plugin:plugin_b",
+        "version": "1.0.0",
+        "category": "业务节点",
+        "displayName": "Plugin B",
+        "transport": "http",
+        "configSchema": {
+            "type": "object"
+        },
+        "supportsCancel": false,
+        "supportsResume": false
+    }])
+    .to_string();
+    let first_upstream_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        first_descriptor_body.len(),
+        first_descriptor_body
+    );
+    let second_upstream_response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        second_descriptor_body.len(),
+        second_descriptor_body
+    );
+    let (first_plugin_base_url, _) = spawn_single_response_http_server(first_upstream_response);
+    let (second_plugin_base_url, _) = spawn_single_response_http_server(second_upstream_response);
+    let app = build_app();
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(api_path("/system/plugin-auto-registration"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "baseUrls": [first_plugin_base_url]
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("first system config update should succeed");
+    assert_eq!(first_response.status(), StatusCode::OK);
+
+    let second_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(api_path("/system/plugin-auto-registration"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "baseUrls": [second_plugin_base_url]
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("second system config update should succeed");
+    assert_eq!(second_response.status(), StatusCode::OK);
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/node-descriptors"))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("descriptor list request should succeed");
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let payload: Value = serde_json::from_slice(
+        &list_response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes(),
+    )
+    .expect("descriptor list should be valid json");
+    let items = payload.as_array().expect("descriptor list should be an array");
+
+    assert!(
+        items.iter().any(|item| item["runnerType"] == json!("plugin:plugin_b")),
+        "newly configured plugin should remain registered"
+    );
+    assert!(
+        items.iter().all(|item| item["runnerType"] != json!("plugin:plugin_a")),
+        "stale plugin descriptor should be removed"
+    );
 }
 
 #[tokio::test]

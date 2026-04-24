@@ -140,6 +140,7 @@ name = "backend"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "async-trait",
  "axum",
  "dotenv",
  "futures-core",
@@ -149,6 +150,7 @@ dependencies = [
  "runner",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tower",
  "tower-http",

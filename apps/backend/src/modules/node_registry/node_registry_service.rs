@@ -67,10 +67,11 @@ async fn fetch_http_plugin_descriptors(state: &ApiState, base_url: &str) -> Resu
         .map_err(|error| ApiError::ServiceUnavailable(format!("failed to fetch plugin descriptors: {error}")))?;
 
     if descriptors_response.status().is_success() {
-        let descriptors = descriptors_response
-            .json::<Vec<NodeDescriptor>>()
+        let response_body = descriptors_response
+            .text()
             .await
-            .map_err(|error| ApiError::BadRequest(format!("failed to parse plugin descriptors: {error}")))?;
+            .map_err(|error| ApiError::BadRequest(format!("failed to read plugin descriptors response: {error}")))?;
+        let descriptors = parse_plugin_descriptors_response(&response_body)?;
 
         if descriptors.is_empty() {
             return Err(ApiError::BadRequest(
@@ -107,6 +108,20 @@ async fn fetch_http_plugin_descriptors(state: &ApiState, base_url: &str) -> Resu
         .await
         .map_err(|error| ApiError::BadRequest(format!("failed to parse plugin descriptor: {error}")))?;
     Ok(vec![descriptor])
+}
+
+fn parse_plugin_descriptors_response(response_body: &str) -> Result<Vec<NodeDescriptor>, ApiError> {
+    if let Ok(descriptors) = serde_json::from_str::<Vec<NodeDescriptor>>(response_body) {
+        return Ok(descriptors);
+    }
+
+    if let Ok(descriptor) = serde_json::from_str::<NodeDescriptor>(response_body) {
+        return Ok(vec![descriptor]);
+    }
+
+    Err(ApiError::BadRequest(
+        "failed to parse plugin descriptors: expected a descriptor object or array".to_string(),
+    ))
 }
 
 pub async fn register_http_plugin_base_urls(

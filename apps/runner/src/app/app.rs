@@ -208,6 +208,16 @@ impl WorkflowApp {
         Ok(descriptor)
     }
 
+    pub fn unregister_node_descriptors_by_endpoints(&self, endpoints: &[String]) -> Result<(), AppError> {
+        let mut registry = self.node_descriptors.lock().map_err(|_| {
+            AppError::Runner(RunnerError::Store(
+                "failed to lock node descriptor registry".to_string(),
+            ))
+        })?;
+        registry.unregister_by_endpoints(endpoints);
+        Ok(())
+    }
+
     pub fn list_node_descriptors(&self) -> Result<Vec<NodeDescriptor>, AppError> {
         let registry = self.node_descriptors.lock().map_err(|_| {
             AppError::Runner(RunnerError::Store(

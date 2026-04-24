@@ -34,7 +34,6 @@ export interface WorkflowRunListItem {
   workflowVersion: number;
 }
 
-
 export const getRunnerBaseUrl = () => {
   const baseUrl = import.meta.env.VITE_RUNNER_BASE_URL ?? "/runner-api";
   if (/^https?:\/\//.test(baseUrl)) {
@@ -46,12 +45,13 @@ export const getRunnerBaseUrl = () => {
         : "http://localhost:6302";
     return `${origin.replace(/\/$/, "")}/${baseUrl.replace(/^\//, "").replace(/\/$/, "")}`;
   }
-}
+};
 
 export const RUNNER_BASE_URL = getRunnerBaseUrl();
 
 const CATALOG_API_BASE_URL = RUNNER_BASE_URL + "/catalog";
 const NODE_DESCRIPTOR_API_BASE_URL = RUNNER_BASE_URL + "/node-descriptors";
+const SYSTEM_API_BASE_URL = RUNNER_BASE_URL + "/system";
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";
 
 const parseResponse = async <T>(
@@ -113,5 +113,43 @@ export const fetchNodeDescriptors = async (): Promise<
   return parseResponse<WorkflowNodeDescriptor[]>(
     response,
     "获取动态节点列表失败",
+  );
+};
+
+export interface PluginAutoRegistrationConfig {
+  baseUrls: string[];
+}
+
+export interface UpdatePluginAutoRegistrationResponse extends PluginAutoRegistrationConfig {
+  descriptors: WorkflowNodeDescriptor[];
+}
+
+export const fetchPluginAutoRegistrationConfig =
+  async (): Promise<PluginAutoRegistrationConfig> => {
+    const response = await sendRequest(
+      `${SYSTEM_API_BASE_URL}/plugin-auto-registration`,
+    );
+    return parseResponse<PluginAutoRegistrationConfig>(
+      response,
+      "获取插件自动注册配置失败",
+    );
+  };
+
+export const updatePluginAutoRegistrationConfig = async (
+  payload: PluginAutoRegistrationConfig,
+): Promise<UpdatePluginAutoRegistrationResponse> => {
+  const response = await sendRequest(
+    `${SYSTEM_API_BASE_URL}/plugin-auto-registration`,
+    {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseResponse<UpdatePluginAutoRegistrationResponse>(
+    response,
+    "保存插件自动注册配置失败",
   );
 };

@@ -112,6 +112,35 @@ impl NodeDescriptorRegistry {
         self.descriptors_by_id.insert(id, descriptor);
     }
 
+    pub fn unregister_by_endpoints(&mut self, endpoints: &[String]) {
+        if endpoints.is_empty() {
+            return;
+        }
+
+        let endpoint_set = endpoints.iter().collect::<std::collections::HashSet<_>>();
+        let removed_runner_types = self
+            .descriptors_by_id
+            .values()
+            .filter(|descriptor| {
+                descriptor
+                    .endpoint
+                    .as_ref()
+                    .is_some_and(|endpoint| endpoint_set.contains(endpoint))
+            })
+            .map(|descriptor| descriptor.runner_type.clone())
+            .collect::<Vec<_>>();
+
+        self.descriptors_by_id.retain(|_, descriptor| {
+            descriptor
+                .endpoint
+                .as_ref()
+                .is_none_or(|endpoint| !endpoint_set.contains(endpoint))
+        });
+
+        self.runner_type_index
+            .retain(|runner_type, _| !removed_runner_types.iter().any(|value| value == runner_type));
+    }
+
     pub fn resolve(&self, id: &str) -> Option<NodeDescriptor> {
         self.descriptors_by_id.get(id).cloned()
     }
@@ -137,6 +166,8 @@ impl NodeDescriptorRegistry {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpPluginExecutionRequest {
+    pub plugin_id: String,
+    pub runner_type: String,
     pub node_id: String,
     pub config: Value,
     pub context: HttpPluginExecutionContext,

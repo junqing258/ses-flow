@@ -7,10 +7,18 @@ import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
 } from "reka-ui";
-import { BookOpen, MoreHorizontal, Search, Settings } from "lucide-vue-next";
+import {
+  BookOpen,
+  Bot,
+  MoreHorizontal,
+  Plug,
+  Search,
+  Settings,
+} from "lucide-vue-next";
 import { type RouteLocationRaw, useRouter } from "vue-router";
 
 import { useAiProviderConfigDialog } from "@/composables/useAiProviderConfigDialog";
+import { usePluginAutoRegisterConfigDialog } from "@/composables/usePluginAutoRegisterConfigDialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +32,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const router = useRouter();
 const { openAiProviderConfigDialog } = useAiProviderConfigDialog();
+const { openPluginAutoRegisterConfigDialog } =
+  usePluginAutoRegisterConfigDialog();
 
 const isCompact = computed(() => props.appearance === "compact");
 const buttonVariant = computed(() => (isCompact.value ? "ghost" : "outline"));
@@ -97,10 +107,7 @@ const openHelp = () => {
             <Search class="h-4 w-4 text-cyan-600" />
             <span>排障工作台</span>
           </DropdownMenuItem>
-          <DropdownMenuItem
-            :class="menuItemClass"
-            @select="openHelp"
-          >
+          <DropdownMenuItem :class="menuItemClass" @select="openHelp">
             <BookOpen class="h-4 w-4 text-amber-600" />
             <span>帮助文档</span>
           </DropdownMenuItem>
@@ -108,15 +115,41 @@ const openHelp = () => {
       </DropdownMenuPortal>
     </DropdownMenuRoot>
 
-    <Button
-      :variant="buttonVariant"
-      :size="isCompact ? 'icon' : 'default'"
-      :class="settingsButtonClass"
-      :aria-label="isCompact ? '设置' : undefined"
-      @click="openAiProviderConfigDialog"
-    >
-      <Settings class="h-4 w-4" />
-      <span v-if="!isCompact">设置</span>
-    </Button>
+    <DropdownMenuRoot>
+      <DropdownMenuTrigger as-child>
+        <Button
+          :variant="buttonVariant"
+          :size="isCompact ? 'icon' : 'default'"
+          :class="settingsButtonClass"
+          :aria-label="isCompact ? '设置' : undefined"
+        >
+          <Settings class="h-4 w-4" />
+          <span v-if="!isCompact">设置</span>
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuPortal>
+        <DropdownMenuContent
+          align="end"
+          :side-offset="8"
+          :class="menuContentClass"
+        >
+          <DropdownMenuItem
+            :class="menuItemClass"
+            @select="openAiProviderConfigDialog"
+          >
+            <Bot class="h-4 w-4 text-slate-700" />
+            <span>AI 供应商配置</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            :class="menuItemClass"
+            @select="openPluginAutoRegisterConfigDialog"
+          >
+            <Plug class="h-4 w-4 text-cyan-700" />
+            <span>插件自动注册</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenuPortal>
+    </DropdownMenuRoot>
   </div>
 </template>

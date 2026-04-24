@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use backend::modules::node_registry::register_http_plugin_base_urls;
+use backend::modules::system::system_store::PostgresSystemSettingsStore;
 use backend::modules::{ApiState, ai_gateway, build_router};
 use runner::app::WorkflowApp;
 use runner::config::RunnerConfig;
@@ -37,8 +38,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     info!(database_url = %database_url, "initializing PostgreSQL stores");
     let run_store = Arc::new(PostgresRunStore::new(&database_url).await?);
-    let catalog_store = Arc::new(PostgresCatalogStore::new(run_store.get_pool()).await?);
-    let edit_session_store = Arc::new(PostgresEditSessionStore::new(run_store.get_pool()).await?);
+    let pool = run_store.get_pool();
+    let catalog_store = Arc::new(PostgresCatalogStore::new(pool.clone()).await?);
+    let edit_session_store = Arc::new(PostgresEditSessionStore::new(pool.clone()).await?);
+    let system_settings = Arc::new(
+        PostgresSystemSettingsStore::new(pool)
+            .await
+            .map_err(std::io::Error::other)?,
+    );
 
     let state = ApiState {
         app: Arc::new(WorkflowApp::with_store_catalog_sessions_and_concurrency(
@@ -49,8 +56,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         )),
         ai_gateway_base_url: ai_gateway::resolve_ai_gateway_base_url(),
         ai_gateway_client: reqwest::Client::new(),
+        system_settings,
     };
-    let auto_register_plugin_base_urls = resolve_auto_register_plugin_base_urls();
+    let auto_register_plugin_base_urls = state
+        .system_settings
+        .load_plugin_auto_register_base_urls()
+        .await
+        .map_err(std::io::Error::other)?;
     if !auto_register_plugin_base_urls.is_empty() {
         let descriptors = register_http_plugin_base_urls(&state, &auto_register_plugin_base_urls)
             .await
@@ -74,18 +86,4 @@ fn parse_arg(flag: &str) -> Option<String> {
     args.windows(2)
         .find(|window| window[0] == flag)
         .map(|window| window[1].clone())
-}
-
-fn resolve_auto_register_plugin_base_urls() -> Vec<String> {
-    env::var("BACKEND_AUTO_REGISTER_PLUGIN_URLS")
-        .ok()
-        .map(|value| {
-            value
-                .split(',')
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
 }

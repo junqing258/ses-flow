@@ -59,6 +59,8 @@ impl NodeExecutor for PluginExecutor {
         let timeout_ms = node.timeout_ms.or(descriptor.timeout_ms);
 
         let payload = HttpPluginExecutionRequest {
+            plugin_id: descriptor.id.clone(),
+            runner_type: node.node_type.as_str().to_string(),
             node_id: node.id.clone(),
             config: resolved_config,
             context: HttpPluginExecutionContext {
