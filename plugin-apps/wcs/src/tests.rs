@@ -26,12 +26,26 @@ async fn descriptors_route_returns_manual_nodes() {
         .expect("descriptors body should be readable");
     let payload: serde_json::Value = serde_json::from_slice(&body).expect("descriptors response should be valid json");
     assert_eq!(payload.as_array().expect("descriptors should be an array").len(), 2);
-    assert_eq!(payload[0]["runnerType"], json!("plugin:manual_pick"));
-    assert_eq!(payload[1]["runnerType"], json!("plugin:manual_weigh"));
+    assert_eq!(payload[0]["id"], json!("scan_task"));
+    assert_eq!(payload[0]["runnerType"], json!("plugin:scan_task"));
+    assert_eq!(payload[0]["supportsResume"], json!(true));
+    assert_eq!(payload[0]["configSchema"]["required"], json!(["stationId"]));
+    assert_eq!(
+        payload[0]["inputSchema"]["required"],
+        json!(["orderId", "waveId", "barcode", "chuteId", "count"])
+    );
+    assert_eq!(payload[1]["id"], json!("pack_task"));
+    assert_eq!(payload[1]["runnerType"], json!("plugin:pack_task"));
+    assert_eq!(payload[1]["supportsResume"], json!(false));
+    assert_eq!(payload[1]["configSchema"]["required"], json!(["stationId"]));
+    assert_eq!(
+        payload[1]["inputSchema"]["required"],
+        json!(["chuteId", "waveId", "itemCount"])
+    );
     assert_eq!(payload[0]["color"], json!("#F97316"));
     assert_eq!(payload[0]["icon"], json!("package-check"));
     assert_eq!(payload[1]["color"], json!("#14B8A6"));
-    assert_eq!(payload[1]["icon"], json!("scale"));
+    assert_eq!(payload[1]["icon"], json!("badge-check"));
 }
 
 #[tokio::test]
@@ -159,11 +173,11 @@ async fn robot_departure_completes_active_task() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "pluginId": "manual_pick",
-                        "runnerType": "plugin:manual_pick",
-                        "nodeId": "manual_pick_1",
+                        "pluginId": "scan_task",
+                        "runnerType": "plugin:scan_task",
+                        "nodeId": "scan_task_1",
                         "config": {
-                            "workerId": "station-1",
+                            "stationId": "station-1",
                             "taskId": "TASK-1"
                         },
                         "context": {
@@ -230,8 +244,8 @@ fn builds_runner_resume_events() {
         request_id: "req-1".to_string(),
         node_id: "node-1".to_string(),
         trace_id: None,
-        plugin_type: "plugin:manual_pick".to_string(),
-        plugin_id: "manual_pick".to_string(),
+        plugin_type: "plugin:scan_task".to_string(),
+        plugin_id: "scan_task".to_string(),
         target_worker_id: "station-1".to_string(),
         payload: json!({}),
         task_id: "TASK-1".to_string(),

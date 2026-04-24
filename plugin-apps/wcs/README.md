@@ -10,7 +10,7 @@
 当前实现是首版可跑骨架，特点：
 
 - 内存态任务与 pending event 管理
-- `manual_pick` / `manual_weigh` 两个 descriptor
+- `scan_task` / `pack_task` 两个 descriptor
 - `POST /execute` 立即返回 `waiting`
 - 工作站完成 `robotDeparture` / `noBarcodeForceDepart` 后，主动回调 runner `POST /runner-api/runs/{runId}/resume`
 - `fail` 路径会把失败结果回灌给 runner
@@ -31,7 +31,7 @@ cargo run -p wcs-plugin -- --host 127.0.0.1 --port 9102
 1. 启动 backend。
 2. 启动本插件。
 3. 在 backend 注册插件 baseUrl，例如 `http://127.0.0.1:9102`。
-4. workflow 使用 `plugin:manual_pick` 或 `plugin:manual_weigh`。
+4. workflow 使用 `plugin:scan_task` 或 `plugin:pack_task`。
 5. 工作站 App 调 `POST /station/operation/login` 获取 token，再通过 `POST /station/operation/connect` 建立 SSE。
 
 ## 当前边界
