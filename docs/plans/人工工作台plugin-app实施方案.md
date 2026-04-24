@@ -1,4 +1,4 @@
-# 人工工作台 Bridge 实施方案（SSE 版）
+# 人工工作台 plugin-app 实施方案（SSE 版）
 
 > 本文是 [动态业务节点注册机制实施方案.md](./动态业务节点注册机制实施方案.md) 路径 B 的子方案。
 > 面向场景：人工工作台（PDA、手机 App、Web 工作台）没有 HTTP Server，runner 无法直接调用；同时业务要求 runner 能把人工任务派给特定工人，工人完成/挂起/取消后回传结果。
@@ -507,7 +507,9 @@ requestId: <GUID>
 }
 ```
 
-Token 由 Bridge 签发，绑定 `workerId`，有效期 12h。
+Token 由 Bridge 签发，绑定 `workerId`（= `StationId`），有效期 12h。
+
+> **Mock 阶段**：暂不校验 `Username`/`Password`，任意凭据均返回 Code=0 和有效 Token；后续对接真实用户系统时再启用校验。
 
 ### 消息确认（VerifyNotify）
 
@@ -522,9 +524,11 @@ requestId: <GUID>
 ```jsonc
 {
   "RequestId": "evt-guid-or-agv-requestId",   // SSE 事件中的 RequestId / eventId
-  "ExecutionId": "exec-uuid"                  // SES 任务事件时必填，设备事件时可省略
+  "ExecutionId": "exec-uuid"                  // SES 任务事件时填写，纯设备事件（Agv_Arrived 等）可省略
 }
 ```
+
+> **兼容说明**：原 App 发送的 VerifyNotify 只含 `RequestId`，不含 `ExecutionId`；Bridge 必须接受无 `ExecutionId` 的请求（纯设备事件 ack 走 AGV 链路，SES 事件 ack 时才需要 `ExecutionId`）。
 
 Bridge 收到后将 PendingEvent 标记为已 ack，停止重推。
 
@@ -558,7 +562,7 @@ requestId: <GUID>
   "Sku": "SKU001",
   "Barcode": "690123456789",
   "Completed": 0,
-  "WaveType": 1,
+  "WaveType": "ORDER",   // 字符串枚举："ORDER" | "PICKING"
   "LockId": "lock-uuid"
 }
 ```

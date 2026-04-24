@@ -124,10 +124,6 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-async fn get_descriptor() -> Json<PluginDescriptor> {
-    Json(plugin_descriptor())
-}
-
 async fn get_descriptors() -> Json<Vec<PluginDescriptor>> {
     Json(plugin_descriptors())
 }
