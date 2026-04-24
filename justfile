@@ -21,10 +21,20 @@ dev-plugins:
   wait
 
 dev-plugin-hello-world:
-  cargo run -p hello-world-plugin -- --host 0.0.0.0 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
+  cargo watch \
+    -w Cargo.toml \
+    -w Cargo.lock \
+    -w .env \
+    -w plugin-apps/hello-world \
+    -x "run -p hello-world-plugin -- --host 0.0.0.0 --port ${HELLO_WORLD_PLUGIN_PORT:-9101}"
 
 dev-plugin-wcs:
-  cargo run -p wcs-plugin -- --host 0.0.0.0 --port "${WCS_PLUGIN_PORT:-9102}"
+  cargo watch \
+    -w Cargo.toml \
+    -w Cargo.lock \
+    -w .env \
+    -w plugin-apps/wcs \
+    -x "run -p wcs-plugin -- --host 0.0.0.0 --port ${WCS_PLUGIN_PORT:-9102}"
 
 dev-ai-gateway:
   pnpm --filter ai-gateway dev
