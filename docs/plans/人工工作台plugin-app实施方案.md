@@ -135,34 +135,113 @@
 | `POST /cancel` | 查 ExecutionTask → 入 Pending Queue `task.cancel` → 推 SSE → 返回 200 |
 | `POST /resume` | runner 不会直接调（见下）|
 
-`GET /descriptors` 返回示例（Bridge 注册了多个人工节点）：
+`GET /descriptors` 返回值（对应分拣场景 2.3 人工工作台两类插件节点）：
 
 ```json
 [
   {
-    "id": "manual_pick",
-    "runnerType": "plugin:manual_pick",
+    "id": "scan_task",
+    "runnerType": "plugin:scan_task",
     "version": "1.0.0",
-    "displayName": "人工拣货",
+    "displayName": "工作站扫码拣货",
     "transport": "http",
     "supportsCancel": true,
     "supportsResume": true,
     "timeoutMs": 0,
-    "configSchema": { "...": "..." }
+    "configSchema": {
+      "type": "object",
+      "required": ["stationId"],
+      "properties": {
+        "stationId": {
+          "type": "string",
+          "title": "工作站 ID（platformId）",
+          "description": "RCS 地图站点 ID；Bridge 以此作为 targetWorkerId 派发任务"
+        },
+        "waveType": {
+          "type": "string",
+          "title": "波次类型",
+          "enum": ["ORDER", "PICKING"],
+          "default": "ORDER",
+          "description": "透传给工作站 getTaskInfo 接口的 WaveType 字段"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "title": "任务超时（ms）",
+          "default": 0,
+          "description": "0 表示不超时"
+        }
+      }
+    },
+    "inputSchema": {
+      "type": "object",
+      "required": ["orderId", "waveId", "barcode", "chuteId", "count"],
+      "properties": {
+        "orderId":  { "type": "string",  "title": "订单 ID" },
+        "waveId":   { "type": "string",  "title": "波次 ID" },
+        "sku":      { "type": "string",  "title": "商品 SKU（可选）" },
+        "barcode":  { "type": "string",  "title": "期望扫描条码" },
+        "chuteId":  { "type": "string",  "title": "目标格口 ID" },
+        "count":    { "type": "integer", "title": "本次需拣数量" },
+        "lockId":   { "type": "string",  "title": "库存锁 ID（可选，透传给 getTaskInfo.LockId）" }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId":         { "type": "string",  "title": "WCS 内部任务 ID（来自 getTaskInfo 响应）" },
+        "scannedBarcode": { "type": "string",  "title": "操作员实际扫描到的条码" },
+        "agvId":          { "type": "string",  "title": "执行本次任务的 AGV 编号" },
+        "completed":      { "type": "integer", "title": "本次实际完成件数" },
+        "chuteId":        { "type": "string",  "title": "WCS 确认的实际投放格口" }
+      }
+    }
   },
   {
-    "id": "manual_weigh",
-    "runnerType": "plugin:manual_weigh",
+    "id": "pack_task",
+    "runnerType": "plugin:pack_task",
     "version": "1.0.0",
-    "displayName": "人工称重",
+    "displayName": "集包确认",
     "transport": "http",
     "supportsCancel": true,
-    "supportsResume": true,
+    "supportsResume": false,
     "timeoutMs": 0,
-    "configSchema": { "...": "..." }
+    "configSchema": {
+      "type": "object",
+      "required": ["stationId"],
+      "properties": {
+        "stationId": {
+          "type": "string",
+          "title": "工作站 ID",
+          "description": "执行集包操作的工作站；Bridge 以此作为 targetWorkerId 派发任务"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "title": "集包确认超时（ms）",
+          "default": 0
+        }
+      }
+    },
+    "inputSchema": {
+      "type": "object",
+      "required": ["chuteId", "waveId", "itemCount"],
+      "properties": {
+        "chuteId":   { "type": "string",  "title": "需集包的格口 ID" },
+        "waveId":    { "type": "string",  "title": "所属波次 ID" },
+        "itemCount": { "type": "integer", "title": "格口当前件数" }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "packId":         { "type": "string",  "title": "集包单号（操作员扫码或系统生成）" },
+        "confirmedCount": { "type": "integer", "title": "操作员确认的实际件数" }
+      }
+    }
   }
 ]
 ```
+
+> **`targetWorkerId` 派生规则**：Bridge 收到 `/execute` 后，从 `config.stationId` 取值作为 `targetWorkerId`，匹配已连接 App 的 `ClientId`（即 WCS 协议中的 `StationId`/`platformId`）。
 
 **关键点**：人工节点永远走 `waiting` 语义。Bridge 收到 `/execute` 后不等工人完成，立刻返回 `waiting`，runner 挂起 workflow；工人完成后 Bridge **主动调 runner 的 resume 入口**把工作流推进。
 
