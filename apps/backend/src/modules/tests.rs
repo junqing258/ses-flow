@@ -100,9 +100,7 @@ fn spawn_single_response_http_server(response: String) -> (String, mpsc::Receive
     (format!("http://{address}"), receiver)
 }
 
-fn spawn_path_response_http_server(
-    responses: Vec<(String, String)>,
-) -> (String, mpsc::Receiver<CapturedHttpRequest>) {
+fn spawn_path_response_http_server(responses: Vec<(String, String)>) -> (String, mpsc::Receiver<CapturedHttpRequest>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("path test server should bind to a random port");
     let address = listener
         .local_addr()
@@ -515,9 +513,8 @@ async fn falls_back_to_legacy_single_descriptor_endpoint() {
         descriptor_body.len(),
         descriptor_body
     );
-    let (plugin_base_url, captured_request_receiver) = spawn_path_response_http_server(vec![
-        ("/descriptor".to_string(), descriptor_response),
-    ]);
+    let (plugin_base_url, captured_request_receiver) =
+        spawn_path_response_http_server(vec![("/descriptor".to_string(), descriptor_response)]);
     let state = ApiState {
         app: Arc::new(WorkflowApp::new()),
         ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),

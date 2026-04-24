@@ -8,10 +8,13 @@ use serde_json::{Value, json};
 
 pub const PLUGIN_ID: &str = "hello_world";
 pub const PLUGIN_RUNNER_TYPE: &str = "plugin:hello_world";
+pub const FORMAL_PLUGIN_ID: &str = "hello_world_formal";
+pub const FORMAL_PLUGIN_RUNNER_TYPE: &str = "plugin:hello_world_formal";
 
 pub fn build_app() -> Router {
     Router::new()
-        .route("/descriptor", get(get_descriptor))
+        .route("/descriptors", get(get_descriptors))
+        // .route("/descriptor", get(get_descriptor))
         .route("/health", get(get_health))
         .route("/execute", post(execute))
         .route("/cancel", post(cancel))
@@ -51,6 +54,8 @@ pub struct HealthResponse {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteRequest {
+    pub plugin_id: String,
+    pub runner_type: String,
     pub node_id: String,
     #[serde(default)]
     pub config: Value,
@@ -123,6 +128,10 @@ async fn get_descriptor() -> Json<PluginDescriptor> {
     Json(plugin_descriptor())
 }
 
+async fn get_descriptors() -> Json<Vec<PluginDescriptor>> {
+    Json(plugin_descriptors())
+}
+
 async fn get_health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok".to_string(),
@@ -134,8 +143,10 @@ async fn get_health() -> Json<HealthResponse> {
 async fn execute(Json(request): Json<ExecuteRequest>) -> Response {
     let target = request_target(&request);
     let prefix = request_prefix(&request);
-    let message = format!("{prefix}, {target}!");
+    let message = format_message(&request, &prefix, &target);
     let ExecuteRequest {
+        plugin_id,
+        runner_type,
         node_id,
         config,
         context,
@@ -150,7 +161,14 @@ async fn execute(Json(request): Json<ExecuteRequest>) -> Response {
         ..
     } = context;
     let input_echo = input.clone();
+    let message_for_output = message.clone();
+    let message_for_state = message.clone();
     let trace_id_header = trace_id.clone();
+    let plugin_id_for_output = plugin_id.clone();
+    let plugin_id_for_state = plugin_id.clone();
+    let plugin_id_for_log = plugin_id.clone();
+    let runner_type_for_output = runner_type.clone();
+    let runner_type_for_log = runner_type.clone();
     let node_id_for_output = node_id.clone();
     let node_id_for_state = node_id.clone();
     let node_id_for_log = node_id.clone();
@@ -166,8 +184,9 @@ async fn execute(Json(request): Json<ExecuteRequest>) -> Response {
     let response = ExecuteResponse {
         status: "success".to_string(),
         output: json!({
-            "message": message,
-            "pluginId": PLUGIN_ID,
+            "message": message_for_output,
+            "pluginId": plugin_id_for_output,
+            "runnerType": runner_type_for_output,
             "nodeId": node_id_for_output,
             "runId": run_id_for_output,
             "requestId": request_id_for_output,
@@ -179,8 +198,8 @@ async fn execute(Json(request): Json<ExecuteRequest>) -> Response {
         }),
         state_patch: json!({
             "plugins": {
-                PLUGIN_ID: {
-                    "lastGreeting": message,
+                plugin_id_for_state: {
+                    "lastGreeting": message_for_state,
                     "lastRunId": run_id_for_state,
                     "lastRequestId": request_id_for_state,
                     "lastNodeId": node_id_for_state,
@@ -193,7 +212,8 @@ async fn execute(Json(request): Json<ExecuteRequest>) -> Response {
             level: "info".to_string(),
             message: format!("hello-world executed for {target}"),
             fields: json!({
-                "pluginId": PLUGIN_ID,
+                "pluginId": plugin_id_for_log,
+                "runnerType": runner_type_for_log,
                 "nodeId": node_id_for_log,
                 "workflowKey": workflow_key_for_log
             }),
@@ -222,6 +242,17 @@ async fn resume(Json(request): Json<ResumeRequest>) -> Response {
 }
 
 pub fn plugin_descriptor() -> PluginDescriptor {
+    plugin_descriptors()
+        .into_iter()
+        .next()
+        .expect("hello-world plugin should expose at least one descriptor")
+}
+
+pub fn plugin_descriptors() -> Vec<PluginDescriptor> {
+    vec![create_hello_world_descriptor(), create_formal_hello_world_descriptor()]
+}
+
+fn create_hello_world_descriptor() -> PluginDescriptor {
     PluginDescriptor {
         id: PLUGIN_ID.to_string(),
         kind: "effect".to_string(),
@@ -285,6 +316,66 @@ pub fn plugin_descriptor() -> PluginDescriptor {
     }
 }
 
+fn create_formal_hello_world_descriptor() -> PluginDescriptor {
+    PluginDescriptor {
+        id: FORMAL_PLUGIN_ID.to_string(),
+        kind: "effect".to_string(),
+        runner_type: FORMAL_PLUGIN_RUNNER_TYPE.to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        category: "业务节点".to_string(),
+        display_name: "Hello World Formal".to_string(),
+        description: "示例 HTTP 插件节点，返回更正式的问候消息。".to_string(),
+        status: "stable".to_string(),
+        transport: "http".to_string(),
+        timeout_ms: 5_000,
+        supports_cancel: false,
+        supports_resume: false,
+        config_schema: json!({
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "title": "默认问候对象",
+                    "x-tab": "base",
+                    "x-component": "input"
+                },
+                "prefix": {
+                    "type": "string",
+                    "title": "正式问候前缀",
+                    "x-tab": "base",
+                    "x-component": "input"
+                }
+            }
+        }),
+        defaults: json!({
+            "target": "World",
+            "prefix": "Greetings"
+        }),
+        input_mapping_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "title": "运行时问候对象"
+                }
+            }
+        }),
+        output_mapping_schema: json!({
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "title": "正式问候消息"
+                },
+                "runnerType": {
+                    "type": "string",
+                    "title": "节点类型"
+                }
+            }
+        }),
+    }
+}
+
 fn request_target(request: &ExecuteRequest) -> String {
     extract_string(&request.context.input, &["name", "target"])
         .or_else(|| extract_string(&request.config, &["target", "name"]))
@@ -292,7 +383,23 @@ fn request_target(request: &ExecuteRequest) -> String {
 }
 
 fn request_prefix(request: &ExecuteRequest) -> String {
-    extract_string(&request.config, &["prefix"]).unwrap_or_else(|| "Hello".to_string())
+    extract_string(&request.config, &["prefix"])
+        .unwrap_or_else(|| default_prefix_for_runner_type(&request.runner_type).to_string())
+}
+
+fn default_prefix_for_runner_type(runner_type: &str) -> &'static str {
+    match runner_type {
+        FORMAL_PLUGIN_RUNNER_TYPE => "Greetings",
+        _ => "Hello",
+    }
+}
+
+fn format_message(request: &ExecuteRequest, prefix: &str, target: &str) -> String {
+    if request.runner_type == FORMAL_PLUGIN_RUNNER_TYPE {
+        format!("{prefix}, {target}.")
+    } else {
+        format!("{prefix}, {target}!")
+    }
 }
 
 fn extract_string(value: &Value, keys: &[&str]) -> Option<String> {
@@ -339,8 +446,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn descriptors_route_returns_multiple_plugin_descriptors() {
+        let response = build_app()
+            .oneshot(Request::builder().uri("/descriptors").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let descriptors: Vec<PluginDescriptor> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(descriptors.len(), 2);
+        assert_eq!(descriptors[0].runner_type, PLUGIN_RUNNER_TYPE);
+        assert_eq!(descriptors[1].runner_type, FORMAL_PLUGIN_RUNNER_TYPE);
+    }
+
+    #[tokio::test]
     async fn execute_route_returns_success_payload_and_trace_header() {
         let payload = json!({
+            "pluginId": PLUGIN_ID,
+            "runnerType": PLUGIN_RUNNER_TYPE,
             "nodeId": "node-hello-1",
             "config": {
                 "prefix": "Hi"
@@ -387,6 +511,50 @@ mod tests {
         assert_eq!(
             execute_response.state_patch["plugins"][PLUGIN_ID]["lastGreeting"],
             json!("Hi, SES!")
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_route_dispatches_formal_descriptor_variants() {
+        let payload = json!({
+            "pluginId": FORMAL_PLUGIN_ID,
+            "runnerType": FORMAL_PLUGIN_RUNNER_TYPE,
+            "nodeId": "node-hello-formal-1",
+            "config": {},
+            "context": {
+                "runId": "run-2",
+                "requestId": "req-2",
+                "traceId": "trace-2",
+                "workflowKey": "wf-hello-formal",
+                "workflowVersion": 1,
+                "input": {
+                    "name": "SES"
+                },
+                "state": {},
+                "env": {}
+            }
+        });
+
+        let response = build_app()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/execute")
+                    .header("content-type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let execute_response: ExecuteResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(execute_response.output["message"], json!("Greetings, SES."));
+        assert_eq!(execute_response.output["pluginId"], json!(FORMAL_PLUGIN_ID));
+        assert_eq!(
+            execute_response.state_patch["plugins"][FORMAL_PLUGIN_ID]["lastGreeting"],
+            json!("Greetings, SES.")
         );
     }
 }

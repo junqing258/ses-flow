@@ -86,11 +86,12 @@
 新增一个"条码扫描"节点：
   ↓
 ① 先有软件团队提供一个 HTTP 插件服务
-   GET /descriptor
+   GET /descriptors
+   GET /descriptor   // 兼容旧协议
    GET /health
    POST /execute
   ↓
-② 平台注册 NodeDescriptor（runnerType: "plugin:barcode_scan"，transport: "http"，endpoint: "http://..."）
+② 平台注册 NodeDescriptor（同一个 plugin-app 可一次返回多个 descriptor）
   ↓
 ③ runner 内置 PluginExecutor
    匹配 runnerType 前缀 "plugin:" → 按 transport 调 HTTP 或本地进程
@@ -123,6 +124,8 @@
 ```jsonc
 // runner → plugin（HTTP body 或 stdin）
 {
+  "pluginId": "barcode_scan",
+  "runnerType": "plugin:barcode_scan",
   "nodeId": "node-123",
   "config": { ... },
   "context": {
@@ -470,7 +473,8 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 
 | 接口 | 调用方 | 说明 |
 |---|---|---|
-| `GET /descriptor` | 平台注册时 | 返回插件自描述，用于协议校验和管理台展示 |
+| `GET /descriptors` | 平台注册时 | 返回插件自描述数组；一个 plugin-app 可注册多个节点 |
+| `GET /descriptor` | 平台注册时 | 兼容旧协议，返回第一个 descriptor |
 | `GET /health` | 平台 / runner | 健康检查 |
 | `POST /execute` | runner | 主执行入口，首次执行和恢复执行复用此接口 |
 | `POST /cancel` | runner | 工作流被终止时调用，插件清理资源 |
@@ -478,28 +482,40 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 
 其中 `POST /resume` 是**插件自己的对外入口**；插件把外部回调转交给宿主时，走上文定义的 `POST /plugin-host/executions/:executionId/resume`，两者职责不要混淆。
 
-`GET /descriptor` 返回示例：
+`GET /descriptors` 返回示例：
 
 ```json
-{
-  "id": "barcode_scan",
-  "runnerType": "plugin:barcode_scan",
-  "version": "1.0.0",
-  "displayName": "条码扫描",
-  "transport": "http",
-  "configSchema": { ... },
-  "timeoutMs": 5000,
-  "supportsCancel": true,
-  "supportsResume": true,
-  "hostCapabilities": {
-    "state": {
-      "read": ["plugins.barcode_scan"],
-      "write": ["plugins.barcode_scan"]
-    },
-    "run": ["resume", "emit_event"]
+[
+  {
+    "id": "barcode_scan",
+    "runnerType": "plugin:barcode_scan",
+    "version": "1.0.0",
+    "displayName": "条码扫描",
+    "transport": "http",
+    "configSchema": { ... },
+    "timeoutMs": 5000,
+    "supportsCancel": true,
+    "supportsResume": true,
+    "hostCapabilities": {
+      "state": {
+        "read": ["plugins.barcode_scan"],
+        "write": ["plugins.barcode_scan"]
+      },
+      "run": ["resume", "emit_event"]
+    }
+  },
+  {
+    "id": "barcode_bind",
+    "runnerType": "plugin:barcode_bind",
+    "version": "1.0.0",
+    "displayName": "条码绑定",
+    "transport": "http",
+    "configSchema": { ... }
   }
-}
+]
 ```
+
+平台注册时优先调用 `GET /descriptors`；若返回 `404 Not Found`，则自动回退到 `GET /descriptor`，以兼容旧插件。
 
 `POST /execute` 响应示例（挂起等待外部回调）：
 
@@ -547,7 +563,7 @@ fn execute(&self, req: PluginRequest) -> PluginResponse {
 
 1. 插件服务实现标准接口：`/descriptor`、`/health`、`/execute`
 2. 运维/实施在平台注册插件 `baseUrl`
-3. 平台调用 `GET /descriptor` 完成协议校验并写入 registry
+3. 平台优先调用 `GET /descriptors` 完成协议校验并写入 registry；若插件尚未升级，则回退到 `GET /descriptor`
 4. runner 执行时只按 `runnerType` 查 registry，再调用对应插件
 
 这样可以避免把服务发现、网络治理、执行逻辑耦合到 runner 内部。
@@ -729,7 +745,7 @@ executor/
   api/
     GET /api/node-descriptors              // 按 token 权限过滤返回
     GET /api/node-descriptors/:id/versions
-    POST /api/plugin-registrations         // 注册 HTTP 插件 baseUrl，回拉 /descriptor 校验
+    POST /api/plugin-registrations         // 注册 HTTP 插件 baseUrl，优先回拉 /descriptors，404 时回退 /descriptor
 ```
 
 ---

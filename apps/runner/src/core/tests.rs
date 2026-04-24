@@ -634,6 +634,8 @@ fn executes_registered_http_plugin_node() {
         .execute_requests
         .clone();
     assert_eq!(execute_requests.len(), 1);
+    assert_eq!(execute_requests[0]["pluginId"], json!("barcode_scan"));
+    assert_eq!(execute_requests[0]["runnerType"], json!("plugin:barcode_scan"));
     assert_eq!(execute_requests[0]["context"]["input"]["orderNo"], json!("SO-PLUGIN-1"));
     assert_eq!(execute_requests[0]["context"]["requestId"], json!("req-plugin-1"));
 }

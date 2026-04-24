@@ -5,8 +5,9 @@
 当前实现聚焦首期能力：
 
 - `transport = "http"`
+- 一个 plugin-app 暴露多个节点定义
 - 同步 `POST /execute`
-- `GET /descriptor` / `GET /health`
+- `GET /descriptors` / `GET /descriptor` / `GET /health`
 - `POST /cancel` / `POST /resume` 预留为占位接口，默认返回 `501 Not Implemented`
 
 ## 目录
@@ -36,9 +37,18 @@ just dev-plugin-hello-world
 
 ## 接口
 
+### `GET /descriptors`
+
+返回插件描述符数组。当前 `hello-world` 一次暴露两个节点定义：
+
+- `id = "hello_world"`，`runnerType = "plugin:hello_world"`
+- `id = "hello_world_formal"`，`runnerType = "plugin:hello_world_formal"`
+
+这也是 backend 新协议优先回拉的接口。
+
 ### `GET /descriptor`
 
-返回插件描述符，关键字段：
+兼容旧协议，返回第一个插件描述符，也就是 `hello_world`：
 
 - `id = "hello_world"`
 - `runnerType = "plugin:hello_world"`
@@ -63,6 +73,8 @@ just dev-plugin-hello-world
 
 ```json
 {
+  "pluginId": "hello_world",
+  "runnerType": "plugin:hello_world",
   "nodeId": "node-hello-1",
   "config": {
     "target": "World",
@@ -82,6 +94,11 @@ just dev-plugin-hello-world
   }
 }
 ```
+
+当一个 plugin-app 返回多个 descriptor 时，runner 会在执行请求里带上：
+
+- `pluginId`：当前命中的 descriptor id
+- `runnerType`：当前节点类型，用于插件内部路由到具体实现
 
 示例响应：
 
@@ -129,6 +146,12 @@ just dev-plugin-hello-world
 获取 descriptor：
 
 ```bash
+curl http://127.0.0.1:9101/descriptors
+```
+
+兼容旧协议：
+
+```bash
 curl http://127.0.0.1:9101/descriptor
 ```
 
@@ -138,6 +161,8 @@ curl http://127.0.0.1:9101/descriptor
 curl -X POST http://127.0.0.1:9101/execute \
   -H 'Content-Type: application/json' \
   -d '{
+    "pluginId":"hello_world",
+    "runnerType":"plugin:hello_world",
     "nodeId":"node-hello-1",
     "config":{"prefix":"Hi"},
     "context":{
@@ -163,7 +188,7 @@ curl -X POST http://127.0.0.1:6302/runner-api/plugin-registrations \
   -d '{"baseUrl":"http://127.0.0.1:9101"}'
 ```
 
-注册成功后，backend 会回拉 `GET /descriptor` 并把该插件节点注册到 node registry。
+注册成功后，backend 会优先回拉 `GET /descriptors`，把返回的多个节点都注册到 node registry；如果插件还只有旧协议，backend 会自动回退到 `GET /descriptor`。
 
 如果希望 backend 启动时自动注册该插件，也可以直接设置：
 
