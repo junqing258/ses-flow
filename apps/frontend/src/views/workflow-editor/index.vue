@@ -39,7 +39,7 @@
       <div class="pointer-events-none absolute inset-0 z-10">
         <div
           v-if="isCanvasDropTarget"
-          class="absolute inset-4 rounded-[28px] border-2 border-dashed border-[var(--app-accent)]/45 bg-[var(--app-accent)]/6 shadow-[inset_0_0_0_1px_rgba(46,197,213,0.12)]"
+          class="absolute inset-4 rounded-[28px] border-2 border-dashed border-[var(--app-accent)]/45 bg-[var(--app-accent)]/6 shadow-[inset_0_0_0_1px_rgba(46,198,214,0.12)]"
         >
           <div class="absolute inset-x-0 top-6 flex justify-center">
             <div
@@ -963,7 +963,7 @@ const canvasTools = [
   { id: "lock", icon: "lock" as WorkflowIconKey },
 ];
 const EMPTY_NODE_DATA: WorkflowNodeData = {
-  accent: "#2ec5d5",
+  accent: "#2ec6d6",
   executionStatus: undefined,
   icon: "database",
   kind: "fetch",

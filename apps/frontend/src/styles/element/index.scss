@@ -1,6 +1,6 @@
 $--colors: (
   "primary": (
-    "base": #2f80ed,
+    "base": #2ec6d6,
   ),
   "success": (
     "base": #27ae60,
@@ -15,7 +15,7 @@ $--colors: (
     "base": #eb5757,
   ),
   "info": (
-    "base": #2ec5d5,
+    "base": #2ec6d6,
   ),
 );
 
@@ -121,7 +121,7 @@ $--colors: (
   --app-shell-soft: #303030;
   --app-shell-foreground: #f7f8fa;
   --app-shell-muted: #a4a9b0;
-  --app-shell-active: #2ec5d5;
+  --app-shell-active: #2ec6d6;
   --app-shell-active-deep: #1d8c98;
   --app-page: #f3f5f8;
   --app-page-top: #ffffff;
@@ -132,9 +132,9 @@ $--colors: (
   --app-heading: #2f3a4a;
   --app-body: #5f6b7a;
   --app-subtle: #8a95a3;
-  --app-blue: #2f80ed;
-  --app-blue-hover: #1f6fd7;
-  --app-cyan: #2ec5d5;
+  --app-blue: #2ec6d6;
+  --app-blue-hover: #24aebe;
+  --app-cyan: #2ec6d6;
   --app-cyan-soft: #d9f4f7;
   --app-red: #eb5757;
   --el-color-info: var(--app-cyan);
@@ -155,9 +155,9 @@ $--colors: (
   --el-button-border-color: var(--app-blue);
   --el-button-hover-bg-color: var(--app-blue-hover);
   --el-button-hover-border-color: var(--app-blue-hover);
-  --el-button-active-bg-color: #175fc0;
-  --el-button-active-border-color: #175fc0;
-  box-shadow: 0 6px 14px rgb(47 128 237 / 18%);
+  --el-button-active-bg-color: #1b97a5;
+  --el-button-active-border-color: #1b97a5;
+  box-shadow: 0 6px 14px rgb(46 198 214 / 18%);
 }
 
 .el-button--danger {
@@ -210,7 +210,7 @@ $--colors: (
   border-radius: 6px;
   background: var(--app-blue);
   color: #ffffff;
-  box-shadow: 0 6px 14px rgb(47 128 237 / 22%);
+  box-shadow: 0 6px 14px rgb(46 198 214 / 22%);
 }
 
 .el-table {
