@@ -1,36 +1,252 @@
 $--colors: (
   "primary": (
-    "base": #2ec5d5,
+    "base": #2f80ed,
   ),
   "success": (
-    "base": #2f9d7e,
+    "base": #27ae60,
   ),
   "warning": (
-    "base": #c67f43,
+    "base": #f2994a,
   ),
   "danger": (
-    "base": #e67d84,
+    "base": #eb5757,
   ),
   "error": (
-    "base": #e67d84,
+    "base": #eb5757,
   ),
   "info": (
-    "base": #3398a3,
+    "base": #2ec5d5,
   ),
 );
 
 @forward "element-plus/theme-chalk/src/common/var.scss" with (
   $colors: $--colors,
+  $text-color: (
+    "primary": #2f3a4a,
+    "regular": #5f6b7a,
+    "secondary": #8a95a3,
+    "placeholder": #aeb6c2,
+    "disabled": #c4cad3,
+  ),
+  $border-color: (
+    "": #dfe5ec,
+    "light": #e7ebf0,
+    "lighter": #edf1f5,
+    "extra-light": #f3f6f9,
+    "dark": #cfd7e2,
+    "darker": #b8c2ce,
+  ),
+  $fill-color: (
+    "": #eef2f6,
+    "light": #f5f7fa,
+    "lighter": #f8fafc,
+    "extra-light": #fbfcfd,
+    "dark": #e5eaf0,
+    "darker": #d9e0e8,
+    "blank": #ffffff,
+  ),
+  $bg-color: (
+    "": #ffffff,
+    "page": #f3f5f8,
+    "overlay": #ffffff,
+  ),
   $border-radius: (
     "base": 8px,
-    "small": 6px,
+    "small": 4px,
     "round": 999px,
     "circle": 100%,
   ),
+  $box-shadow: (
+    "": (
+      0 14px 36px rgb(31 47 70 / 10%),
+      0 4px 12px rgb(31 47 70 / 8%),
+    ),
+    "light": 0 8px 24px rgb(31 47 70 / 10%),
+    "lighter": 0 4px 14px rgb(31 47 70 / 8%),
+    "dark": (
+      0 24px 54px rgb(31 47 70 / 16%),
+      0 10px 24px rgb(31 47 70 / 12%),
+    ),
+  ),
+  $font-family: (
+    "": "'IBM Plex Sans', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', Arial, sans-serif",
+  ),
+  $font-size: (
+    "extra-large": 18px,
+    "large": 16px,
+    "medium": 15px,
+    "base": 14px,
+    "small": 13px,
+    "extra-small": 12px,
+  ),
+  $common-component-size: (
+    "large": 38px,
+    "default": 32px,
+    "small": 24px,
+  ),
+  $button: (
+    "font-weight": 500,
+    "hover-bg-color": #eaf3ff,
+    "hover-border-color": #9fc8fb,
+    "hover-text-color": #2f80ed,
+    "active-bg-color": #dcecff,
+    "active-border-color": #2f80ed,
+  ),
+  $button-border-radius: (
+    "large": 6px,
+    "default": 5px,
+    "small": 4px,
+  ),
+  $button-padding-horizontal: (
+    "large": 18px,
+    "default": 14px,
+    "small": 12px,
+  ),
   $dialog: (
     "width": fit-content,
+    "margin-top": 10vh,
+    "bg-color": #ffffff,
+    "border-radius": 8px,
+    "padding-primary": 20px,
+    "box-shadow": 0 24px 64px rgb(31 47 70 / 18%),
+    "title-font-size": 16px,
   )
 );
 
 @use "element-plus/theme-chalk/src/index.scss" as *;
 @use "./dark.scss";
+
+:root {
+  --app-shell: #292929;
+  --app-shell-soft: #303030;
+  --app-shell-foreground: #f7f8fa;
+  --app-shell-muted: #a4a9b0;
+  --app-shell-active: #2ec5d5;
+  --app-shell-active-deep: #1d8c98;
+  --app-page: #f3f5f8;
+  --app-page-top: #ffffff;
+  --app-panel: #ffffff;
+  --app-panel-soft: #f7f9fb;
+  --app-stroke: #dfe5ec;
+  --app-stroke-soft: #edf1f5;
+  --app-heading: #2f3a4a;
+  --app-body: #5f6b7a;
+  --app-subtle: #8a95a3;
+  --app-blue: #2f80ed;
+  --app-blue-hover: #1f6fd7;
+  --app-cyan: #2ec5d5;
+  --app-cyan-soft: #d9f4f7;
+  --app-red: #eb5757;
+  --el-color-info: var(--app-cyan);
+  --el-color-primary: var(--app-blue);
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 4px;
+  --el-component-size: 32px;
+  --el-component-size-small: 24px;
+  --el-font-weight-primary: 500;
+}
+
+.el-button {
+  letter-spacing: 0;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--app-blue);
+  --el-button-border-color: var(--app-blue);
+  --el-button-hover-bg-color: var(--app-blue-hover);
+  --el-button-hover-border-color: var(--app-blue-hover);
+  --el-button-active-bg-color: #175fc0;
+  --el-button-active-border-color: #175fc0;
+  box-shadow: 0 6px 14px rgb(47 128 237 / 18%);
+}
+
+.el-button--danger {
+  --el-button-bg-color: var(--app-red);
+  --el-button-border-color: var(--app-red);
+  --el-button-hover-bg-color: #dc4343;
+  --el-button-hover-border-color: #dc4343;
+  box-shadow: 0 6px 14px rgb(235 87 87 / 16%);
+}
+
+.el-tabs__header {
+  margin-bottom: 0;
+}
+
+.el-tabs__nav-wrap::after {
+  height: 0;
+}
+
+.el-tabs__item {
+  height: 40px;
+  padding: 0 18px;
+  color: var(--app-body);
+  font-weight: 600;
+}
+
+.el-tabs__item.is-active {
+  color: var(--app-blue);
+}
+
+.el-tabs__active-bar {
+  height: 3px;
+  border-radius: 999px;
+  background-color: var(--app-blue);
+}
+
+.el-tabs--card > .el-tabs__header .el-tabs__nav {
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: #eef0f4;
+}
+
+.el-tabs--card > .el-tabs__header .el-tabs__item {
+  border: 0;
+}
+
+.el-tabs--card > .el-tabs__header .el-tabs__item.is-active {
+  margin: 4px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--app-blue);
+  color: #ffffff;
+  box-shadow: 0 6px 14px rgb(47 128 237 / 22%);
+}
+
+.el-table {
+  --el-table-header-bg-color: #ffffff;
+  --el-table-header-text-color: var(--app-subtle);
+  --el-table-text-color: var(--app-body);
+  --el-table-border-color: var(--app-stroke-soft);
+  --el-table-row-hover-bg-color: #f7fafc;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+}
+
+.el-dialog {
+  overflow: hidden;
+  border: 1px solid var(--app-stroke-soft);
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid var(--app-stroke-soft);
+  padding-bottom: 16px;
+}
+
+.el-dialog__title {
+  color: var(--app-heading);
+  font-weight: 600;
+}
+
+.el-dialog__body {
+  color: var(--app-body);
+}
+
+.el-message {
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(31 47 70 / 14%);
+}

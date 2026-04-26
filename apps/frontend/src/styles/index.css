@@ -12,76 +12,76 @@
 
 :root {
   color-scheme: light;
-  --bg: #f5f7f7;
+  --bg: #f3f5f8;
   --bg-top: #ffffff;
-  --bg-bottom: #dce9eb;
+  --bg-bottom: #eef2f6;
   --panel: #ffffff;
-  --panel-soft: #f8fbfb;
-  --panel-border: #d7e2e6;
-  --panel-border-strong: #a0a4a9;
-  --text: #2a2a2a;
-  --app-muted: #60646a;
-  --app-primary: #2a2a2a;
-  --app-primary-soft: #eef2f3;
+  --panel-soft: #f7f9fb;
+  --panel-border: #dfe5ec;
+  --panel-border-strong: #b8c2ce;
+  --text: #2f3a4a;
+  --app-muted: #5f6b7a;
+  --app-primary: #292929;
+  --app-primary-soft: #eef2f6;
   --app-accent: #2ec5d5;
-  --app-accent-soft: #d6f0f4;
-  --app-accent-border: #89dde7;
-  --app-accent-text: #2c6f77;
-  --muted: #f5f7f7;
-  --primary: #2a2a2a;
-  --primary-soft: #eef2f3;
+  --app-accent-soft: #d9f4f7;
+  --app-accent-border: #8ce0e8;
+  --app-accent-text: #1d7d88;
+  --muted: #f3f5f8;
+  --primary: #292929;
+  --primary-soft: #eef2f6;
   --accent: #2ec5d5;
-  --accent-soft: #d6f0f4;
-  --accent-border: #89dde7;
-  --accent-text: #2c6f77;
-  --danger: #e67d84;
-  --danger-soft: #fdebed;
-  --danger-border: #f7c8cd;
-  --danger-text: #a9444d;
-  --success: #2f9d7e;
-  --warning: #c67f43;
-  --warning-soft: #fdf0e2;
-  --info: #3398a3;
-  --info-soft: #deeff1;
-  --info-text: #2c6f77;
-  --queue: #c67f43;
-  --waiting: #3398a3;
-  --canvas-grid: #d7e2e6;
-  --canvas-bg: #f5f7f7;
-  --overlay: rgb(42 42 42 / 30%);
-  --shadow-sm: 0 10px 24px rgb(53 74 86 / 8%);
-  --shadow-md: 0 18px 44px rgb(53 74 86 / 12%);
-  --shadow-lg: 0 30px 60px rgb(42 42 42 / 16%);
-  --focus-ring: 0 0 0 3px rgb(46 197 213 / 22%);
-  --radius: 0.625rem;
-  --background: #f5f7f7;
-  --foreground: #2a2a2a;
+  --accent-soft: #d9f4f7;
+  --accent-border: #8ce0e8;
+  --accent-text: #1d7d88;
+  --danger: #eb5757;
+  --danger-soft: #fdecec;
+  --danger-border: #f7c6c6;
+  --danger-text: #b63a3a;
+  --success: #27ae60;
+  --warning: #f2994a;
+  --warning-soft: #fff2e3;
+  --info: #2ec5d5;
+  --info-soft: #d9f4f7;
+  --info-text: #1d7d88;
+  --queue: #f2994a;
+  --waiting: #2ec5d5;
+  --canvas-grid: #dfe5ec;
+  --canvas-bg: #f3f5f8;
+  --overlay: rgb(31 47 70 / 36%);
+  --shadow-sm: 0 8px 20px rgb(31 47 70 / 7%);
+  --shadow-md: 0 16px 36px rgb(31 47 70 / 10%);
+  --shadow-lg: 0 24px 64px rgb(31 47 70 / 16%);
+  --focus-ring: 0 0 0 3px rgb(47 128 237 / 20%);
+  --radius: 0.5rem;
+  --background: #f3f5f8;
+  --foreground: #2f3a4a;
   --card: #ffffff;
-  --card-foreground: #2a2a2a;
+  --card-foreground: #2f3a4a;
   --popover: #ffffff;
-  --popover-foreground: #2a2a2a;
+  --popover-foreground: #2f3a4a;
   --primary-foreground: #ffffff;
-  --secondary: #eef2f3;
-  --secondary-foreground: #354a56;
-  --muted-foreground: #60646a;
-  --accent-foreground: #2c6f77;
-  --destructive: #e67d84;
+  --secondary: #eef2f6;
+  --secondary-foreground: #5f6b7a;
+  --muted-foreground: #5f6b7a;
+  --accent-foreground: #1d7d88;
+  --destructive: #eb5757;
   --destructive-foreground: #ffffff;
-  --border: #d7e2e6;
-  --input: #d7e2e6;
-  --ring: #2ec5d5;
-  --chart-1: #c67f43;
+  --border: #dfe5ec;
+  --input: #dfe5ec;
+  --ring: #2f80ed;
+  --chart-1: #2f80ed;
   --chart-2: #2ec5d5;
-  --chart-3: #354a56;
-  --chart-4: #2f9d7e;
-  --chart-5: #89dde7;
-  --sidebar: #2a2a2a;
-  --sidebar-foreground: #f5f7f7;
+  --chart-3: #292929;
+  --chart-4: #27ae60;
+  --chart-5: #f2994a;
+  --sidebar: #292929;
+  --sidebar-foreground: #f7f8fa;
   --sidebar-primary: #2ec5d5;
-  --sidebar-primary-foreground: #2a2a2a;
-  --sidebar-accent: #354a56;
-  --sidebar-accent-foreground: #f5f7f7;
-  --sidebar-border: #354a56;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #303030;
+  --sidebar-accent-foreground: #f7f8fa;
+  --sidebar-border: #3a3a3a;
   --sidebar-ring: #2ec5d5;
 }
 
@@ -97,10 +97,12 @@ body,
   height: 100%;
   font-family: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", sans-serif;
   color: var(--text);
-  background:
-    radial-gradient(circle at 18% 14%, rgb(214 240 244 / 0.8) 0, transparent 22%),
-    radial-gradient(circle at 84% 10%, rgb(137 221 231 / 0.2) 0, transparent 18%),
-    linear-gradient(180deg, var(--bg-top) 0, var(--bg) 48%, var(--bg-bottom) 100%);
+  background: linear-gradient(
+    180deg,
+    var(--bg-top) 0,
+    var(--bg) 42%,
+    var(--bg-bottom) 100%
+  );
 }
 
 .tool-device-icon {
