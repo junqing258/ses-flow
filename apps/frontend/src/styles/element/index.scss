@@ -93,8 +93,8 @@ $--colors: (
     "active-border-color": #2f80ed,
   ),
   $button-border-radius: (
-    "large": 6px,
-    "default": 5px,
+    "large": 8px,
+    "default": 8px,
     "small": 4px,
   ),
   $button-padding-horizontal: (
@@ -110,6 +110,18 @@ $--colors: (
     "padding-primary": 20px,
     "box-shadow": 0 24px 64px rgb(31 47 70 / 18%),
     "title-font-size": 16px,
+  ),
+  $messagebox: (
+    "border-radius": 8px,
+  ),
+  $popover: (
+    "border-radius": 8px,
+  ),
+  $card: (
+    "border-radius": 8px,
+  ),
+  $pagination: (
+    "border-radius": 4px,
   )
 );
 
@@ -137,10 +149,18 @@ $--colors: (
   --app-cyan: #2ec6d6;
   --app-cyan-soft: #d9f4f7;
   --app-red: #eb5757;
+  --app-radius-small: 4px;
+  --app-radius-medium: 6px;
+  --app-radius-base: 8px;
+  --app-radius-large: 12px;
+  --app-radius-xlarge: 16px;
+  --app-radius-2xlarge: 24px;
+  --app-radius-pill: 999px;
   --el-color-info: var(--app-cyan);
   --el-color-primary: var(--app-blue);
-  --el-border-radius-base: 8px;
-  --el-border-radius-small: 4px;
+  --el-border-radius-base: var(--app-radius-base);
+  --el-border-radius-small: var(--app-radius-small);
+  --el-border-radius-round: var(--app-radius-pill);
   --el-component-size: 32px;
   --el-component-size-small: 24px;
   --el-font-weight-primary: 500;
@@ -189,14 +209,14 @@ $--colors: (
 
 .el-tabs__active-bar {
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   background-color: var(--app-blue);
 }
 
 .el-tabs--card > .el-tabs__header .el-tabs__nav {
   overflow: hidden;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--app-radius-base);
   background: #eef0f4;
 }
 
@@ -207,7 +227,7 @@ $--colors: (
 .el-tabs--card > .el-tabs__header .el-tabs__item.is-active {
   margin: 4px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-medium);
   background: var(--app-blue);
   color: #ffffff;
   box-shadow: 0 6px 14px rgb(46 198 214 / 22%);
@@ -219,7 +239,7 @@ $--colors: (
   --el-table-text-color: var(--app-body);
   --el-table-border-color: var(--app-stroke-soft);
   --el-table-row-hover-bg-color: #f7fafc;
-  border-radius: 8px;
+  border-radius: var(--app-radius-base);
   font-size: 13px;
 }
 
@@ -247,7 +267,7 @@ $--colors: (
 }
 
 .el-message {
-  border-radius: 8px;
+  border-radius: var(--app-radius-base);
   box-shadow: 0 12px 32px rgb(31 47 70 / 14%);
 }
 

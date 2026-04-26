@@ -53,7 +53,14 @@
   --shadow-md: 0 16px 36px rgb(31 47 70 / 10%);
   --shadow-lg: 0 24px 64px rgb(31 47 70 / 16%);
   --focus-ring: 0 0 0 3px rgb(46 198 214 / 20%);
-  --radius: 0.5rem;
+  --app-radius-small: 4px;
+  --app-radius-medium: 6px;
+  --app-radius-base: 8px;
+  --app-radius-large: 12px;
+  --app-radius-xlarge: 16px;
+  --app-radius-2xlarge: 24px;
+  --app-radius-pill: 999px;
+  --radius: var(--app-radius-base);
   --background: #f3f5f8;
   --foreground: #2f3a4a;
   --card: #ffffff;
@@ -169,7 +176,7 @@ body,
 .ui-pill {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   padding: 0.25rem 0.625rem;
   font-size: 0.75rem;
   line-height: 1rem;
@@ -251,7 +258,7 @@ body,
 
 .ai-chat-markdown code:not(pre code) {
   border: 1px solid rgb(148 163 184 / 0.25);
-  border-radius: 0.5rem;
+  border-radius: var(--app-radius-base);
   background: rgb(255 255 255 / 0.8);
   padding: 0.15rem 0.4rem;
   font-family:
@@ -262,7 +269,7 @@ body,
 .ai-chat-markdown pre {
   overflow-x: auto;
   border: 1px solid rgb(53 74 86 / 0.14);
-  border-radius: 0.875rem;
+  border-radius: var(--app-radius-large);
   background: #2a2a2a;
   color: #f5f7f7;
   padding: 0.875rem 1rem;
@@ -283,7 +290,7 @@ body,
   display: block;
   overflow-x: auto;
   border: 1px solid rgb(148 163 184 / 0.2);
-  border-radius: 0.875rem;
+  border-radius: var(--app-radius-large);
   background: rgb(255 255 255 / 0.75);
 }
 
@@ -328,7 +335,7 @@ body,
 
 .app-markdown code:not(pre code) {
   border: 1px solid var(--panel-border);
-  border-radius: 0.5rem;
+  border-radius: var(--app-radius-base);
   background: rgb(255 255 255 / 72%);
   padding: 0.15rem 0.4rem;
   font-family:
@@ -339,7 +346,7 @@ body,
 .app-markdown pre {
   overflow-x: auto;
   border: 1px solid var(--panel-border);
-  border-radius: 1rem;
+  border-radius: var(--app-radius-xlarge);
   background: #2a2a2a;
   color: #f5f7f7;
   padding: 1rem 1.125rem;
@@ -360,7 +367,7 @@ body,
 .app-markdown table {
   overflow: hidden;
   border: 1px solid var(--panel-border);
-  border-radius: 1rem;
+  border-radius: var(--app-radius-xlarge);
   background: rgb(255 255 255 / 72%);
   box-shadow: var(--shadow-sm);
   padding: 1rem;
@@ -390,7 +397,7 @@ body,
 .tool-dot {
   width: 12px;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   display: inline-block;
 }
 
@@ -431,7 +438,7 @@ body,
 .input {
   width: 100%;
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-base);
   padding: 7px 8px;
   margin-top: 4px;
   background: var(--panel);
@@ -463,10 +470,12 @@ body,
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: var(--app-radius-small);
+  --radius-md: var(--app-radius-medium);
+  --radius-lg: var(--app-radius-base);
+  --radius-xl: var(--app-radius-large);
+  --radius-2xl: var(--app-radius-xlarge);
+  --radius-3xl: var(--app-radius-2xlarge);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

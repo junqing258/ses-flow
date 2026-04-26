@@ -1,6 +1,6 @@
 <template>
   <aside
-    class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
+    class="pointer-events-auto absolute right-6 top-24 bottom-6 z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-lg bg-white/95 backdrop-blur shadow-sm ring-1 ring-slate-100/50"
     :class="visibilityClass"
   >
     <div class="border-b border-slate-100 px-4 py-4">

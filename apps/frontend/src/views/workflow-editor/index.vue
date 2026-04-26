@@ -126,14 +126,14 @@
         <ElButton text
           class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
         >
-          <Compass class="h-4 w-4" />
+          <Compass class="h-4 w-4 mr-1" />
           Evaluate
         </ElButton>
         <ElButton text
           class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleExportJson"
         >
-          <Code class="h-4 w-4" />
+          <Code class="h-4 w-4 mr-1" />
           JSON
         </ElButton>
         <ElButton
@@ -167,7 +167,7 @@
     <aside
       v-if="isEditMode"
       ref="leftCanvasAsideRef"
-      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-60 flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-60 flex-col overflow-hidden rounded-lg bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
     >
       <div class="min-h-0 flex-1 overflow-y-auto py-3 px-2">
         <div
@@ -220,7 +220,7 @@
     <aside
       v-else
       ref="leftCanvasAsideRef"
-      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
+      class="pointer-events-auto absolute left-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-lg bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
     >
       <div
         class="flex h-21 shrink-0 items-center justify-between border-b border-[var(--panel-border)]/55 px-4"
@@ -364,7 +364,7 @@
     <!-- Floating Right Properties Panel -->
     <aside
       v-if="isEditMode && selectedNodeId"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-[320px] flex-col overflow-hidden rounded-lg bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
       :class="rightAsideVisibilityClass"
     >
       <div
@@ -584,7 +584,7 @@
     </aside>
     <aside
       v-else-if="isRunMode"
-      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
+      class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-lg bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
       :class="rightAsideVisibilityClass"
     >
       <div
