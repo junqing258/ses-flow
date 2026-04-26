@@ -13,7 +13,7 @@
         保存后后端会持久化这些插件地址，并立即注册；服务重启后也会按这份配置恢复。
       </p>
       <div
-        class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900"
+        class="rounded-lg border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900"
       >
         每行填写一个插件服务 Base URL，例如
         <code class="rounded bg-white/80 px-1 py-0.5 text-[13px]"
@@ -33,7 +33,7 @@
           :disabled="isLoading || isSaving"
           rows="8"
           placeholder="http://127.0.0.1:6310&#10;http://127.0.0.1:6311"
-          class="min-h-44 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          class="min-h-44 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         />
         <p class="text-xs leading-5 text-slate-500">
           支持换行或逗号分隔；保存时会自动去重并清理首尾空格。

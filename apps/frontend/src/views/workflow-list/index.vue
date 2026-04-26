@@ -92,13 +92,13 @@
               </div>
               <div
                 v-if="isLoadingWorkflows"
-                class="rounded-[24px] border border-slate-200/80 bg-white/92 px-6 py-12 text-center text-sm text-slate-500 shadow-[0_20px_45px_rgba(15,23,42,0.06)]"
+                class="rounded-lg border border-slate-200/80 bg-white/92 px-6 py-12 text-center text-sm text-slate-500 shadow-[0_20px_45px_rgba(15,23,42,0.06)]"
               >
                 Loading workflows...
               </div>
               <div
                 v-else-if="draftWorkflows.length === 0"
-                class="rounded-[24px] border border-dashed border-slate-200 bg-white/70 px-6 py-12 text-center"
+                class="rounded-lg border border-dashed border-slate-200 bg-white/70 px-6 py-12 text-center"
               >
                 <p class="text-sm font-medium text-slate-700">
                   还没有已保存的工作流
@@ -111,7 +111,7 @@
                 <article
                   v-for="workflow in draftWorkflows"
                   :key="workflow.id"
-                  class="group rounded-3xl border border-slate-200/80 bg-white/92 p-4 shadow-[0_20px_45px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-[0_24px_50px_rgba(15,23,42,0.1)]"
+                  class="group rounded-lg border border-slate-200/80 bg-white/92 p-4 shadow-[0_20px_45px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-[0_24px_50px_rgba(15,23,42,0.1)]"
                 >
                   <div
                     class="w-full text-left cursor-pointer!"
@@ -152,7 +152,7 @@
                     </div>
                   </div>
                   <div
-                    class="mt-4 flex items-center justify-between gap-3 rounded-[18px] border border-slate-100 bg-slate-50/80 px-3 py-2.5"
+                    class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5"
                   >
                     <div>
                       <p
@@ -190,7 +190,7 @@
                 <article
                   v-for="template in templateWorkflows"
                   :key="template.id"
-                  class="rounded-[24px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_20px_45px_rgba(15,23,42,0.06)]"
+                  class="rounded-lg border border-slate-200/80 bg-white/92 p-4 shadow-[0_20px_45px_rgba(15,23,42,0.06)]"
                 >
                   <div class="flex items-start justify-between gap-3">
                     <div
