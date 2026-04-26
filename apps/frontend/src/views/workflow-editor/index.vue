@@ -76,7 +76,7 @@
           @click="handleOpenWorkflowRuns"
         >
           <LoaderCircle class="h-3.5 w-3.5" />
-          查看运行
+          <span class="mx-1">查看运行</span>
           <span
             class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-[var(--app-primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
           >
