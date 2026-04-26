@@ -250,3 +250,18 @@ $--colors: (
   border-radius: 8px;
   box-shadow: 0 12px 32px rgb(31 47 70 / 14%);
 }
+
+.settings-config-dialog.el-dialog {
+  overflow: visible;
+  border: 0;
+}
+
+.settings-config-dialog .el-dialog__header {
+  border-bottom: 0;
+  padding-bottom: var(--el-dialog-padding-primary);
+}
+
+.settings-config-dialog .el-dialog__title {
+  color: var(--el-text-color-primary);
+  font-weight: 400;
+}

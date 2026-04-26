@@ -1,102 +1,73 @@
 <template>
   <ElDialog
     :model-value="aiProviderConfigDialogOpen"
+    title="AI 供应商配置"
     append-to-body
     align-center
+    class="settings-config-dialog"
+    width="min(92vw, 34rem)"
     @update:model-value="handleDialogOpenChange"
   >
-    <div
-      class="max-w-[min(92vw,34rem)] rounded-[28px] border border-slate-200/80 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
-    >
-      <div class="overflow-hidden rounded-[28px]">
-        <div class="border-b border-slate-200/80 px-6 py-5">
-          <div class="space-y-2">
-            <h2
-              class="text-xl font-semibold tracking-tight text-slate-950"
-            >
-              AI 供应商配置
-            </h2>
-            <!-- <DialogDescription class="text-sm leading-6 text-slate-600">
-              页面内每一次 AI 协作请求都会直接使用这里保存的用户配置。
-            </DialogDescription> -->
-          </div>
-        </div>
-        <div class="space-y-5 px-6 py-6">
-          <!-- <div class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900">
-            当前配置只保存在本浏览器，不再回退 `.env`。请完整填写后再使用
-            AI 编辑能力。
-          </div> -->
-          <div class="space-y-2">
-            <label
-              for="ai-provider-base-url"
-              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
-            >
-              ANTHROPIC_BASE_URL
-            </label>
-            <ElInput
-              id="ai-provider-base-url"
-              v-model="form.baseUrl"
-              placeholder="https://api.anthropic.com"
-              class="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
-            />
-          </div>
-          <div class="space-y-2">
-            <label
-              for="ai-provider-auth-token"
-              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
-            >
-              ANTHROPIC_AUTH_TOKEN
-            </label>
-            <ElInput
-              id="ai-provider-auth-token"
-              v-model="form.authToken"
-              type="password"
-              placeholder="sk-ant-..."
-              class="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
-            />
-          </div>
-          <div class="space-y-2">
-            <label
-              for="ai-provider-model"
-              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
-            >
-              ANTHROPIC_MODEL
-            </label>
-            <ElInput
-              id="ai-provider-model"
-              v-model="form.model"
-              placeholder="claude-sonnet-4-6"
-              class="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
-            />
-          </div>
-        </div>
-        <div
-          class="border-t border-slate-200/80 bg-slate-50/80 px-6 py-4"
+    <div class="space-y-5">
+      <!-- <div class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900">
+        当前配置只保存在本浏览器，不再回退 `.env`。请完整填写后再使用
+        AI 编辑能力。
+      </div> -->
+      <div class="space-y-2">
+        <label
+          for="ai-provider-base-url"
+          class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
         >
-          <ElButton
-            native-type="button"
-            class="rounded-full border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-            @click="handleReset"
-          >
-            清空配置
-          </ElButton>
-          <ElButton
-            native-type="button"
-            class="rounded-full border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-            @click="handleCancel"
-          >
-            取消
-          </ElButton>
-          <ElButton
-            native-type="button"
-            class="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
-            @click="handleSave"
-          >
-            保存配置
-          </ElButton>
-        </div>
+          ANTHROPIC_BASE_URL
+        </label>
+        <ElInput
+          id="ai-provider-base-url"
+          v-model="form.baseUrl"
+          placeholder="https://api.anthropic.com"
+          class="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
+        />
+      </div>
+      <div class="space-y-2">
+        <label
+          for="ai-provider-auth-token"
+          class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
+        >
+          ANTHROPIC_AUTH_TOKEN
+        </label>
+        <ElInput
+          id="ai-provider-auth-token"
+          v-model="form.authToken"
+          type="password"
+          placeholder="sk-ant-..."
+          class="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
+        />
+      </div>
+      <div class="space-y-2">
+        <label
+          for="ai-provider-model"
+          class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
+        >
+          ANTHROPIC_MODEL
+        </label>
+        <ElInput
+          id="ai-provider-model"
+          v-model="form.model"
+          placeholder="claude-sonnet-4-6"
+          class="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-100"
+        />
       </div>
     </div>
+    <template #footer>
+      <ElButton native-type="button" @click="handleReset">
+        清空配置
+      </ElButton>
+      <ElButton native-type="button" @click="handleCancel">
+        取消
+      </ElButton>
+      <ElButton native-type="button" type="primary" @click="handleSave">
+        保存配置
+      </ElButton>
+    </template>
   </ElDialog>
 </template>
 <script setup lang="ts">

@@ -1,85 +1,65 @@
 <template>
   <ElDialog
     :model-value="pluginAutoRegisterConfigDialogOpen"
+    title="插件自动注册配置"
     append-to-body
     align-center
+    class="settings-config-dialog"
+    width="min(92vw, 40rem)"
     @update:model-value="handleDialogOpenChange"
   >
-    <div
-      class="max-w-[min(92vw,40rem)] rounded-[28px] border border-slate-200/80 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
-    >
-      <div class="overflow-hidden rounded-[28px]">
-        <div class="border-b border-slate-200/80 px-6 py-5">
-          <div class="space-y-2">
-            <h2
-              class="text-xl font-semibold tracking-tight text-slate-950"
-            >
-              插件自动注册配置
-            </h2>
-            <p class="text-sm leading-6 text-slate-600">
-              保存后后端会持久化这些插件地址，并立即注册；服务重启后也会按这份配置恢复。
-            </p>
-          </div>
-        </div>
-        <div class="space-y-5 px-6 py-6">
-          <div
-            class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900"
-          >
-            每行填写一个插件服务 Base URL，例如
-            <code class="rounded bg-white/80 px-1 py-0.5 text-[13px]"
-              >http://127.0.0.1:6310</code
-            >。
-          </div>
-          <div class="space-y-2">
-            <label
-              for="plugin-auto-register-base-urls"
-              class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
-            >
-              Plugin Base URLs
-            </label>
-            <textarea
-              id="plugin-auto-register-base-urls"
-              v-model="baseUrlsText"
-              :disabled="isLoading || isSaving"
-              rows="8"
-              placeholder="http://127.0.0.1:6310&#10;http://127.0.0.1:6311"
-              class="min-h-44 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            <p class="text-xs leading-5 text-slate-500">
-              支持换行或逗号分隔；保存时会自动去重并清理首尾空格。
-            </p>
-          </div>
-        </div>
-        <div
-          class="border-t border-slate-200/80 bg-slate-50/80 px-6 py-4"
+    <div class="space-y-5">
+      <p class="text-sm leading-6 text-slate-600">
+        保存后后端会持久化这些插件地址，并立即注册；服务重启后也会按这份配置恢复。
+      </p>
+      <div
+        class="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-4 py-3 text-sm leading-6 text-cyan-900"
+      >
+        每行填写一个插件服务 Base URL，例如
+        <code class="rounded bg-white/80 px-1 py-0.5 text-[13px]"
+          >http://127.0.0.1:6310</code
+        >。
+      </div>
+      <div class="space-y-2">
+        <label
+          for="plugin-auto-register-base-urls"
+          class="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase"
         >
-          <ElButton
-            native-type="button"
-            class="rounded-full border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-            :disabled="isLoading || isSaving"
-            @click="handleReset"
-          >
-            清空配置
-          </ElButton>
-          <ElButton
-            native-type="button"
-            class="rounded-full border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-            :disabled="isSaving"
-            @click="handleCancel"
-          >
-            取消
-          </ElButton>
-          <ElButton
-            native-type="button"
-            class="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="isLoading || isSaving"
-            @click="handleSave"
-          >
-            {{ isSaving ? "保存中..." : "保存配置" }}
-          </ElButton>
-        </div>
+          Plugin Base URLs
+        </label>
+        <textarea
+          id="plugin-auto-register-base-urls"
+          v-model="baseUrlsText"
+          :disabled="isLoading || isSaving"
+          rows="8"
+          placeholder="http://127.0.0.1:6310&#10;http://127.0.0.1:6311"
+          class="min-h-44 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 shadow-none outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <p class="text-xs leading-5 text-slate-500">
+          支持换行或逗号分隔；保存时会自动去重并清理首尾空格。
+        </p>
       </div>
     </div>
+    <template #footer>
+      <ElButton
+        native-type="button"
+        :disabled="isLoading || isSaving"
+        @click="handleReset"
+      >
+        清空配置
+      </ElButton>
+      <ElButton native-type="button" :disabled="isSaving" @click="handleCancel">
+        取消
+      </ElButton>
+      <ElButton
+        native-type="button"
+        type="primary"
+        :disabled="isLoading || isSaving"
+        @click="handleSave"
+      >
+        {{ isSaving ? "保存中..." : "保存配置" }}
+      </ElButton>
+    </template>
   </ElDialog>
 </template>
 <script setup lang="ts">
