@@ -40,7 +40,7 @@
           </div>
         </div> -->
         <div
-          class="rounded-[14px] border border-slate-200/80 bg-slate-50/80 px-3 py-2"
+          class="rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2"
         >
           <!-- <p class="font-semibold tracking-wide text-slate-500">最近同步</p> -->
           <!-- <p class="mt-1 text-sm font-medium text-slate-900">
@@ -53,7 +53,7 @@
         </div>
         <div
           v-if="combinedError"
-          class="rounded-[14px] border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700"
+          class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700"
         >
           {{ combinedError }}
         </div>
@@ -116,7 +116,7 @@
       </template>
       <div
         v-else
-        class="rounded-2xl border border-dashed border-slate-200 bg-white/85 px-4 py-5 text-[13px] leading-6 text-slate-500"
+        class="rounded-lg border border-dashed border-slate-200 bg-white/85 px-4 py-5 text-[13px] leading-6 text-slate-500"
       >
         先描述你的改动需求，例如“新增一个审核分支，并把失败结果汇总到 respond
         节点”。
@@ -125,7 +125,7 @@
     <div class="border-t border-slate-100 bg-white px-4 py-4">
       <textarea
         v-model="draftMessage"
-        class="min-h-23 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] leading-6 text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
+        class="min-h-23 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] leading-6 text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
         :disabled="isComposerDisabled"
         placeholder="描述你希望 Agent 帮你调整的工作流内容"
         @keydown.enter.exact.prevent="handleSend"
@@ -136,14 +136,14 @@
         </p>
         <div class="flex items-center gap-2">
           <ElButton text
-            class="h-9 rounded-full px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            class="h-9 rounded-lg px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
             :disabled="!isRunning"
             @click="handleCancel"
           >
             停止
           </ElButton>
           <ElButton
-            class="h-9 rounded-full bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            class="h-9 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             :disabled="isComposerDisabled || !draftMessage.trim()"
             @click="handleSend"
           >

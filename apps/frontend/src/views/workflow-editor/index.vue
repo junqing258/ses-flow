@@ -238,17 +238,17 @@
       </div>
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <div
-          class="rounded-[18px] border border-[var(--panel-border)]/80 bg-[var(--panel-soft)]/90 p-3"
+          class="rounded-lg border border-[var(--panel-border)]/80 bg-[var(--panel-soft)]/90 p-3"
         >
           <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             触发载荷
           </p>
           <div
-            class="mt-3 flex rounded-full bg-white p-1 ring-1 ring-[var(--panel-border)]"
+            class="mt-3 flex rounded-lg bg-white p-1 ring-1 ring-[var(--panel-border)]"
           >
             <button
               type="button"
-              class="flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+              class="flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
               :class="
                 runDraft.triggerMode === 'manual'
                   ? 'bg-[var(--app-primary)] text-white'
@@ -260,7 +260,7 @@
             </button>
             <button
               type="button"
-              class="flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+              class="flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
               :class="
                 runDraft.triggerMode === 'webhook'
                   ? 'bg-[var(--app-primary)] text-white'
@@ -283,7 +283,7 @@
           >
           <textarea
             :value="runDraft.body"
-            class="min-h-37 w-full rounded-2xl border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
+            class="min-h-37 w-full rounded-lg border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
             @input="
               handleRunDraftUpdate(
                 'body',
@@ -299,7 +299,7 @@
           >
           <textarea
             :value="runDraft.headers"
-            class="min-h-28 w-full rounded-2xl border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
+            class="min-h-28 w-full rounded-lg border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
             @input="
               handleRunDraftUpdate(
                 'headers',
@@ -315,7 +315,7 @@
           >
           <textarea
             :value="runDraft.env"
-            class="min-h-28 w-full rounded-2xl border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
+            class="min-h-28 w-full rounded-lg border border-[var(--panel-border)] bg-white px-3 py-3 font-mono text-[12px] leading-6 text-[var(--text)] outline-none transition focus:border-[var(--app-accent-border)] focus:ring-2 focus:ring-[var(--app-accent-soft)]"
             @input="
               handleRunDraftUpdate(
                 'env',
@@ -324,19 +324,19 @@
             "
           />
         </div>
-        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-3">
+        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-3">
           <div class="flex items-center justify-between text-xs text-[var(--app-muted)]">
             <span class="font-semibold">执行预览</span>
             <span>{{ runnerWorkflowPreview.nodes.length }} nodes</span>
           </div>
           <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div class="rounded-xl bg-[var(--panel-soft)] px-3 py-2">
+            <div class="rounded-lg bg-[var(--panel-soft)] px-3 py-2">
               <p class="text-[#7a7f86]">Trigger</p>
               <p class="mt-1 font-semibold text-[#354a56]">
                 {{ runnerWorkflowPreview.trigger.type }}
               </p>
             </div>
-            <div class="rounded-xl bg-[var(--panel-soft)] px-3 py-2">
+            <div class="rounded-lg bg-[var(--panel-soft)] px-3 py-2">
               <p class="text-[#7a7f86]">Transitions</p>
               <p class="mt-1 font-semibold text-[#354a56]">
                 {{ runnerWorkflowPreview.transitions.length }}
@@ -347,7 +347,7 @@
       </div>
       <div class="shrink-0 border-t border-[var(--panel-border)]/55 px-4 py-4">
         <ElButton
-          class="h-10 w-full rounded-full bg-[var(--app-primary)] text-sm font-medium text-white hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
+          class="h-10 w-full rounded-lg bg-[var(--app-primary)] text-sm font-medium text-white hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="isRunningWorkflow"
           @click="handleRunWorkflow"
         >
@@ -621,7 +621,7 @@
         </button>
       </div>
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
+        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4">
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
@@ -642,7 +642,7 @@
           </div>
           <button
             type="button"
-            class="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[var(--danger-border)] px-3 text-sm font-medium text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)] disabled:cursor-not-allowed disabled:border-[var(--panel-border)] disabled:text-[#7a7f86] disabled:hover:bg-transparent"
+            class="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[var(--danger-border)] px-3 text-sm font-medium text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)] disabled:cursor-not-allowed disabled:border-[var(--panel-border)] disabled:text-[#7a7f86] disabled:hover:bg-transparent"
             :disabled="!canTerminateActiveRun || isTerminatingWorkflow"
             @click="handleTerminateRun"
           >
@@ -675,7 +675,7 @@
           </div>
           <p
             v-if="runErrorMessage"
-            class="mt-4 rounded-[14px] bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700"
+            class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700"
           >
             {{ runErrorMessage }}
           </p>
@@ -685,21 +685,21 @@
           :node-name-map="workflowNodeNameMap"
           :workflow-key="activeRunSummary?.workflowKey ?? runnerWorkflowPreview.meta.key"
         />
-        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
+        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4">
           <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             State Snapshot
           </p>
           <pre
-            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-[var(--app-primary)] px-3 py-3 font-mono text-[11px] leading-5 text-[#f5f7f7]"
+            class="mt-3 max-h-45 overflow-auto rounded-lg bg-[var(--app-primary)] px-3 py-3 font-mono text-[11px] leading-5 text-[#f5f7f7]"
             >{{ runStatePreview }}</pre
           >
         </div>
-        <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
+        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4">
           <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             Last Output
           </p>
           <pre
-            class="mt-3 max-h-45 overflow-auto rounded-[14px] bg-[var(--app-primary)] px-3 py-3 font-mono text-[11px] leading-5 text-[#f5f7f7]"
+            class="mt-3 max-h-45 overflow-auto rounded-lg bg-[var(--app-primary)] px-3 py-3 font-mono text-[11px] leading-5 text-[#f5f7f7]"
             >{{ runOutputPreview }}</pre
           >
         </div>

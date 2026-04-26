@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <div
-      class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4"
+      class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4"
     >
       <div class="flex items-center justify-between gap-3">
         <div>
@@ -18,7 +18,7 @@
         <article
           v-for="(item, index) in timeline"
           :key="`${item.nodeId}-${index}`"
-          class="rounded-2xl border p-4 transition"
+          class="rounded-lg border p-4 transition"
           :class="cardClass(item)"
         >
           <div class="flex items-start justify-between gap-3">
@@ -52,11 +52,11 @@
           </div>
 
           <div class="mt-3 grid gap-2 text-[11px] text-[var(--app-muted)] sm:grid-cols-2">
-            <div class="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70">
+            <div class="rounded-lg bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70">
               <span class="font-semibold text-[#354a56]">开始</span>
               <p class="mt-1 break-all">{{ formatDateTime(item.startedAt) }}</p>
             </div>
-            <div class="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70">
+            <div class="rounded-lg bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70">
               <span class="font-semibold text-[#354a56]">结束</span>
               <p class="mt-1 break-all">{{ formatDateTime(item.endedAt) }}</p>
             </div>
@@ -68,7 +68,7 @@
           >
             <div
               v-if="item.inputSummary"
-              class="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70"
+              class="rounded-lg bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70"
             >
               <span class="font-semibold text-[#354a56]">Input</span>
               <p class="mt-1 whitespace-pre-wrap break-words">
@@ -77,7 +77,7 @@
             </div>
             <div
               v-if="item.outputSummary"
-              class="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70"
+              class="rounded-lg bg-white/80 px-3 py-2 ring-1 ring-[var(--panel-border)]/70"
             >
               <span class="font-semibold text-[#354a56]">Output</span>
               <p class="mt-1 whitespace-pre-wrap break-words">
@@ -88,7 +88,7 @@
 
           <div
             v-if="item.errorCode || item.errorDetail || templateSteps(item).length"
-            class="mt-3 rounded-xl border border-rose-200 bg-rose-50/90 px-3 py-3 text-[11px] text-rose-700"
+            class="mt-3 rounded-lg border border-rose-200 bg-rose-50/90 px-3 py-3 text-[11px] text-rose-700"
           >
             <p v-if="item.errorCode" class="font-semibold">
               {{ item.errorCode }}
@@ -117,7 +117,7 @@
             <p
               v-for="(log, logIndex) in item.logs"
               :key="`${item.nodeId}-log-${logIndex}`"
-              class="rounded-xl bg-white px-2.5 py-2 font-mono text-[11px] leading-5 text-[var(--app-muted)] ring-1 ring-[var(--panel-border)]/80"
+              class="rounded-lg bg-white px-2.5 py-2 font-mono text-[11px] leading-5 text-[var(--app-muted)] ring-1 ring-[var(--panel-border)]/80"
             >
               [{{ log.level }}] {{ log.message }}
             </p>
@@ -127,7 +127,7 @@
 
       <div
         v-else
-        class="mt-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--panel-border)] bg-[var(--panel-soft)]/80 px-6 text-center text-xs leading-5 text-[#7a7f86]"
+        class="mt-4 flex min-h-40 items-center justify-center rounded-lg border border-dashed border-[var(--panel-border)] bg-[var(--panel-soft)]/80 px-6 text-center text-xs leading-5 text-[#7a7f86]"
       >
         {{ emptyText }}
       </div>
