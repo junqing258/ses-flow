@@ -93,7 +93,7 @@
                 </div>
               </div>
               <div class="flex flex-wrap gap-3">
-                <ElButton :disabled="isSubmitting" @click="handleLogout">
+                <ElButton type="danger" plain :disabled="isSubmitting" @click="handleLogout">
                   {{ isSubmitting ? t("auth.actions.processing") : t("auth.actions.logout") }}
                 </ElButton>
                 <ElButton @click="setDialogOpen(false)">
@@ -146,7 +146,7 @@
                 {{ submitError }}
               </div>
               <div class="flex flex-wrap gap-3">
-                <ElButton native-type="submit" :disabled="isSubmitting" class="min-w-28">
+                <ElButton native-type="submit" type="primary" :disabled="isSubmitting" class="min-w-28">
                   {{ isSubmitting ? t("auth.actions.processing") : submitLabel }}
                 </ElButton>
                 <ElButton native-type="button" :disabled="isSubmitting" @click="setDialogOpen(false)">

@@ -43,6 +43,8 @@
     <template #footer>
       <ElButton
         native-type="button"
+        type="danger"
+        plain
         :disabled="isLoading || isSaving"
         @click="handleReset"
       >

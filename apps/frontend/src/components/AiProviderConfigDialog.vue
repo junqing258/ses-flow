@@ -58,7 +58,7 @@
       </div>
     </div>
     <template #footer>
-      <ElButton native-type="button" @click="handleReset">
+      <ElButton native-type="button" type="danger" plain @click="handleReset">
         清空配置
       </ElButton>
       <ElButton native-type="button" @click="handleCancel">

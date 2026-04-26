@@ -65,7 +65,9 @@
             publish-ready orchestration.
           </p>
           <ElButton
-            class="mt-8 h-11 rounded-full bg-slate-950 px-6 text-sm font-medium text-white shadow-[0_16px_36px_rgba(15,23,42,0.16)] hover:bg-slate-800"
+            type="primary"
+            size="large"
+            class="mt-8"
             @click="handleCreate"
           >
             <Plus class="h-4 w-4" />
@@ -79,7 +81,7 @@
               <div class="mb-3 flex items-center justify-end">
                 <ElButton
                   size="small"
-                  class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                  plain
                   :disabled="isRefreshingCatalog || isLoadingWorkflows"
                   @click="handleRefreshCatalog"
                 >
@@ -167,7 +169,7 @@
                     </div>
                     <ElButton
                       size="small"
-                      class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                      plain
                       :disabled="workflow.runningRunCount === 0"
                       @click="openRunList(workflow)"
                     >
@@ -221,7 +223,7 @@
                     }}</span>
                     <ElButton
                       size="small"
-                      class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+                      plain
                       @click="useTemplate(template.id)"
                     >
                       Use template

@@ -52,9 +52,9 @@
           </select>
         </div>
         <div class="flex flex-wrap items-center gap-2 lg:self-end lg:justify-end">
-          <ElButton size="small" class="h-10" @click="emit('import')">导入</ElButton>
-          <ElButton size="small" class="h-10" @click="emit('update:open', false)">关闭</ElButton>
-          <ElButton size="small" class="h-10" :disabled="selectedCount === 0" @click="exportSelected">
+          <ElButton size="small" type="primary" class="h-10" @click="emit('import')">导入</ElButton>
+          <ElButton size="small" plain class="h-10" @click="emit('update:open', false)">关闭</ElButton>
+          <ElButton size="small" plain class="h-10" :disabled="selectedCount === 0" @click="exportSelected">
             导出 JSONL<span v-if="selectedCount > 0">（{{ selectedCount }}）</span>
           </ElButton>
           <ElButton size="small" type="danger" class="h-10" :disabled="selectedCount === 0" @click="deleteSelected">
@@ -135,8 +135,8 @@
                 </div>
               </div>
               <div class="flex shrink-0 flex-wrap gap-2">
-                <ElButton size="small" class="min-w-20" @click="emit('export-item', item.id)">导出</ElButton>
-                <ElButton size="small" class="min-w-20" @click="emit('open-item', item.id)">打开</ElButton>
+                <ElButton size="small" plain class="min-w-20" @click="emit('export-item', item.id)">导出</ElButton>
+                <ElButton size="small" type="primary" plain class="min-w-20" @click="emit('open-item', item.id)">打开</ElButton>
               </div>
             </div>
           </article>

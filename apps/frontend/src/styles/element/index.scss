@@ -86,11 +86,11 @@ $--colors: (
   ),
   $button: (
     "font-weight": 500,
-    "hover-bg-color": #eaf3ff,
-    "hover-border-color": #9fc8fb,
-    "hover-text-color": #2f80ed,
-    "active-bg-color": #dcecff,
-    "active-border-color": #2f80ed,
+    "hover-bg-color": #e8f9fb,
+    "hover-border-color": #8ce0e8,
+    "hover-text-color": #2ec6d6,
+    "active-bg-color": #d9f4f7,
+    "active-border-color": #2ec6d6,
   ),
   $button-border-radius: (
     "large": 8px,
@@ -168,6 +168,17 @@ $--colors: (
 
 .el-button {
   letter-spacing: 0;
+}
+
+.el-button.is-plain {
+  --el-button-hover-bg-color: var(--app-cyan-soft);
+  --el-button-hover-border-color: var(--app-cyan);
+  --el-button-hover-text-color: var(--app-cyan);
+}
+
+.el-button.is-text {
+  --el-button-hover-bg-color: var(--app-cyan-soft);
+  --el-button-hover-text-color: var(--app-cyan);
 }
 
 .el-button--primary {

@@ -42,7 +42,8 @@
             placeholder="波次号"
           />
           <ElButton
-            class="h-10 rounded-xl bg-slate-950 px-4 text-sm text-white hover:bg-slate-800"
+            type="primary"
+            size="large"
             :disabled="isSearching"
             @click="handleSearch"
           >
@@ -134,7 +135,7 @@
                 </p>
               </div>
               <ElButton
-                class="rounded-full border-slate-200 bg-white px-4 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+                plain
                 :disabled="!selectedRunId || isLoadingSummary"
                 @click="refreshSelectedRun"
               >

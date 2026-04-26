@@ -136,14 +136,13 @@
         </p>
         <div class="flex items-center gap-2">
           <ElButton text
-            class="h-9 rounded-lg px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
             :disabled="!isRunning"
             @click="handleCancel"
           >
             停止
           </ElButton>
           <ElButton
-            class="h-9 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            type="primary"
             :disabled="isComposerDisabled || !draftMessage.trim()"
             @click="handleSend"
           >

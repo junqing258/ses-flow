@@ -26,14 +26,10 @@ const wrapperClass = computed(() =>
   isCompact.value ? "flex items-center gap-1.5" : "flex items-center gap-3",
 );
 const moreButtonClass = computed(() =>
-  isCompact.value
-    ? "h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-    : "h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700",
+  isCompact.value ? "" : "shadow-[0_10px_30px_rgba(15,23,42,0.05)]",
 );
 const settingsButtonClass = computed(() =>
-  isCompact.value
-    ? "h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-    : "h-10 rounded-full border-slate-200/80 bg-white/90 px-4 text-sm font-medium text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.05)] hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700",
+  isCompact.value ? "" : "shadow-[0_10px_30px_rgba(15,23,42,0.05)]",
 );
 const openRouteInNewTab = (location: RouteLocationRaw) => {
   const resolvedRoute = router.resolve(location);
@@ -52,6 +48,8 @@ const openHelp = () => {
       <span>
         <ElButton
           :text="isCompact"
+          :plain="!isCompact"
+          :circle="isCompact"
           :class="moreButtonClass"
           :aria-label="isCompact ? '更多菜单' : undefined"
         >
@@ -76,6 +74,8 @@ const openHelp = () => {
       <span>
         <ElButton
           :text="isCompact"
+          :plain="!isCompact"
+          :circle="isCompact"
           :class="settingsButtonClass"
           :aria-label="isCompact ? '设置' : undefined"
         >

@@ -56,27 +56,24 @@
       class="pointer-events-none absolute inset-x-0 top-4 z-20 flex h-14 items-center justify-between px-6"
     >
       <div class="flex items-center gap-3 pointer-events-auto">
-        <ElButton text
-          class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-          @click="handleBackToList"
-        >
+        <ElButton text circle @click="handleBackToList">
           <ChevronLeft class="h-5 w-5" />
         </ElButton>
-        <span class="text-[16px] font-semibold tracking-tight text-[var(--text)]">{{
-          workflowTitle
-        }}</span>
+        <span
+          class="text-[16px] font-semibold tracking-tight text-[var(--text)]"
+          >{{ workflowTitle }}</span
+        >
         <span
           class="rounded-full bg-[var(--app-accent-soft)]/75 px-2 py-0.5 text-[11px] font-semibold text-[var(--app-accent-text)]"
           >{{ workflowStatusLabel }}</span
         >
         <ElButton
           v-if="persistedWorkflowId"
- text
-          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
+          text
           @click="handleOpenWorkflowRuns"
         >
           <LoaderCircle class="h-3.5 w-3.5" />
-          <span class="mx-1">查看运行</span>
+          <span class="">查看运行</span>
           <span
             class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-[var(--app-primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
           >
@@ -123,21 +120,17 @@
       </div>
       <div class="flex items-center gap-1.5 pointer-events-auto">
         <WorkflowHeaderActionButtons appearance="compact" />
-        <ElButton text
-          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-        >
-          <Compass class="h-4 w-4 mr-1" />
+        <ElButton text>
+          <Compass class="h-4 w-4" />
           Evaluate
         </ElButton>
-        <ElButton text
-          class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
-          @click="handleExportJson"
-        >
-          <Code class="h-4 w-4 mr-1" />
+        <ElButton text @click="handleExportJson">
+          <Code class="h-4 w-4" />
           JSON
         </ElButton>
         <ElButton
-          class="ml-1 h-8 rounded-full bg-[var(--app-primary)] px-4 text-[13px] font-medium text-white shadow-sm hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
+          type="primary"
+          class="ml-1"
           :disabled="isPublishing"
           @click="handlePublish"
         >
@@ -240,7 +233,9 @@
         <div
           class="rounded-lg border border-[var(--panel-border)]/80 bg-[var(--panel-soft)]/90 p-3"
         >
-          <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
+          <p
+            class="text-xs font-semibold tracking-wide text-[var(--app-muted)]"
+          >
             触发载荷
           </p>
           <div
@@ -324,8 +319,12 @@
             "
           />
         </div>
-        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-3">
-          <div class="flex items-center justify-between text-xs text-[var(--app-muted)]">
+        <div
+          class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-3"
+        >
+          <div
+            class="flex items-center justify-between text-xs text-[var(--app-muted)]"
+          >
             <span class="font-semibold">执行预览</span>
             <span>{{ runnerWorkflowPreview.nodes.length }} nodes</span>
           </div>
@@ -347,7 +346,9 @@
       </div>
       <div class="shrink-0 border-t border-[var(--panel-border)]/55 px-4 py-4">
         <ElButton
-          class="h-10 w-full rounded-lg bg-[var(--app-primary)] text-sm font-medium text-white hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
+          type="primary"
+          size="large"
+          class="w-full"
           :disabled="isRunningWorkflow"
           @click="handleRunWorkflow"
         >
@@ -401,11 +402,7 @@
         :model-value="activeTab"
         @update:model-value="handleTabChange"
       >
-        <ElTabPane
-          v-for="tab in visibleTabs"
-          :key="tab"
-          :name="tab"
-        >
+        <ElTabPane v-for="tab in visibleTabs" :key="tab" :name="tab">
           <template #label>
             <span :data-tab-visible="`${tab}`" class="px-2 text-xs font-medium">
               {{ WORKFLOW_TAB_LABELS[tab] }}
@@ -621,10 +618,14 @@
         </button>
       </div>
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4">
+        <div
+          class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4"
+        >
           <div class="flex items-start justify-between gap-3">
             <div>
-              <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
+              <p
+                class="text-xs font-semibold tracking-wide text-[var(--app-muted)]"
+              >
                 运行状态
               </p>
               <p
@@ -683,10 +684,16 @@
         <WorkflowRunTimelineDetail
           :summary="activeRunSummary"
           :node-name-map="workflowNodeNameMap"
-          :workflow-key="activeRunSummary?.workflowKey ?? runnerWorkflowPreview.meta.key"
+          :workflow-key="
+            activeRunSummary?.workflowKey ?? runnerWorkflowPreview.meta.key
+          "
         />
-        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4">
-          <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
+        <div
+          class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4"
+        >
+          <p
+            class="text-xs font-semibold tracking-wide text-[var(--app-muted)]"
+          >
             State Snapshot
           </p>
           <pre
@@ -694,8 +701,12 @@
             >{{ runStatePreview }}</pre
           >
         </div>
-        <div class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4">
-          <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
+        <div
+          class="rounded-lg border border-[var(--panel-border)]/80 bg-white p-4"
+        >
+          <p
+            class="text-xs font-semibold tracking-wide text-[var(--app-muted)]"
+          >
             Last Output
           </p>
           <pre
@@ -1132,14 +1143,16 @@ const runOutputPreview = computed(() => {
 });
 const filteredCategories = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
-  return paletteCategories.value.map((category) => ({
-    ...category,
-    items: keyword
-      ? category.items.filter((item) =>
-          item.label.toLowerCase().includes(keyword),
-        )
-      : category.items,
-  })).filter((category) => category.items.length > 0);
+  return paletteCategories.value
+    .map((category) => ({
+      ...category,
+      items: keyword
+        ? category.items.filter((item) =>
+            item.label.toLowerCase().includes(keyword),
+          )
+        : category.items,
+    }))
+    .filter((category) => category.items.length > 0);
 });
 const paletteItemMap = computed<Record<string, WorkflowPaletteItem>>(() =>
   createWorkflowPaletteItemMap(paletteCategories.value),
@@ -2089,8 +2102,7 @@ const focusPaletteItem = (item: WorkflowPaletteItem) => {
     return;
   }
   const targetNode = nodes.value.find(
-    (node) =>
-      node.type !== "branch-chip" && matchesPaletteItem(item, node),
+    (node) => node.type !== "branch-chip" && matchesPaletteItem(item, node),
   );
   if (targetNode) {
     setSelectedNode(targetNode.id);
