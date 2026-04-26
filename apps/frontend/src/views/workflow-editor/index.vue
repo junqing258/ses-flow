@@ -36,7 +36,6 @@
           <WorkflowBranchChipNode v-bind="nodeProps" />
         </template>
       </VueFlow>
-
       <div class="pointer-events-none absolute inset-0 z-10">
         <div
           v-if="isCanvasDropTarget"
@@ -52,20 +51,17 @@
         </div>
       </div>
     </main>
-
     <!-- Floating Top Header -->
     <header
       class="pointer-events-none absolute inset-x-0 top-4 z-20 flex h-14 items-center justify-between px-6"
     >
       <div class="flex items-center gap-3 pointer-events-auto">
-        <Button
-          variant="ghost"
-          size="icon"
+        <ElButton text
           class="h-8 w-8 rounded-full text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleBackToList"
         >
           <ChevronLeft class="h-5 w-5" />
-        </Button>
+        </ElButton>
         <span class="text-[16px] font-semibold tracking-tight text-[var(--text)]">{{
           workflowTitle
         }}</span>
@@ -73,9 +69,9 @@
           class="rounded-full bg-[var(--app-accent-soft)]/75 px-2 py-0.5 text-[11px] font-semibold text-[var(--app-accent-text)]"
           >{{ workflowStatusLabel }}</span
         >
-        <Button
+        <ElButton
           v-if="persistedWorkflowId"
-          variant="ghost"
+ text
           class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleOpenWorkflowRuns"
         >
@@ -86,9 +82,8 @@
           >
             {{ workflowRunCount }}
           </span>
-        </Button>
+        </ElButton>
       </div>
-
       <div
         class="pointer-events-auto absolute left-1/2 flex h-9 -translate-x-1/2 items-center rounded-full bg-white/92 p-1 shadow-sm ring-1 ring-[var(--panel-border)]"
       >
@@ -126,34 +121,30 @@
           <Bot class="h-3.5 w-3.5" />
         </button>
       </div>
-
       <div class="flex items-center gap-1.5 pointer-events-auto">
         <WorkflowHeaderActionButtons appearance="compact" />
-        <Button
-          variant="ghost"
+        <ElButton text
           class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
         >
           <Compass class="h-4 w-4" />
           Evaluate
-        </Button>
-        <Button
-          variant="ghost"
+        </ElButton>
+        <ElButton text
           class="h-8 gap-1.5 rounded-full px-3 text-sm font-medium text-[var(--app-muted)] hover:bg-[var(--app-primary-soft)]"
           @click="handleExportJson"
         >
           <Code class="h-4 w-4" />
           JSON
-        </Button>
-        <Button
+        </ElButton>
+        <ElButton
           class="ml-1 h-8 rounded-full bg-[var(--app-primary)] px-4 text-[13px] font-medium text-white shadow-sm hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="isPublishing"
           @click="handlePublish"
         >
           {{ publishButtonLabel }}
-        </Button>
+        </ElButton>
       </div>
     </header>
-
     <WorkflowRunListDialog
       :open="isWorkflowRunListOpen"
       :workflow-id="persistedWorkflowId ?? ''"
@@ -161,7 +152,6 @@
       @update:open="handleWorkflowRunListOpenChange"
       @select-run="handleOpenWorkflowRunFromList"
     />
-
     <WorkflowAiChatPanel
       v-if="isAiMode"
       :runner-base-url="assistantRunnerBaseUrl"
@@ -173,7 +163,6 @@
       :visibility-class="rightAsideVisibilityClass"
       :workflow-id="persistedWorkflowId"
     />
-
     <!-- Floating Left Panel -->
     <aside
       v-if="isEditMode"
@@ -228,7 +217,6 @@
         </div>
       </div>
     </aside>
-
     <aside
       v-else
       ref="leftCanvasAsideRef"
@@ -248,7 +236,6 @@
           >{{ runnerTriggerSummaryLabel }}</span
         >
       </div>
-
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <div
           class="rounded-[18px] border border-[var(--panel-border)]/80 bg-[var(--panel-soft)]/90 p-3"
@@ -289,7 +276,6 @@
             body`，方便模拟真实入口。
           </p>
         </div>
-
         <div class="space-y-1.5">
           <label
             class="block text-xs font-semibold tracking-wide text-[var(--app-muted)]"
@@ -306,7 +292,6 @@
             "
           />
         </div>
-
         <div v-if="runDraft.triggerMode === 'webhook'" class="space-y-1.5">
           <label
             class="block text-xs font-semibold tracking-wide text-[var(--app-muted)]"
@@ -323,7 +308,6 @@
             "
           />
         </div>
-
         <div class="space-y-1.5">
           <label
             class="block text-xs font-semibold tracking-wide text-[var(--app-muted)]"
@@ -340,7 +324,6 @@
             "
           />
         </div>
-
         <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-3">
           <div class="flex items-center justify-between text-xs text-[var(--app-muted)]">
             <span class="font-semibold">执行预览</span>
@@ -362,9 +345,8 @@
           </div>
         </div>
       </div>
-
       <div class="shrink-0 border-t border-[var(--panel-border)]/55 px-4 py-4">
-        <Button
+        <ElButton
           class="h-10 w-full rounded-full bg-[var(--app-primary)] text-sm font-medium text-white hover:bg-[#354a56] disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="isRunningWorkflow"
           @click="handleRunWorkflow"
@@ -372,14 +354,13 @@
           <LoaderCircle v-if="isRunningWorkflow" class="h-4 w-4 animate-spin" />
           <Play v-else class="h-4 w-4" />
           {{ runActionLabel }}
-        </Button>
+        </ElButton>
         <p class="mt-2 text-[11px] leading-5 text-[#7a7f86]">
           运行不会自动发布正式版本，但会把当前画布同步到 Runner
           进行一次最新执行。
         </p>
       </div>
     </aside>
-
     <!-- Floating Right Properties Panel -->
     <aside
       v-if="isEditMode && selectedNodeId"
@@ -399,7 +380,6 @@
             class="h-4.5 w-4.5"
           />
         </div>
-
         <div class="min-w-0 flex-1 px-1">
           <p class="truncate text-[14px] font-semibold text-[var(--text)]">
             {{ selectedNodeData.subtitle ?? selectedNodeData.title }}
@@ -408,7 +388,6 @@
             {{ selectedNodeData.title }}
           </p>
         </div>
-
         <button
           type="button"
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#7a7f86] transition-colors hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-muted)]"
@@ -417,33 +396,22 @@
           <MoreHorizontal class="h-4 w-4" />
         </button>
       </div>
-
-      <Tabs
+      <ElTabs
         class="flex min-h-0 flex-1 flex-col"
         :model-value="activeTab"
         @update:model-value="handleTabChange"
       >
-        <div class="border-b border-[var(--panel-border)]/55 px-4">
-          <TabsList class="mt-1 mb-2 h-10 w-full rounded-lg bg-[var(--app-primary-soft)]/80 p-1">
-            <TabsTrigger
-              v-for="tab in visibleTabs"
-              :key="tab"
-              :value="tab"
-              :data-tab-visible="`${tab}`"
-              class="rounded-md px-3 text-xs font-medium data-[state=active]:bg-white data-[state=active]:text-[var(--text)] data-[state=active]:shadow-sm"
-            >
+        <ElTabPane
+          v-for="tab in visibleTabs"
+          :key="tab"
+          :name="tab"
+        >
+          <template #label>
+            <span :data-tab-visible="`${tab}`" class="px-2 text-xs font-medium">
               {{ WORKFLOW_TAB_LABELS[tab] }}
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <TabsContent
-            v-for="tab in visibleTabs"
-            :key="tab"
-            :value="tab"
-            class="m-0 h-full"
-          >
+            </span>
+          </template>
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div
               v-if="
                 getFieldsForTab(tab).length ||
@@ -475,7 +443,6 @@
                     添加分支
                   </button>
                 </div>
-
                 <div
                   v-for="branch in selectedSwitchBranches"
                   :key="branch.id"
@@ -488,7 +455,7 @@
                       >
                         分支标签
                       </label>
-                      <Input
+                      <ElInput
                         :model-value="branch.label"
                         class="h-9 rounded-lg border-[var(--panel-border)] bg-white px-3 text-sm shadow-none focus-visible:border-[var(--app-accent-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent-soft)]"
                         @update:model-value="
@@ -499,7 +466,6 @@
                         "
                       />
                     </div>
-
                     <button
                       type="button"
                       class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50"
@@ -517,7 +483,6 @@
                     >
                       <Check class="h-4 w-4" />
                     </button>
-
                     <button
                       type="button"
                       class="mt-6 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--panel-border)] bg-white text-[#7a7f86] transition-colors hover:border-[var(--danger-border)] hover:text-[var(--danger-text)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -530,7 +495,6 @@
                   </div>
                 </div>
               </div>
-
               <div
                 v-for="field in getFieldsForTab(tab)"
                 :key="`${tab}-${field.key}`"
@@ -551,8 +515,7 @@
                     打开子工作流
                   </a>
                 </label>
-
-                <Input
+                <ElInput
                   v-if="field.type === 'input'"
                   :model-value="field.value"
                   class="h-9 rounded-lg border-[var(--panel-border)] bg-white px-3 text-sm shadow-none focus-visible:border-[var(--app-accent-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent-soft)]"
@@ -560,7 +523,6 @@
                     handleFieldUpdate(tab, field.key, String($event))
                   "
                 />
-
                 <div v-else-if="field.type === 'select'" class="relative">
                   <select
                     :value="field.value"
@@ -585,7 +547,6 @@
                     class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a7f86]"
                   />
                 </div>
-
                 <textarea
                   v-else-if="field.type === 'textarea'"
                   :value="field.value"
@@ -598,7 +559,6 @@
                     )
                   "
                 />
-
                 <div
                   v-else
                   class="flex h-9 items-center justify-between rounded-lg border px-3 text-sm"
@@ -612,18 +572,16 @@
                 </div>
               </div>
             </div>
-
             <div
               v-else
               class="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-[var(--panel-border)] bg-[var(--panel-soft)]/70 px-6 text-center text-xs leading-5 text-[#7a7f86]"
             >
               {{ WORKFLOW_EMPTY_TAB_TEXT[tab] }}
             </div>
-          </TabsContent>
-        </div>
-      </Tabs>
+          </div>
+        </ElTabPane>
+      </ElTabs>
     </aside>
-
     <aside
       v-else-if="isRunMode"
       class="pointer-events-auto absolute right-6 top-24 bottom-auto z-10 flex max-h-[calc(100vh-7.5rem)] w-90 flex-col overflow-hidden rounded-[20px] bg-white/92 backdrop-blur shadow-sm ring-1 ring-[var(--panel-border)]/80"
@@ -662,7 +620,6 @@
           />
         </button>
       </div>
-
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
           <div class="flex items-start justify-between gap-3">
@@ -683,7 +640,6 @@
               {{ activeRunStatusLabel }}
             </span>
           </div>
-
           <button
             type="button"
             class="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[var(--danger-border)] px-3 text-sm font-medium text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)] disabled:cursor-not-allowed disabled:border-[var(--panel-border)] disabled:text-[#7a7f86] disabled:hover:bg-transparent"
@@ -697,7 +653,6 @@
             <Square v-else class="h-4 w-4" />
             {{ isTerminatingWorkflow ? "终止中..." : "终止运行" }}
           </button>
-
           <div class="mt-4 space-y-2 text-xs text-[var(--app-muted)]">
             <div class="flex items-center justify-between gap-3">
               <span>Workflow ID</span>
@@ -718,7 +673,6 @@
               }}</span>
             </div>
           </div>
-
           <p
             v-if="runErrorMessage"
             class="mt-4 rounded-[14px] bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700"
@@ -726,13 +680,11 @@
             {{ runErrorMessage }}
           </p>
         </div>
-
         <WorkflowRunTimelineDetail
           :summary="activeRunSummary"
           :node-name-map="workflowNodeNameMap"
           :workflow-key="activeRunSummary?.workflowKey ?? runnerWorkflowPreview.meta.key"
         />
-
         <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
           <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             State Snapshot
@@ -742,7 +694,6 @@
             >{{ runStatePreview }}</pre
           >
         </div>
-
         <div class="rounded-[18px] border border-[var(--panel-border)]/80 bg-white p-4">
           <p class="text-xs font-semibold tracking-wide text-[var(--app-muted)]">
             Last Output
@@ -754,7 +705,6 @@
         </div>
       </div>
     </aside>
-
     <!-- Floating Bottom Control Toolbar -->
     <div
       v-if="isEditMode"
@@ -783,7 +733,6 @@
         <Redo2 class="h-4 w-4" />
       </button>
     </div>
-
     <div
       v-if="isLoadingWorkflow"
       class="absolute inset-0 z-30 flex items-center justify-center bg-white/55 backdrop-blur-[2px]"
@@ -796,7 +745,6 @@
     </div>
   </section>
 </template>
-
 <script setup lang="ts">
 import {
   computed,
@@ -838,8 +786,7 @@ import {
   Webhook,
 } from "lucide-vue-next";
 import { type LocationQueryValue, useRoute, useRouter } from "vue-router";
-import { toast } from "vue-sonner";
-
+import { toast } from "@/lib/element-toast";
 import WorkflowAiChatPanel from "@/components/workflow/WorkflowAiChatPanel.vue";
 import WorkflowBranchChipNode from "@/components/workflow/WorkflowBranchChipNode.vue";
 import WorkflowCanvasNode from "@/components/workflow/WorkflowCanvasNode.vue";
@@ -848,9 +795,6 @@ import WorkflowHeaderActionButtons from "@/components/workflow/WorkflowHeaderAct
 import WorkflowRunTimelineDetail from "@/components/workflow/WorkflowRunTimelineDetail.vue";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
 import WorkflowTerminalNode from "@/components/workflow/WorkflowTerminalNode.vue";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   fetchNodeDescriptors,
   fetchWorkflowList,
@@ -924,7 +868,6 @@ import {
   type WorkflowTabId,
 } from "@/features/workflow/model";
 import type { EventSourceSubscription } from "@/lib/sse";
-
 const DRAG_DATA_TYPE = "application/x-ses-workflow-node";
 const HISTORY_LIMIT = 50;
 const DEFAULT_WORKFLOW_ID = "sorting-main-flow";
@@ -933,7 +876,6 @@ const RUN_SUMMARY_RESYNC_DELAY_MS = 1500;
 const CANVAS_FIT_BASE_PADDING_PERCENT = 20;
 const CANVAS_LEFT_ASIDE_GAP_PX = 24;
 const CANVAS_LEFT_PADDING_MAX_RATIO = 0.45;
-
 const route = useRoute();
 const router = useRouter();
 const initialEditorState = createInitialWorkflowEditorState();
@@ -990,10 +932,8 @@ let pendingFlowRemovalSync: {
 const getRouteWorkflowId = (value: string | string[] | undefined) => {
   const routeValue = Array.isArray(value) ? value[0] : value;
   const normalizedValue = routeValue?.trim();
-
   return normalizedValue || DEFAULT_WORKFLOW_ID;
 };
-
 const workflowMeta = reactive({
   id: getRouteWorkflowId(route.params.id as string | string[] | undefined),
   name: "sorting-main-flow",
@@ -1016,14 +956,12 @@ const { fitView, onPaneReady, screenToFlowCoordinate } =
   useVueFlow(WORKFLOW_FLOW_ID);
 const isCanvasPaneReady = ref(false);
 const shouldResetCanvasViewport = ref(false);
-
 const canvasTools = [
   { id: "select", icon: "mousePointer" as WorkflowIconKey },
   { id: "pan", icon: "hand" as WorkflowIconKey },
   { id: "fit", icon: "maximize" as WorkflowIconKey },
   { id: "lock", icon: "lock" as WorkflowIconKey },
 ];
-
 const EMPTY_NODE_DATA: WorkflowNodeData = {
   accent: "#2ec5d5",
   executionStatus: undefined,
@@ -1033,7 +971,6 @@ const EMPTY_NODE_DATA: WorkflowNodeData = {
   subtitle: "请选择节点",
   title: "未选择节点",
 };
-
 interface WorkflowEditorSnapshot {
   activeTab: WorkflowTabId;
   edges: Edge[];
@@ -1041,7 +978,6 @@ interface WorkflowEditorSnapshot {
   panelByNodeId: Record<string, WorkflowNodePanel>;
   selectedNodeId: string;
 }
-
 const selectedNodeData = ref<WorkflowNodeData>(EMPTY_NODE_DATA);
 const selectedPanel = computed(() => panelByNodeId.value[selectedNodeId.value]);
 const visibleTabs = computed(() => selectedPanel.value?.tabs ?? ["base"]);
@@ -1055,7 +991,6 @@ const rightAsideVisibilityClass = computed(() => {
   if (isAiMode.value) {
     return "opacity-100";
   }
-
   return isViewportResetting.value
     ? "opacity-0 pointer-events-none"
     : "opacity-100";
@@ -1085,7 +1020,6 @@ const selectableSubWorkflowOptions = computed(() => {
           : `${workflow.name} · ${workflow.workflowKey} · ${workflow.version}`,
       value: workflow.workflowId,
     }));
-
   return [{ label: "请选择子工作流", value: "" }, ...options];
 });
 const workflowStatusLabel = computed(() =>
@@ -1151,7 +1085,6 @@ const runnerTriggerSummaryLabel = computed(() => {
       ? "Webhook Trigger · Sync"
       : "Webhook Trigger · Async Ack";
   }
-
   return "Manual Trigger";
 });
 const activeRunStatus = computed<WorkflowRunStatus | null>(
@@ -1197,10 +1130,8 @@ const runOutputPreview = computed(() => {
   const lastItem = runTimeline.value[runTimeline.value.length - 1];
   return formatJsonPreview(lastItem?.output ?? {});
 });
-
 const filteredCategories = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
-
   return paletteCategories.value.map((category) => ({
     ...category,
     items: keyword
@@ -1210,11 +1141,9 @@ const filteredCategories = computed(() => {
       : category.items,
   })).filter((category) => category.items.length > 0);
 });
-
 const paletteItemMap = computed<Record<string, WorkflowPaletteItem>>(() =>
   createWorkflowPaletteItemMap(paletteCategories.value),
 );
-
 watch(
   visibleTabs,
   (tabs) => {
@@ -1224,31 +1153,24 @@ watch(
   },
   { immediate: true },
 );
-
 const isSwitchBranchField = (fieldKey: string) =>
   fieldKey.startsWith("branch:");
-
 const getFieldsForTab = (tab: WorkflowTabId) => {
   const fields =
     panelByNodeId.value[selectedNodeId.value]?.fieldsByTab[tab] ?? [];
-
   if (!isSelectedSwitchNode.value) {
     return fields;
   }
-
   return fields.filter((field) => {
     if (tab === "base" && field.key === "fallback") {
       return false;
     }
-
     if (tab === "mapping" && isSwitchBranchField(field.key)) {
       return false;
     }
-
     return true;
   });
 };
-
 const getFieldSelectOptions = (field: WorkflowField) => {
   if (
     (selectedNodeData.value.kind === "sub-workflow" ||
@@ -1261,29 +1183,23 @@ const getFieldSelectOptions = (field: WorkflowField) => {
       selectableSubWorkflowOptions.value,
     );
   }
-
   return getWorkflowFieldSelectOptions(selectedPanel.value, field);
 };
-
 const isSubWorkflowReferenceField = (field: WorkflowField) =>
   selectedNodeData.value.kind === "sub-workflow" &&
   field.type === "select" &&
   field.key === "workflowRef";
-
 const getSubWorkflowLinkHref = (field: WorkflowField) => {
   if (!isSubWorkflowReferenceField(field)) {
     return "";
   }
-
   const workflowId = resolveWorkflowReferenceId(
     field.value,
     workflowSummaries.value,
   );
-
   if (!workflowId) {
     return "";
   }
-
   return router.resolve({
     name: "workflow-editor",
     params: {
@@ -1291,37 +1207,30 @@ const getSubWorkflowLinkHref = (field: WorkflowField) => {
     },
   }).href;
 };
-
 const syncBranchHandleNodes = (nodeId?: string) => {
   nodes.value = nodes.value.map((node) => {
     if (node.data.kind !== "switch" && node.data.kind !== "if-else") {
       return node;
     }
-
     if (nodeId && node.id !== nodeId) {
       return node;
     }
-
     return syncBranchHandlesForNode(node, panelByNodeId.value[node.id]);
   }) as WorkflowFlowNode[];
   syncSelectedNodeData();
 };
-
 const getNextSwitchBranchHandleId = (panel: WorkflowNodePanel) => {
   const existingHandleIds = new Set(
     getSwitchBranches(panel).map((branch) => branch.id),
   );
   let index = existingHandleIds.size;
   let nextHandleId = createSwitchBranchHandleId(index);
-
   while (existingHandleIds.has(nextHandleId)) {
     index += 1;
     nextHandleId = createSwitchBranchHandleId(index);
   }
-
   return nextHandleId;
 };
-
 const getNextSwitchBranchLabel = (panel: WorkflowNodePanel) => {
   const existingLabels = new Set(
     getSwitchBranches(panel).map((branch) => branch.label),
@@ -1329,43 +1238,34 @@ const getNextSwitchBranchLabel = (panel: WorkflowNodePanel) => {
   let index = existingLabels.size;
   let nextLabel =
     index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
-
   while (existingLabels.has(nextLabel)) {
     index += 1;
     nextLabel =
       index < 26 ? String.fromCharCode(65 + index) : `Branch ${index + 1}`;
   }
-
   return nextLabel;
 };
-
 const handleBackToList = () => {
   void router.push({ name: "workflow-list" });
 };
-
 const handleOpenWorkflowRuns = () => {
   if (!persistedWorkflowId.value) {
     return;
   }
-
   isWorkflowRunListOpen.value = true;
 };
-
 const ensureAssistantSessionForAiMode = async () => {
   if (isCreatingAssistantSession.value) {
     return;
   }
-
   if (assistantSession.value?.sessionId) {
     await refreshAssistantSessionPreview(assistantSession.value.sessionId, {
       silent: true,
     });
     return;
   }
-
   isCreatingAssistantSession.value = true;
   assistantSessionError.value = "";
-
   try {
     const session = await createWorkflowEditSession({
       editorDocument: buildCurrentEditorDocument({
@@ -1374,7 +1274,6 @@ const ensureAssistantSessionForAiMode = async () => {
       workflow: runnerWorkflowPreview.value,
       workflowId: persistedWorkflowId.value,
     });
-
     assistantSession.value = session;
     applyAssistantSessionPreview(session);
     ensureAssistantSessionEventStream(session.sessionId);
@@ -1387,16 +1286,13 @@ const ensureAssistantSessionForAiMode = async () => {
     isCreatingAssistantSession.value = false;
   }
 };
-
 const handleWorkflowRunListOpenChange = (open: boolean) => {
   isWorkflowRunListOpen.value = open;
 };
-
 const handleOpenWorkflowRunFromList = (runId: string) => {
   if (!persistedWorkflowId.value) {
     return;
   }
-
   void router.push({
     name: "workflow-editor",
     params: {
@@ -1407,13 +1303,10 @@ const handleOpenWorkflowRunFromList = (runId: string) => {
     },
   });
 };
-
 const resetCanvasViewport = async () => {
   isViewportResetting.value = true;
-
   try {
     await new Promise<void>((resolve) => setTimeout(resolve, 16));
-
     const asideRect = leftCanvasAsideRef.value?.getBoundingClientRect();
     const viewportWidth = window.innerWidth || 0;
     const leftPaddingPx = asideRect
@@ -1425,7 +1318,6 @@ const resetCanvasViewport = async () => {
           ),
         )
       : 0;
-
     await fitView({
       padding: {
         top: `${CANVAS_FIT_BASE_PADDING_PERCENT}%`,
@@ -1442,23 +1334,19 @@ const resetCanvasViewport = async () => {
     isViewportResetting.value = false;
   }
 };
-
 const queueCanvasViewportReset = () => {
   if (!isCanvasPaneReady.value) {
     shouldResetCanvasViewport.value = true;
     return;
   }
-
   if (viewportResetTimer !== null) {
     window.clearTimeout(viewportResetTimer);
   }
-
   viewportResetTimer = window.setTimeout(() => {
     viewportResetTimer = null;
     void resetCanvasViewport();
   }, 0);
 };
-
 const buildCurrentEditorDocument = (
   overrides: Partial<{
     pageMode: WorkflowPageMode;
@@ -1480,12 +1368,10 @@ const buildCurrentEditorDocument = (
       workflowName: workflowMeta.name,
     },
   );
-
 const applyAssistantSessionPreview = (session: WorkflowEditSession) => {
   const nextState = session.editorDocument
     ? createWorkflowEditorStateFromDocument(session.editorDocument)
     : createWorkflowEditorStateFromRunnerDefinition(session.workflow);
-
   workflowMeta.id = session.workflowId?.trim() || workflowMeta.id;
   workflowMeta.name = session.workflow.meta.name ?? workflowMeta.name;
   workflowMeta.status =
@@ -1494,29 +1380,24 @@ const applyAssistantSessionPreview = (session: WorkflowEditSession) => {
   applyWorkflowEditorState(nextState);
   pageMode.value = "ai";
 };
-
 const clearAssistantSessionPolling = () => {
   if (assistantSessionPollTimer !== null) {
     window.clearTimeout(assistantSessionPollTimer);
     assistantSessionPollTimer = null;
   }
 };
-
 const closeAssistantSessionEventStream = () => {
   assistantSessionEventSubscription?.close();
   assistantSessionEventSubscription = null;
 };
-
 const scheduleAssistantSessionPolling = (
   sessionId: string,
   delay = ASSISTANT_SESSION_POLL_INTERVAL_MS,
 ) => {
   clearAssistantSessionPolling();
-
   if (!isAiMode.value || assistantSession.value?.sessionId !== sessionId) {
     return;
   }
-
   assistantSessionPollTimer = window.setTimeout(() => {
     assistantSessionPollTimer = null;
     void refreshAssistantSessionPreview(sessionId, {
@@ -1524,16 +1405,13 @@ const scheduleAssistantSessionPolling = (
     });
   }, delay);
 };
-
 const ensureAssistantSessionEventStream = (sessionId: string) => {
   if (!isAiMode.value || assistantSession.value?.sessionId !== sessionId) {
     return;
   }
-
   if (assistantSessionEventSubscription) {
     return;
   }
-
   assistantConnectionState.value =
     assistantConnectionState.value === "live" ? "live" : "connecting";
   assistantSessionEventSubscription = subscribeWorkflowEditSessionEvents(
@@ -1543,7 +1421,6 @@ const ensureAssistantSessionEventStream = (sessionId: string) => {
         if (assistantSession.value?.sessionId !== sessionId) {
           return;
         }
-
         clearAssistantSessionPolling();
         assistantConnectionState.value = "live";
       },
@@ -1551,7 +1428,6 @@ const ensureAssistantSessionEventStream = (sessionId: string) => {
         if (assistantSession.value?.sessionId !== sessionId) {
           return;
         }
-
         assistantConnectionState.value = "reconnecting";
         scheduleAssistantSessionPolling(sessionId);
       },
@@ -1559,25 +1435,21 @@ const ensureAssistantSessionEventStream = (sessionId: string) => {
         if (assistantSession.value?.sessionId !== sessionId) {
           return;
         }
-
         if (notification.eventType === "stream.connected") {
           assistantConnectionState.value = "live";
           return;
         }
-
         void refreshAssistantSessionPreview(sessionId, {
           silent: true,
         });
       },
     },
   );
-
   if (!assistantSessionEventSubscription) {
     assistantConnectionState.value = "idle";
     scheduleAssistantSessionPolling(sessionId);
   }
 };
-
 const refreshAssistantSessionPreview = async (
   sessionId: string,
   options: {
@@ -1587,16 +1459,12 @@ const refreshAssistantSessionPreview = async (
   if (assistantSessionPollInFlight) {
     return;
   }
-
   assistantSessionPollInFlight = true;
-
   try {
     const session = await fetchWorkflowEditSession(sessionId);
-
     if (assistantSession.value?.sessionId !== sessionId) {
       return;
     }
-
     assistantSession.value = session;
     applyAssistantSessionPreview(session);
     assistantSessionError.value = "";
@@ -1608,14 +1476,11 @@ const refreshAssistantSessionPreview = async (
     if (assistantSession.value?.sessionId !== sessionId) {
       return;
     }
-
     assistantSessionError.value =
       error instanceof Error ? error.message : "拉取 AI 会话预览失败";
-
     if (!options.silent) {
       toast.error(assistantSessionError.value);
     }
-
     if (isAiMode.value) {
       assistantConnectionState.value = "reconnecting";
       scheduleAssistantSessionPolling(sessionId);
@@ -1624,7 +1489,6 @@ const refreshAssistantSessionPreview = async (
     assistantSessionPollInFlight = false;
   }
 };
-
 const resetAssistantSession = () => {
   closeAssistantSessionEventStream();
   clearAssistantSessionPolling();
@@ -1632,7 +1496,6 @@ const resetAssistantSession = () => {
   assistantSessionError.value = "";
   assistantConnectionState.value = "idle";
 };
-
 const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   nodes.value = state.nodes;
   edges.value = state.edges;
@@ -1643,14 +1506,11 @@ const applyWorkflowEditorState = (state: WorkflowEditorState) => {
   historyStack.value = [];
   syncBranchHandleNodes();
   setSelectedNode(state.selectedNodeId);
-
   if (activeRunSummary.value && activeRunWorkflowId.value === workflowMeta.id) {
     setNodeExecutionStatuses(activeRunSummary.value);
   }
-
   queueCanvasViewportReset();
 };
-
 const updateNodeExecutionStatus = (
   node: WorkflowFlowNode,
   statusByNodeId: Map<string, WorkflowExecutionStatus>,
@@ -1665,26 +1525,21 @@ const updateNodeExecutionStatus = (
   };
   return newNode;
 };
-
 const setNodeExecutionStatuses = (summary: WorkflowRunSummary | null) => {
   const statusByNodeId = new Map<string, WorkflowExecutionStatus>();
-
   if (summary) {
     summary.timeline.forEach((item) => {
       statusByNodeId.set(item.nodeId, item.status as WorkflowExecutionStatus);
     });
-
     if (summary.status === "running" && summary.currentNodeId) {
       statusByNodeId.set(summary.currentNodeId, "running");
     }
   }
-
   nodes.value = nodes.value.map((node) =>
     updateNodeExecutionStatus(node, statusByNodeId),
   );
   syncSelectedNodeData();
 };
-
 const resetRunSession = () => {
   closeRunSummaryEventStream();
   clearRunSummaryPolling();
@@ -1695,12 +1550,10 @@ const resetRunSession = () => {
   runErrorMessage.value = "";
   setNodeExecutionStatuses(null);
 };
-
 const resetToInitialWorkflow = () => {
   const nextState = clearWorkflowEditorSelection(
     createNewWorkflowEditorState(),
   );
-
   workflowMeta.id = DEFAULT_WORKFLOW_ID;
   workflowMeta.name = DEFAULT_WORKFLOW_ID;
   workflowMeta.status = "draft";
@@ -1711,24 +1564,19 @@ const resetToInitialWorkflow = () => {
   resetRunSession();
   applyWorkflowEditorState(nextState);
 };
-
 const getRouteRunId = (
   value: LocationQueryValue | LocationQueryValue[] | undefined,
 ) => {
   const normalizedValue = Array.isArray(value) ? value[0] : value;
-
   return typeof normalizedValue === "string" && normalizedValue.trim()
     ? normalizedValue.trim()
     : "";
 };
-
 const clearRouteRunId = async (workflowId: string) => {
   if (route.name !== "workflow-editor") {
     return;
   }
-
   const { runId: _ignoredRunId, ...restQuery } = route.query;
-
   await router.replace({
     name: "workflow-editor",
     params: {
@@ -1737,7 +1585,6 @@ const clearRouteRunId = async (workflowId: string) => {
     query: restQuery,
   });
 };
-
 const restoreWorkflowRunFromRoute = async (
   workflowId: string,
   expectedWorkflowKey: string,
@@ -1746,7 +1593,6 @@ const restoreWorkflowRunFromRoute = async (
 ) => {
   try {
     const summary = await fetchWorkflowRunSummary(requestedRunId);
-
     if (
       summary.workflowKey !== expectedWorkflowKey ||
       summary.workflowVersion !== expectedWorkflowVersion
@@ -1756,12 +1602,10 @@ const restoreWorkflowRunFromRoute = async (
       await clearRouteRunId(workflowId);
       return;
     }
-
     if (activeRunId.value && activeRunId.value !== summary.runId) {
       closeRunSummaryEventStream();
       clearRunSummaryPolling();
     }
-
     activeRunWorkflowId.value = workflowId;
     activeRunId.value = summary.runId;
     activeRunSummary.value = summary;
@@ -1770,13 +1614,11 @@ const restoreWorkflowRunFromRoute = async (
     isTerminatingWorkflow.value = false;
     setNodeExecutionStatuses(summary);
     selectRunFocusedNode(summary);
-
     if (shouldPollWorkflowRunSummary(summary.status)) {
       ensureRunSummaryEventStream(summary.runId);
       await refreshRunSummary({ silent: true });
       return;
     }
-
     closeRunSummaryEventStream();
     clearRunSummaryPolling();
   } catch (error) {
@@ -1787,17 +1629,14 @@ const restoreWorkflowRunFromRoute = async (
     await clearRouteRunId(workflowId);
   }
 };
-
 const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
   isLoadingWorkflow.value = true;
-
   if (
     assistantSession.value?.workflowId &&
     assistantSession.value.workflowId !== workflowId
   ) {
     resetAssistantSession();
   }
-
   try {
     await loadNodeDescriptorRegistry(false);
     const workflow = await fetchWorkflowDetail(workflowId);
@@ -1817,11 +1656,9 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
                   paletteCategories.value,
                 ),
           );
-
     if (activeRunWorkflowId.value && activeRunWorkflowId.value !== workflowId) {
       resetRunSession();
     }
-
     workflowMeta.id = workflow.workflowId;
     workflowMeta.name = workflow.name;
     workflowMeta.status = workflow.status;
@@ -1830,7 +1667,6 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
     closeWorkflowRunCountEventStream();
     ensureWorkflowRunCountEventStream(workflow.workflowId);
     applyWorkflowEditorState(nextState);
-
     if (requestedRunId) {
       await restoreWorkflowRunFromRoute(
         workflowId,
@@ -1840,12 +1676,9 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
       );
       return;
     }
-
     pageMode.value = "edit";
     queueCanvasViewportReset();
-
     clearRunSummaryPolling();
-
     if (activeRunSummary.value && activeRunWorkflowId.value === workflowId) {
       setNodeExecutionStatuses(activeRunSummary.value);
     }
@@ -1856,7 +1689,6 @@ const loadWorkflowDetail = async (workflowId: string, requestedRunId = "") => {
     isLoadingWorkflow.value = false;
   }
 };
-
 const loadSelectableWorkflows = async (silent = true) => {
   try {
     workflowSummaries.value = await fetchWorkflowList();
@@ -1868,7 +1700,6 @@ const loadSelectableWorkflows = async (silent = true) => {
     }
   }
 };
-
 const loadNodeDescriptorRegistry = async (silent = true) => {
   try {
     nodeDescriptors.value = await fetchNodeDescriptors();
@@ -1880,7 +1711,6 @@ const loadNodeDescriptorRegistry = async (silent = true) => {
     }
   }
 };
-
 const handleTabChange = (value: string | number) => {
   if (
     typeof value === "string" &&
@@ -1889,41 +1719,33 @@ const handleTabChange = (value: string | number) => {
     activeTab.value = value as WorkflowTabId;
   }
 };
-
 const handlePageModeChange = (mode: WorkflowPageMode) => {
   if (mode === "edit") {
     resetRunSession();
     closeAssistantSessionEventStream();
     clearAssistantSessionPolling();
-
     if (getRouteRunId(route.query.runId)) {
       void clearRouteRunId(workflowMeta.id);
     }
   }
-
   if (mode === "run") {
     closeAssistantSessionEventStream();
     clearAssistantSessionPolling();
   }
-
   pageMode.value = mode;
-
   if (mode === "ai") {
     resetRunSession();
     void ensureAssistantSessionForAiMode();
   }
-
   void nextTick().then(() => {
     queueCanvasViewportReset();
   });
 };
-
 const syncSelectedNodeData = () => {
   selectedNodeData.value =
     nodes.value.find((node) => node.id === selectedNodeId.value)?.data ??
     EMPTY_NODE_DATA;
 };
-
 watch(
   [() => route.name, () => route.params.id],
   async ([routeName, routeWorkflowId]) => {
@@ -1938,12 +1760,10 @@ watch(
       );
       return;
     }
-
     resetToInitialWorkflow();
   },
   { immediate: true },
 );
-
 watch(
   () => getRouteRunId(route.query.runId),
   async (requestedRunId, previousRunId) => {
@@ -1957,7 +1777,6 @@ watch(
     ) {
       return;
     }
-
     await restoreWorkflowRunFromRoute(
       route.params.id,
       runnerWorkflowPreview.value.meta.key,
@@ -1966,7 +1785,6 @@ watch(
     );
   },
 );
-
 const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
   active: data.active,
   accent: data.accent,
@@ -1983,7 +1801,6 @@ const cloneWorkflowNodeData = (data: WorkflowNodeData): WorkflowNodeData => ({
   subtitle: data.subtitle,
   title: data.title,
 });
-
 const cloneWorkflowNodes = (sourceNodes: WorkflowFlowNode[]) =>
   sourceNodes.map<WorkflowFlowNode>((node) => ({
     data: cloneWorkflowNodeData(node.data),
@@ -2000,24 +1817,20 @@ const cloneWorkflowNodes = (sourceNodes: WorkflowFlowNode[]) =>
     targetPosition: node.targetPosition,
     type: node.type,
   }));
-
 const cloneEdgeStyle = (style: Edge["style"]) => {
   if (!style || typeof style !== "object" || Array.isArray(style)) {
     return undefined;
   }
-
   return Object.entries(style).reduce<Record<string, string | number>>(
     (acc, [key, value]) => {
       if (typeof value === "string" || typeof value === "number") {
         acc[key] = value;
       }
-
       return acc;
     },
     {},
   );
 };
-
 const cloneWorkflowEdges = (sourceEdges: Edge[]) =>
   sourceEdges.map<Edge>((edge) => ({
     animated: edge.animated,
@@ -2033,7 +1846,6 @@ const cloneWorkflowEdges = (sourceEdges: Edge[]) =>
     type: edge.type,
     updatable: edge.updatable,
   }));
-
 const cloneWorkflowPanels = (sourcePanels: Record<string, WorkflowNodePanel>) =>
   Object.fromEntries(
     Object.entries(sourcePanels).map(([nodeId, panel]) => [
@@ -2054,7 +1866,6 @@ const cloneWorkflowPanels = (sourcePanels: Record<string, WorkflowNodePanel>) =>
       } satisfies WorkflowNodePanel,
     ]),
   ) as Record<string, WorkflowNodePanel>;
-
 const createSnapshot = (): WorkflowEditorSnapshot => ({
   activeTab: activeTab.value,
   edges: cloneWorkflowEdges(edges.value),
@@ -2062,14 +1873,12 @@ const createSnapshot = (): WorkflowEditorSnapshot => ({
   panelByNodeId: cloneWorkflowPanels(panelByNodeId.value),
   selectedNodeId: selectedNodeId.value,
 });
-
 const pushHistorySnapshot = () => {
   historyStack.value = [
     ...historyStack.value.slice(-(HISTORY_LIMIT - 1)),
     createSnapshot(),
   ];
 };
-
 const restoreSnapshot = (snapshot: WorkflowEditorSnapshot) => {
   nodes.value = cloneWorkflowNodes(snapshot.nodes);
   edges.value = cloneWorkflowEdges(snapshot.edges);
@@ -2079,20 +1888,16 @@ const restoreSnapshot = (snapshot: WorkflowEditorSnapshot) => {
   syncBranchHandleNodes();
   syncSelectedNodeData();
 };
-
 const undoLastChange = () => {
   const snapshot = historyStack.value[historyStack.value.length - 1];
-
   if (!snapshot) {
     toast.info("没有可撤销的操作");
     return;
   }
-
   historyStack.value = historyStack.value.slice(0, -1);
   restoreSnapshot(snapshot);
   toast.success("已撤销上一步操作");
 };
-
 const clearSelectedNode = () => {
   selectedNodeId.value = "";
   nodes.value = nodes.value.map((node) => ({
@@ -2105,18 +1910,14 @@ const clearSelectedNode = () => {
   })) as WorkflowFlowNode[];
   syncSelectedNodeData();
 };
-
 const selectFallbackNode = () => {
   const fallbackNode = nodes.value.find((node) => node.type !== "branch-chip");
-
   if (fallbackNode) {
     setSelectedNode(fallbackNode.id);
     return;
   }
-
   clearSelectedNode();
 };
-
 const setSelectedNode = (nodeId: string) => {
   selectedNodeId.value = nodeId;
   nodes.value = nodes.value.map((node) => ({
@@ -2129,24 +1930,19 @@ const setSelectedNode = (nodeId: string) => {
   })) as WorkflowFlowNode[];
   syncSelectedNodeData();
 };
-
 const handleNodeClick = (payload: any) => {
   setSelectedNode(payload.node.id);
 };
-
 const handlePaneClick = () => {
   if (!isEditMode.value) {
     return;
   }
-
   clearSelectedNode();
 };
-
 const scheduleFlowRemovalSync = () => {
   if (pendingFlowRemovalSync) {
     return pendingFlowRemovalSync;
   }
-
   pushHistorySnapshot();
   pendingFlowRemovalSync = {
     edgeIds: new Set<string>(),
@@ -2154,15 +1950,12 @@ const scheduleFlowRemovalSync = () => {
     nodeLabels: [],
     selectedNodeRemoved: false,
   };
-
   void nextTick().then(() => {
     const pendingRemoval = pendingFlowRemovalSync;
     pendingFlowRemovalSync = null;
-
     if (!pendingRemoval) {
       return;
     }
-
     if (pendingRemoval.nodeIds.size > 0) {
       panelByNodeId.value = Object.fromEntries(
         Object.entries(panelByNodeId.value).filter(
@@ -2170,17 +1963,14 @@ const scheduleFlowRemovalSync = () => {
         ),
       );
     }
-
     if (pendingRemoval.selectedNodeRemoved) {
       selectFallbackNode();
     } else {
       syncSelectedNodeData();
     }
-
     if (pendingRemoval.nodeIds.size > 0) {
       const removedLabel =
         pendingRemoval.nodeLabels[0] ?? `${pendingRemoval.nodeIds.size} 个节点`;
-
       toast.success(
         pendingRemoval.nodeIds.size === 1
           ? `已删除节点：${removedLabel}`
@@ -2188,7 +1978,6 @@ const scheduleFlowRemovalSync = () => {
       );
       return;
     }
-
     if (pendingRemoval.edgeIds.size > 0) {
       toast.success(
         pendingRemoval.edgeIds.size === 1
@@ -2197,80 +1986,60 @@ const scheduleFlowRemovalSync = () => {
       );
     }
   });
-
   return pendingFlowRemovalSync;
 };
-
 const handleNodesChange = (changes: NodeChange[]) => {
   const removedNodeIds = changes
     .filter((change) => change.type === "remove")
     .map((change) => change.id);
-
   if (!removedNodeIds.length || !isEditMode.value) {
     return;
   }
-
   const pendingRemoval = scheduleFlowRemovalSync();
-
   removedNodeIds.forEach((nodeId) => {
     if (pendingRemoval.nodeIds.has(nodeId)) {
       return;
     }
-
     pendingRemoval.nodeIds.add(nodeId);
-
     const removedNode = nodes.value.find((node) => node.id === nodeId);
     const label = removedNode?.data.subtitle ?? removedNode?.data.title;
-
     if (label) {
       pendingRemoval.nodeLabels.push(label);
     }
-
     if (nodeId === selectedNodeId.value) {
       pendingRemoval.selectedNodeRemoved = true;
     }
   });
 };
-
 const handleEdgesChange = (changes: EdgeChange[]) => {
   const removedEdgeIds = changes
     .filter((change) => change.type === "remove")
     .map((change) => change.id);
-
   if (!removedEdgeIds.length || !isEditMode.value) {
     return;
   }
-
   const pendingRemoval = scheduleFlowRemovalSync();
-
   removedEdgeIds.forEach((edgeId) => {
     pendingRemoval.edgeIds.add(edgeId);
   });
 };
-
 const getEdgeId = (connection: Connection) => {
   const sourceHandle = connection.sourceHandle ?? "default";
   const targetHandle = connection.targetHandle ?? "default";
-
   return `edge:${connection.source}:${sourceHandle}->${connection.target}:${targetHandle}`;
 };
-
 const handleConnect = (connection: Connection) => {
   if (!isEditMode.value) {
     return;
   }
-
   if (!connection.source || !connection.target) {
     return;
   }
-
   const nextEdgeId = getEdgeId(connection);
-
   if (edges.value.some((edge) => edge.id === nextEdgeId)) {
     toast.info("这条连线已经存在");
     return;
   }
-
   pushHistorySnapshot();
   edges.value = [
     ...edges.value,
@@ -2284,28 +2053,22 @@ const handleConnect = (connection: Connection) => {
       style: WORKFLOW_EDGE_STYLE,
     },
   ];
-
   toast.success("已创建连线");
 };
-
 const toggleCategory = (categoryId: string) => {
   expandedCategories[categoryId] = !expandedCategories[categoryId];
 };
-
 const isCategoryOpen = (categoryId: string) => {
   if (searchQuery.value.trim()) {
     return true;
   }
-
   return expandedCategories[categoryId];
 };
-
 const matchesPaletteItem = (
   item: WorkflowPaletteItem,
   node: WorkflowFlowNode | WorkflowNodeData,
 ) => {
   const nodeData = "data" in node ? node.data : node;
-
   if (item.runnerType || nodeData.runnerType) {
     return (
       !!item.runnerType &&
@@ -2313,90 +2076,69 @@ const matchesPaletteItem = (
       nodeData.runnerType === item.runnerType
     );
   }
-
   return nodeData.title === item.label;
 };
-
 const isPaletteItemSelected = (item: WorkflowPaletteItem) => {
   if (!selectedNodeId.value) {
     return false;
   }
-
   return matchesPaletteItem(item, selectedNodeData.value);
 };
-
 const focusPaletteItem = (item: WorkflowPaletteItem) => {
   if (!isEditMode.value) {
     return;
   }
-
   const targetNode = nodes.value.find(
     (node) =>
       node.type !== "branch-chip" && matchesPaletteItem(item, node),
   );
-
   if (targetNode) {
     setSelectedNode(targetNode.id);
   }
 };
-
 const handlePaletteDragStart = (event: DragEvent, itemId: string) => {
   if (!isEditMode.value || !event.dataTransfer) {
     return;
   }
-
   activeDragPaletteItemId.value = itemId;
   event.dataTransfer.effectAllowed = "copy";
   event.dataTransfer.setData(DRAG_DATA_TYPE, itemId);
   event.dataTransfer.setData("text/plain", itemId);
 };
-
 const handlePaletteDragEnd = () => {
   activeDragPaletteItemId.value = null;
   isCanvasDropTarget.value = false;
 };
-
 const handleCanvasDragEnter = (event: DragEvent) => {
   if (!isEditMode.value) {
     return;
   }
-
   if (!event.dataTransfer?.types.includes(DRAG_DATA_TYPE)) {
     return;
   }
-
   isCanvasDropTarget.value = true;
 };
-
 const handleCanvasDragOver = (event: DragEvent) => {
   if (!isEditMode.value) {
     return;
   }
-
   if (!event.dataTransfer?.types.includes(DRAG_DATA_TYPE)) {
     return;
   }
-
   event.dataTransfer.dropEffect = "copy";
   isCanvasDropTarget.value = true;
 };
-
 const handleCanvasDrop = (event: DragEvent) => {
   if (!isEditMode.value) {
     return;
   }
-
   isCanvasDropTarget.value = false;
-
   const itemId = event.dataTransfer?.getData(DRAG_DATA_TYPE);
   const item = itemId ? paletteItemMap.value[itemId] : undefined;
-
   activeDragPaletteItemId.value = null;
-
   if (!item) {
     return;
   }
-
   const flowPosition = screenToFlowCoordinate({
     x: event.clientX,
     y: event.clientY,
@@ -2417,7 +2159,6 @@ const handleCanvasDrop = (event: DragEvent) => {
     },
     nodes.value,
   );
-
   pushHistorySnapshot();
   nodes.value.push(node);
   panelByNodeId.value = {
@@ -2425,10 +2166,8 @@ const handleCanvasDrop = (event: DragEvent) => {
     [node.id]: panel,
   };
   setSelectedNode(node.id);
-
   toast.success(`已添加节点：${node.data.subtitle ?? node.data.title}`);
 };
-
 const handleFieldUpdate = (
   tab: WorkflowTabId,
   fieldKey: string,
@@ -2437,23 +2176,17 @@ const handleFieldUpdate = (
   if (!isEditMode.value) {
     return;
   }
-
   const panel = selectedPanel.value;
-
   if (!panel) {
     return;
   }
-
   const fields = panel.fieldsByTab[tab];
   const targetField = fields?.find((field) => field.key === fieldKey);
-
   if (!targetField) {
     return;
   }
-
   targetField.value = value;
   triggerRef(panelByNodeId);
-
   if (fieldKey === "nodeName") {
     nodes.value = nodes.value.map((node) =>
       node.id === selectedNodeId.value
@@ -2469,7 +2202,6 @@ const handleFieldUpdate = (
     syncSelectedNodeData();
   }
 };
-
 const handleAddSwitchBranch = () => {
   if (
     !isEditMode.value ||
@@ -2478,21 +2210,17 @@ const handleAddSwitchBranch = () => {
   ) {
     return;
   }
-
   pushHistorySnapshot();
-
   const branches = getSwitchBranches(selectedPanel.value);
   const nextBranch = {
     id: getNextSwitchBranchHandleId(selectedPanel.value),
     label: getNextSwitchBranchLabel(selectedPanel.value),
   };
-
   setSwitchBranches(selectedPanel.value, [...branches, nextBranch]);
   triggerRef(panelByNodeId);
   syncBranchHandleNodes(selectedNodeId.value);
   toast.success(`已新增分支：${nextBranch.label}`);
 };
-
 const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
   if (
     !isEditMode.value ||
@@ -2501,7 +2229,6 @@ const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
   ) {
     return;
   }
-
   setSwitchBranches(
     selectedPanel.value,
     getSwitchBranches(selectedPanel.value).map((branch) =>
@@ -2516,7 +2243,6 @@ const handleSwitchBranchLabelUpdate = (branchId: string, value: string) => {
   triggerRef(panelByNodeId);
   syncBranchHandleNodes(selectedNodeId.value);
 };
-
 const handleSwitchFallbackUpdate = (branchId: string) => {
   if (
     !isEditMode.value ||
@@ -2525,12 +2251,10 @@ const handleSwitchFallbackUpdate = (branchId: string) => {
   ) {
     return;
   }
-
   setSwitchFallbackHandle(selectedPanel.value, branchId);
   triggerRef(panelByNodeId);
   syncBranchHandleNodes(selectedNodeId.value);
 };
-
 const handleRemoveSwitchBranch = (branchId: string) => {
   if (
     !isEditMode.value ||
@@ -2539,30 +2263,22 @@ const handleRemoveSwitchBranch = (branchId: string) => {
   ) {
     return;
   }
-
   const branches = getSwitchBranches(selectedPanel.value);
-
   if (branches.length <= 2) {
     toast.info("Switch 节点至少需要保留两个分支");
     return;
   }
-
   pushHistorySnapshot();
-
   const nextBranches = branches.filter((branch) => branch.id !== branchId);
   const previousFallbackHandle = getSwitchFallbackHandle(selectedPanel.value);
-
   setSwitchBranches(selectedPanel.value, nextBranches);
-
   if (previousFallbackHandle === branchId) {
     setSwitchFallbackHandle(
       selectedPanel.value,
       nextBranches[nextBranches.length - 1]?.id ?? "",
     );
   }
-
   triggerRef(panelByNodeId);
-
   edges.value = edges.value.filter(
     (edge) =>
       edge.source !== selectedNodeId.value || edge.sourceHandle !== branchId,
@@ -2570,7 +2286,6 @@ const handleRemoveSwitchBranch = (branchId: string) => {
   syncBranchHandleNodes(selectedNodeId.value);
   toast.success("已移除分支并清理对应连线");
 };
-
 const handleRunDraftUpdate = <K extends keyof WorkflowRunDraft>(
   key: K,
   value: WorkflowRunDraft[K],
@@ -2580,52 +2295,40 @@ const handleRunDraftUpdate = <K extends keyof WorkflowRunDraft>(
     [key]: value,
   };
 };
-
 const parseJsonRecord = (rawValue: string, fieldLabel: string) => {
   const trimmed = rawValue.trim();
-
   if (!trimmed) {
     return {};
   }
-
   let parsed: unknown;
-
   try {
     parsed = JSON.parse(trimmed);
   } catch {
     throw new Error(`${fieldLabel} 需要是合法的 JSON 对象`);
   }
-
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`${fieldLabel} 需要是 JSON 对象`);
   }
-
   return parsed as Record<string, unknown>;
 };
-
 const normalizeRunEnvRecord = (env: Record<string, unknown>) => {
   const nextEnv = { ...env };
-
   if (
     typeof nextEnv.siteCode === "string" &&
     typeof nextEnv.warehouseId !== "string"
   ) {
     nextEnv.warehouseId = nextEnv.siteCode;
   }
-
   if (typeof nextEnv.tenantId !== "string" || !nextEnv.tenantId.trim()) {
     nextEnv.tenantId = "tenant-a";
   }
-
   return nextEnv;
 };
-
 const buildRunExecutionRequest = () => {
   const body = parseJsonRecord(runDraft.value.body, "Trigger Body");
   const env = normalizeRunEnvRecord(
     parseJsonRecord(runDraft.value.env, "运行环境变量"),
   );
-
   if (runDraft.value.triggerMode === "webhook") {
     return {
       env,
@@ -2635,7 +2338,6 @@ const buildRunExecutionRequest = () => {
       },
     };
   }
-
   return {
     env,
     trigger: {
@@ -2643,22 +2345,18 @@ const buildRunExecutionRequest = () => {
     },
   };
 };
-
 const formatJsonPreview = (value: unknown) =>
   JSON.stringify(value ?? {}, null, 2);
-
 const clearRunSummaryPolling = () => {
   if (runSummaryPollTimer !== null) {
     window.clearTimeout(runSummaryPollTimer);
     runSummaryPollTimer = null;
   }
 };
-
 const closeWorkflowRunCountEventStream = () => {
   workflowRunCountSubscription?.close();
   workflowRunCountSubscription = null;
 };
-
 const refreshWorkflowRunCount = async (
   workflowId: string,
   options: {
@@ -2669,16 +2367,12 @@ const refreshWorkflowRunCount = async (
     workflowRunCountRefreshQueued = true;
     return;
   }
-
   workflowRunCountRefreshInFlight = true;
-
   try {
     const runs = await fetchWorkflowRuns(workflowId);
-
     if (persistedWorkflowId.value !== workflowId) {
       return;
     }
-
     workflowRunCount.value = runs.length;
   } catch (error) {
     if (!options.silent) {
@@ -2686,23 +2380,19 @@ const refreshWorkflowRunCount = async (
     }
   } finally {
     workflowRunCountRefreshInFlight = false;
-
     if (workflowRunCountRefreshQueued) {
       workflowRunCountRefreshQueued = false;
       void refreshWorkflowRunCount(workflowId, { silent: true });
     }
   }
 };
-
 const ensureWorkflowRunCountEventStream = (workflowId: string) => {
   if (!workflowId) {
     return;
   }
-
   if (workflowRunCountSubscription) {
     return;
   }
-
   workflowRunCountSubscription = subscribeWorkflowEvents(workflowId, {
     onEvent: (notification) => {
       if (
@@ -2711,88 +2401,72 @@ const ensureWorkflowRunCountEventStream = (workflowId: string) => {
       ) {
         return;
       }
-
       void refreshWorkflowRunCount(workflowId, { silent: true });
     },
     onError: () => {
       if (persistedWorkflowId.value !== workflowId) {
         return;
       }
-
       void refreshWorkflowRunCount(workflowId, { silent: true });
     },
   });
 };
-
 const closeRunSummaryEventStream = () => {
   runEventSubscription?.close();
   runEventSubscription = null;
 };
-
 const scheduleRunSummaryResync = (
   runId: string,
   delay = RUN_SUMMARY_RESYNC_DELAY_MS,
 ) => {
   clearRunSummaryPolling();
-
   if (!activeRunId.value || activeRunId.value !== runId) {
     return;
   }
-
   runSummaryPollTimer = window.setTimeout(() => {
     runSummaryPollTimer = null;
     void refreshRunSummary({ silent: true });
   }, delay);
 };
-
 const ensureRunSummaryEventStream = (runId: string) => {
   if (!activeRunId.value || activeRunId.value !== runId) {
     return;
   }
-
   if (runEventSubscription) {
     return;
   }
-
   runEventSubscription = subscribeWorkflowRunEvents(runId, {
     onOpen: () => {
       if (activeRunId.value !== runId) {
         return;
       }
-
       clearRunSummaryPolling();
     },
     onError: () => {
       if (activeRunId.value !== runId) {
         return;
       }
-
       scheduleRunSummaryResync(runId);
     },
     onEvent: (notification) => {
       if (activeRunId.value !== runId) {
         return;
       }
-
       if (notification.eventType === "stream.connected") {
         clearRunSummaryPolling();
         return;
       }
-
       void refreshRunSummary({ silent: true });
     },
   });
-
   if (!runEventSubscription) {
     scheduleRunSummaryResync(runId);
   }
 };
-
 const selectRunFocusedNode = (summary: WorkflowRunSummary) => {
   const candidateNodeId =
     summary.currentNodeId ??
     summary.timeline[summary.timeline.length - 1]?.nodeId;
-
   if (
     candidateNodeId &&
     nodes.value.some((node) => node.id === candidateNodeId)
@@ -2800,7 +2474,6 @@ const selectRunFocusedNode = (summary: WorkflowRunSummary) => {
     setSelectedNode(candidateNodeId);
   }
 };
-
 const refreshRunSummary = async (
   _options: {
     silent?: boolean;
@@ -2809,38 +2482,30 @@ const refreshRunSummary = async (
   if (!activeRunId.value) {
     return;
   }
-
   if (runSummaryRefreshInFlight) {
     runSummaryRefreshQueued = true;
     return;
   }
-
   const runId = activeRunId.value;
   runSummaryRefreshInFlight = true;
-
   try {
     const summary = await fetchWorkflowRunSummary(runId);
-
     if (activeRunId.value !== runId) {
       return;
     }
-
     activeRunSummary.value = summary;
     runErrorMessage.value = "";
     setNodeExecutionStatuses(summary);
     selectRunFocusedNode(summary);
-
     if (shouldPollWorkflowRunSummary(summary.status)) {
       ensureRunSummaryEventStream(runId);
       clearRunSummaryPolling();
       return;
     }
-
     const workflowId = activeRunWorkflowId.value || persistedWorkflowId.value;
     if (workflowId) {
       void refreshWorkflowRunCount(workflowId, { silent: true });
     }
-
     isTerminatingWorkflow.value = false;
     closeRunSummaryEventStream();
     clearRunSummaryPolling();
@@ -2848,30 +2513,25 @@ const refreshRunSummary = async (
     if (activeRunId.value !== runId) {
       return;
     }
-
     isTerminatingWorkflow.value = false;
     scheduleRunSummaryResync(runId);
     runErrorMessage.value =
       error instanceof Error ? error.message : "获取运行状态失败";
   } finally {
     runSummaryRefreshInFlight = false;
-
     if (runSummaryRefreshQueued) {
       runSummaryRefreshQueued = false;
       void refreshRunSummary({ silent: true });
     }
   }
 };
-
 const handleRefreshRunSummary = async () => {
   if (!activeRunId.value) {
     toast.info("当前还没有运行记录");
     return;
   }
-
   await refreshRunSummary();
 };
-
 const handleTerminateRun = async () => {
   if (
     !activeRunId.value ||
@@ -2880,16 +2540,13 @@ const handleTerminateRun = async () => {
   ) {
     return;
   }
-
   isTerminatingWorkflow.value = true;
   runErrorMessage.value = "";
   const runId = activeRunId.value;
-
   try {
     ensureRunSummaryEventStream(runId);
     const summary = await terminateWorkflowRun(runId);
     const workflowId = activeRunWorkflowId.value || persistedWorkflowId.value;
-
     if (shouldPollWorkflowRunSummary(summary.status)) {
       scheduleRunSummaryResync(summary.runId);
     } else {
@@ -2903,7 +2560,6 @@ const handleTerminateRun = async () => {
         void refreshWorkflowRunCount(workflowId, { silent: true });
       }
     }
-
     toast.success("已发送终止请求");
   } catch (error) {
     isTerminatingWorkflow.value = false;
@@ -2912,16 +2568,13 @@ const handleTerminateRun = async () => {
     toast.error(runErrorMessage.value);
   }
 };
-
 const handleRunWorkflow = async () => {
   if (isRunningWorkflow.value) {
     return;
   }
-
   isRunningWorkflow.value = true;
   runErrorMessage.value = "";
   pageMode.value = "run";
-
   try {
     const editorDocument = createPersistedWorkflowDocument(
       nodes.value,
@@ -2955,7 +2608,6 @@ const handleRunWorkflow = async () => {
       registration.workflowId,
       buildRunExecutionRequest(),
     );
-
     workflowMeta.id = registration.workflowId;
     activeRunWorkflowId.value = registration.workflowId;
     closeRunSummaryEventStream();
@@ -2980,7 +2632,6 @@ const handleRunWorkflow = async () => {
         runId: execution.runId,
       },
     });
-
     toast.success(`已启动运行：${execution.runId}`);
     await refreshRunSummary();
   } catch (error) {
@@ -2991,7 +2642,6 @@ const handleRunWorkflow = async () => {
     isRunningWorkflow.value = false;
   }
 };
-
 const handleExportJson = () => {
   try {
     const exportDocument = createWorkflowExportDocument(
@@ -3011,14 +2661,12 @@ const handleExportJson = () => {
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-
     link.href = url;
     link.download = `${workflowMeta.name}.${workflowMeta.version}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-
     toast.success("工作流 JSON 已导出");
   } catch (error) {
     toast.error(
@@ -3026,14 +2674,11 @@ const handleExportJson = () => {
     );
   }
 };
-
 const handlePublish = async () => {
   if (isPublishing.value) {
     return;
   }
-
   isPublishing.value = true;
-
   try {
     const persistedDocument = createPersistedWorkflowDocument(
       nodes.value,
@@ -3065,7 +2710,6 @@ const handlePublish = async () => {
     );
     const publishedWorkflowId =
       registration.workflowId?.trim() || workflowMeta.id;
-
     workflowMeta.id = publishedWorkflowId;
     workflowMeta.status = "published";
     await router.replace({
@@ -3082,26 +2726,21 @@ const handlePublish = async () => {
     isPublishing.value = false;
   }
 };
-
 onMounted(() => {
   void loadSelectableWorkflows();
   void loadNodeDescriptorRegistry();
 });
-
 onPaneReady(() => {
   isCanvasPaneReady.value = true;
-
   if (!shouldResetCanvasViewport.value) {
     if (isViewportResetting.value) {
       void resetCanvasViewport();
     }
     return;
   }
-
   shouldResetCanvasViewport.value = false;
   void resetCanvasViewport();
 });
-
 onBeforeUnmount(() => {
   closeAssistantSessionEventStream();
   closeWorkflowRunCountEventStream();
@@ -3113,25 +2752,20 @@ onBeforeUnmount(() => {
   clearAssistantSessionPolling();
   clearRunSummaryPolling();
 });
-
 setSelectedNode(selectedNodeId.value);
 </script>
-
 <style scoped>
 .workflow-editor-shell {
   background: var(--canvas-bg);
   color: var(--text);
 }
-
 .workflow-canvas :deep(.vue-flow__pane) {
   background-color: transparent;
 }
-
 .workflow-canvas :deep(.vue-flow__edge-path) {
   stroke: var(--panel-border-strong);
   stroke-width: 2;
 }
-
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

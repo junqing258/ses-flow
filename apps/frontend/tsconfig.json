@@ -8,6 +8,7 @@
     "sourceMap": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
+    "skipLibCheck": true,
     "isolatedModules": true,
     "lib": ["ES2021", "DOM", "DOM.Iterable", "ESNext.Disposable"],
     "types": ["vite/client", "vite-plugin-pages/client", "web-bluetooth"],

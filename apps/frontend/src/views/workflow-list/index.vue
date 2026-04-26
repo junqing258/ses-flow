@@ -13,7 +13,6 @@
         class="absolute inset-x-0 top-0 h-64 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0))]"
       />
     </div>
-
     <div
       class="relative mx-auto flex min-h-screen w-full flex-col max-w-7xl px-4 pb-20 pt-6 sm:px-8 lg:px-12"
     >
@@ -35,7 +34,6 @@
             </h1>
           </div>
         </div>
-
         <div class="flex items-center gap-3">
           <WorkflowHeaderActionButtons appearance="pill" />
           <div
@@ -46,7 +44,6 @@
           </div>
         </div>
       </header>
-
       <main class="flex flex-1 flex-col items-center">
         <section
           class="mx-auto mt-16 flex max-w-2xl flex-col items-center text-center sm:mt-24"
@@ -67,39 +64,21 @@
             Build a chat agent workflow with custom logic, reusable nodes, and
             publish-ready orchestration.
           </p>
-          <Button
+          <ElButton
             class="mt-8 h-11 rounded-full bg-slate-950 px-6 text-sm font-medium text-white shadow-[0_16px_36px_rgba(15,23,42,0.16)] hover:bg-slate-800"
             @click="handleCreate"
           >
             <Plus class="h-4 w-4" />
             Create
-          </Button>
+          </ElButton>
         </section>
-
         <section class="mt-14 w-full max-w-4xl sm:mt-18">
-          <Tabs v-model="activeTab" class="w-full">
-            <TabsList
-              class="h-auto rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
-            >
-              <TabsTrigger
-                value="drafts"
-                class="rounded-xl px-4 py-2 text-sm font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_8px_20px_rgba(15,23,42,0.08)]"
-              >
-                Drafts
-              </TabsTrigger>
-              <TabsTrigger
-                value="templates"
-                class="rounded-xl px-4 py-2 text-sm font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-[0_8px_20px_rgba(15,23,42,0.08)]"
-              >
-                Templates
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="drafts" class="mt-5">
+          <ElTabs v-model="activeTab" class="w-full">
+            <ElTabPane label="Drafts" name="drafts">
+              <div class="mt-5">
               <div class="mb-3 flex items-center justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
+                <ElButton
+                  size="small"
                   class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                   :disabled="isRefreshingCatalog || isLoadingWorkflows"
                   @click="handleRefreshCatalog"
@@ -109,7 +88,7 @@
                     :class="{ 'animate-spin': isRefreshingCatalog }"
                   />
                   {{ isRefreshingCatalog ? "刷新中..." : "刷新目录" }}
-                </Button>
+                </ElButton>
               </div>
               <div
                 v-if="isLoadingWorkflows"
@@ -135,7 +114,6 @@
                   class="group rounded-3xl border border-slate-200/80 bg-white/92 p-4 shadow-[0_20px_45px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-[0_24px_50px_rgba(15,23,42,0.1)]"
                 >
                   <div
-                    type="button"
                     class="w-full text-left cursor-pointer!"
                     @click="openWorkflow(workflow.id)"
                   >
@@ -153,7 +131,6 @@
                         {{ workflow.status }}
                       </span>
                     </div>
-
                     <div class="mt-8">
                       <h3
                         class="text-base font-semibold tracking-tight text-slate-900"
@@ -164,7 +141,6 @@
                         {{ workflow.description }}
                       </p>
                     </div>
-
                     <div
                       class="mt-8 flex items-center justify-between text-xs text-slate-400"
                     >
@@ -175,7 +151,6 @@
                       <span>{{ workflow.owner }}</span>
                     </div>
                   </div>
-
                   <div
                     class="mt-4 flex items-center justify-between gap-3 rounded-[18px] border border-slate-100 bg-slate-50/80 px-3 py-2.5"
                   >
@@ -190,9 +165,8 @@
                         {{ workflow.runningRunCount === 1 ? "task" : "tasks" }}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <ElButton
+                      size="small"
                       class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                       :disabled="workflow.runningRunCount === 0"
                       @click="openRunList(workflow)"
@@ -204,13 +178,14 @@
                       >
                         {{ workflow.runningRunCount }}
                       </span>
-                    </Button>
+                    </ElButton>
                   </div>
                 </article>
               </div>
-            </TabsContent>
-
-            <TabsContent value="templates" class="mt-5">
+              </div>
+            </ElTabPane>
+            <ElTabPane label="Templates" name="templates">
+              <div class="mt-5">
               <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <article
                   v-for="template in templateWorkflows"
@@ -230,7 +205,6 @@
                       Template
                     </span>
                   </div>
-
                   <div class="mt-8">
                     <h3
                       class="text-base font-semibold tracking-tight text-slate-900"
@@ -241,28 +215,26 @@
                       {{ template.description }}
                     </p>
                   </div>
-
                   <div class="mt-8 flex items-center justify-between">
                     <span class="text-xs text-slate-400">{{
                       template.category
                     }}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <ElButton
+                      size="small"
                       class="rounded-full border-slate-200 bg-white px-3.5 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
                       @click="useTemplate(template.id)"
                     >
                       Use template
-                    </Button>
+                    </ElButton>
                   </div>
                 </article>
               </div>
-            </TabsContent>
-          </Tabs>
+              </div>
+            </ElTabPane>
+          </ElTabs>
         </section>
       </main>
     </div>
-
     <WorkflowRunListDialog
       :open="isRunListOpen"
       :workflow-id="selectedWorkflowForRuns?.id ?? ''"
@@ -272,7 +244,6 @@
     />
   </section>
 </template>
-
 <script setup lang="ts">
 import dayjs from "dayjs";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
@@ -286,12 +257,9 @@ import {
   Workflow,
 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
-import { toast } from "vue-sonner";
-
+import { toast } from "@/lib/element-toast";
 import WorkflowHeaderActionButtons from "@/components/workflow/WorkflowHeaderActionButtons.vue";
 import WorkflowRunListDialog from "@/components/workflow/WorkflowRunListDialog.vue";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { subscribeWorkflowsEvents } from "@/features/workflow/live";
 import {
   fetchWorkflowList,
@@ -299,9 +267,7 @@ import {
   type WorkflowSummary,
 } from "@/features/workflow/api";
 import type { EventSourceSubscription } from "@/lib/sse";
-
 type WorkflowTabId = "drafts" | "templates";
-
 interface WorkflowListItem {
   id: string;
   name: string;
@@ -314,7 +280,6 @@ interface WorkflowListItem {
   icon: typeof Workflow;
   iconClass: string;
 }
-
 interface WorkflowTemplateItem {
   id: string;
   name: string;
@@ -323,7 +288,6 @@ interface WorkflowTemplateItem {
   icon: typeof Workflow;
   iconClass: string;
 }
-
 const router = useRouter();
 const activeTab = ref<WorkflowTabId>("drafts");
 const workflowSummaries = ref<WorkflowSummary[]>([]);
@@ -333,7 +297,6 @@ const isRunListOpen = ref(false);
 const selectedWorkflowForRuns = ref<WorkflowListItem | null>(null);
 let workflowsEventSubscription: EventSourceSubscription | null = null;
 let workflowListRefreshQueued = false;
-
 const draftWorkflows = computed<WorkflowListItem[]>(() =>
   workflowSummaries.value.map((workflow, index) => ({
     id: workflow.workflowId,
@@ -353,7 +316,6 @@ const draftWorkflows = computed<WorkflowListItem[]>(() =>
       "bg-[#d9f99d]",
   })),
 );
-
 const templateWorkflows: WorkflowTemplateItem[] = [
   /* {
     id: "template-chat-agent",
@@ -383,23 +345,19 @@ const templateWorkflows: WorkflowTemplateItem[] = [
     iconClass: "bg-[#c7f9cc]",
   },
 ];
-
 const closeWorkflowsEventSubscription = () => {
   workflowsEventSubscription?.close();
   workflowsEventSubscription = null;
 };
-
 const ensureWorkflowsEventSubscription = () => {
   if (workflowsEventSubscription) {
     return;
   }
-
   workflowsEventSubscription = subscribeWorkflowsEvents({
     onEvent: (notification) => {
       if (notification.eventType === "stream.connected") {
         return;
       }
-
       void loadWorkflowList({ silent: true });
     },
     onError: () => {
@@ -407,7 +365,6 @@ const ensureWorkflowsEventSubscription = () => {
     },
   });
 };
-
 const loadWorkflowList = async (
   options: {
     silent?: boolean;
@@ -417,9 +374,7 @@ const loadWorkflowList = async (
     workflowListRefreshQueued = true;
     return;
   }
-
   isLoadingWorkflows.value = true;
-
   try {
     workflowSummaries.value = await fetchWorkflowList();
   } catch (error) {
@@ -430,34 +385,27 @@ const loadWorkflowList = async (
     }
   } finally {
     isLoadingWorkflows.value = false;
-
     if (workflowListRefreshQueued) {
       workflowListRefreshQueued = false;
       void loadWorkflowList({ silent: true });
     }
   }
 };
-
 onMounted(() => {
   void loadWorkflowList();
   ensureWorkflowsEventSubscription();
 });
-
 onBeforeUnmount(() => {
   closeWorkflowsEventSubscription();
 });
-
 const handleCreate = () => {
   void router.push({ name: "workflow-new" });
 };
-
 const handleRefreshCatalog = async () => {
   if (isRefreshingCatalog.value || isLoadingWorkflows.value) {
     return;
   }
-
   isRefreshingCatalog.value = true;
-
   try {
     await refreshWorkflowCatalog();
     await loadWorkflowList({ silent: true });
@@ -468,7 +416,6 @@ const handleRefreshCatalog = async () => {
     isRefreshingCatalog.value = false;
   }
 };
-
 const openWorkflow = (workflowId: string) => {
   void router.push({
     name: "workflow-editor",
@@ -477,29 +424,23 @@ const openWorkflow = (workflowId: string) => {
     },
   });
 };
-
 const handleRunListOpenChange = (open: boolean) => {
   isRunListOpen.value = open;
-
   if (!open) {
     selectedWorkflowForRuns.value = null;
   }
 };
-
 const openRunList = async (workflow: WorkflowListItem) => {
   if (workflow.runningRunCount === 0) {
     return;
   }
-
   selectedWorkflowForRuns.value = workflow;
   isRunListOpen.value = true;
 };
-
 const openWorkflowRun = (runId: string) => {
   if (!selectedWorkflowForRuns.value) {
     return;
   }
-
   const workflowId = selectedWorkflowForRuns.value.id;
   handleRunListOpenChange(false);
   void router.push({
@@ -512,7 +453,6 @@ const openWorkflowRun = (runId: string) => {
     },
   });
 };
-
 const useTemplate = (templateId: string) => {
   void router.push({
     name: "workflow-new",

@@ -1,6 +1,11 @@
 <template>
-  <Dialog :open="dialogOpen" @update:open="setDialogOpen">
-    <DialogContent
+  <ElDialog
+    :model-value="dialogOpen"
+    append-to-body
+    align-center
+    @update:model-value="setDialogOpen"
+  >
+    <div
       class="max-w-[min(92vw,38rem)] overflow-hidden border-white/10 bg-linear-to-br from-slate-950 via-slate-900 to-cyan-950 p-0 text-white shadow-[0_28px_80px_rgba(15,23,42,0.48)]"
     >
       <div class="relative overflow-hidden">
@@ -14,7 +19,6 @@
             <p class="mt-3 text-sm leading-6 text-slate-300">
               {{ isAuthenticated ? t("auth.dialog.accountDescription") : currentDescription }}
             </p>
-
             <div class="mt-8 grid gap-3">
               <div class="rounded-2xl border border-white/10 bg-white/6 p-4">
                 <p class="text-xs font-semibold tracking-[0.24em] text-cyan-200 uppercase">
@@ -30,7 +34,6 @@
               </div>
             </div>
           </aside>
-
           <div class="px-6 py-8">
             <div
               v-if="!isAuthenticated"
@@ -53,7 +56,6 @@
                 {{ t("auth.actions.register") }}
               </button>
             </div>
-
             <div
               v-if="isAuthenticated && user"
               class="mt-6 space-y-5 rounded-[24px] border border-white/10 bg-slate-950/45 p-5"
@@ -64,7 +66,6 @@
                 </p>
                 <p class="text-2xl font-semibold text-white">{{ user.displayName || t("auth.fallbackName") }}</p>
               </div>
-
               <div class="grid gap-4 sm:grid-cols-2">
                 <div class="rounded-2xl border border-white/8 bg-white/4 p-4">
                   <p class="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
@@ -91,35 +92,32 @@
                   <p class="mt-2 text-sm text-slate-100">{{ lastLoginLabel }}</p>
                 </div>
               </div>
-
               <div class="flex flex-wrap gap-3">
-                <Button :disabled="isSubmitting" @click="handleLogout">
+                <ElButton :disabled="isSubmitting" @click="handleLogout">
                   {{ isSubmitting ? t("auth.actions.processing") : t("auth.actions.logout") }}
-                </Button>
-                <Button variant="outline" @click="setDialogOpen(false)">
+                </ElButton>
+                <ElButton @click="setDialogOpen(false)">
                   {{ t("auth.actions.close") }}
-                </Button>
+                </ElButton>
               </div>
             </div>
-
             <form v-else class="mt-6 space-y-5" @submit.prevent="handleSubmit">
               <div v-if="dialogMode === 'register'" class="space-y-2">
                 <label class="text-sm font-medium text-slate-200" for="auth-display-name">
                   {{ t("auth.fields.displayName") }}
                 </label>
-                <Input
+                <ElInput
                   id="auth-display-name"
                   v-model="form.displayName"
                   :placeholder="t('auth.placeholders.displayName')"
                   class="h-11 border-white/10 bg-white/6 text-white placeholder:text-slate-400"
                 />
               </div>
-
               <div class="space-y-2">
                 <label class="text-sm font-medium text-slate-200" for="auth-email">
                   {{ t("auth.fields.email") }}
                 </label>
-                <Input
+                <ElInput
                   id="auth-email"
                   v-model="form.email"
                   type="email"
@@ -128,12 +126,11 @@
                   class="h-11 border-white/10 bg-white/6 text-white placeholder:text-slate-400"
                 />
               </div>
-
               <div class="space-y-2">
                 <label class="text-sm font-medium text-slate-200" for="auth-password">
                   {{ t("auth.fields.password") }}
                 </label>
-                <Input
+                <ElInput
                   id="auth-password"
                   v-model="form.password"
                   type="password"
@@ -142,42 +139,33 @@
                   class="h-11 border-white/10 bg-white/6 text-white placeholder:text-slate-400"
                 />
               </div>
-
               <div
                 v-if="submitError"
                 class="rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"
               >
                 {{ submitError }}
               </div>
-
               <div class="flex flex-wrap gap-3">
-                <Button type="submit" :disabled="isSubmitting" class="min-w-28">
+                <ElButton native-type="submit" :disabled="isSubmitting" class="min-w-28">
                   {{ isSubmitting ? t("auth.actions.processing") : submitLabel }}
-                </Button>
-                <Button type="button" variant="outline" :disabled="isSubmitting" @click="setDialogOpen(false)">
+                </ElButton>
+                <ElButton native-type="button" :disabled="isSubmitting" @click="setDialogOpen(false)">
                   {{ t("auth.actions.cancel") }}
-                </Button>
+                </ElButton>
               </div>
             </form>
           </div>
         </div>
       </div>
-    </DialogContent>
-  </Dialog>
+    </div>
+  </ElDialog>
 </template>
-
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { toast } from "vue-sonner";
-
+import { toast } from "@/lib/element-toast";
 import { useAuth } from "@/composables/useAuth";
 import type { AuthDialogMode } from "@/types/auth";
-
-import { Button } from "./ui/button";
-import { Dialog, DialogContent } from "./ui/dialog";
-import { Input } from "./ui/input";
-
 const { locale, t } = useI18n();
 const {
   dialogMode,
@@ -192,15 +180,12 @@ const {
   setDialogOpen,
   user,
 } = useAuth();
-
 const form = reactive({
   displayName: "",
   email: "",
   password: "",
 });
-
 const submitError = ref("");
-
 const formatter = computed(
   () =>
     new Intl.DateTimeFormat(locale.value === "zh-CN" ? "zh-CN" : "en-US", {
@@ -208,52 +193,41 @@ const formatter = computed(
       timeStyle: "short",
     }),
 );
-
 const currentTitle = computed(() =>
   dialogMode.value === "login" ? t("auth.dialog.loginTitle") : t("auth.dialog.registerTitle"),
 );
-
 const currentDescription = computed(() =>
   dialogMode.value === "login"
     ? t("auth.dialog.loginDescription")
     : t("auth.dialog.registerDescription"),
 );
-
 const submitLabel = computed(() =>
   dialogMode.value === "login" ? t("auth.actions.login") : t("auth.actions.register"),
 );
-
 const sessionExpiryLabel = computed(() => {
   if (!session.value?.expiresAt) {
     return t("auth.account.unavailable");
   }
-
   return formatter.value.format(new Date(session.value.expiresAt));
 });
-
 const lastLoginLabel = computed(() => {
   if (!user.value?.lastLoginAt) {
     return t("auth.account.unavailable");
   }
-
   return formatter.value.format(new Date(user.value.lastLoginAt));
 });
-
 const resetForm = () => {
   form.displayName = "";
   form.email = "";
   form.password = "";
   submitError.value = "";
 };
-
 const switchMode = (mode: AuthDialogMode) => {
   setDialogMode(mode);
   submitError.value = "";
 };
-
 const handleSubmit = async () => {
   submitError.value = "";
-
   try {
     if (dialogMode.value === "login") {
       await login({
@@ -264,7 +238,6 @@ const handleSubmit = async () => {
       resetForm();
       return;
     }
-
     await register({
       displayName: form.displayName,
       email: form.email,
@@ -276,10 +249,8 @@ const handleSubmit = async () => {
     submitError.value = error instanceof Error ? error.message : t("auth.feedback.genericError");
   }
 };
-
 const handleLogout = async () => {
   submitError.value = "";
-
   try {
     await logout();
     toast.success(t("auth.feedback.logoutSuccess"));
@@ -288,7 +259,6 @@ const handleLogout = async () => {
     submitError.value = error instanceof Error ? error.message : t("auth.feedback.genericError");
   }
 };
-
 watch(dialogOpen, (open) => {
   if (!open) {
     resetForm();
@@ -296,7 +266,6 @@ watch(dialogOpen, (open) => {
     submitError.value = "";
   }
 });
-
 watch(dialogMode, () => {
   submitError.value = "";
 });

@@ -1,6 +1,7 @@
-import "./styles.css";
-import "vue-sonner/style.css";
+import "./styles/index.css";
+import "./styles/element/index.scss";
 
+import ElementPlus from "element-plus";
 import { createApp } from "vue";
 
 import App from "./App.vue";
@@ -27,4 +28,5 @@ const app = createApp(App);
 
 app.use(i18n);
 app.use(router);
+app.use(ElementPlus);
 app.mount("#app");

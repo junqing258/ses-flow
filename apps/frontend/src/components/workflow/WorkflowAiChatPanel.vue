@@ -29,7 +29,6 @@
         </div>
       </div>
     </div>
-
     <div class="border-b border-slate-100 px-4 py-3">
       <div class="grid grid-cols-1 gap-2 text-[11px] text-slate-500">
         <!-- <div class="rounded-[14px] border border-slate-200/80 bg-white px-3 py-2">
@@ -60,7 +59,6 @@
         </div>
       </div>
     </div>
-
     <div
       ref="messageContainerRef"
       class="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 px-4 py-4"
@@ -116,7 +114,6 @@
           </article>
         </div>
       </template>
-
       <div
         v-else
         class="rounded-2xl border border-dashed border-slate-200 bg-white/85 px-4 py-5 text-[13px] leading-6 text-slate-500"
@@ -125,7 +122,6 @@
         节点”。
       </div>
     </div>
-
     <div class="border-t border-slate-100 bg-white px-4 py-4">
       <textarea
         v-model="draftMessage"
@@ -139,32 +135,28 @@
           Enter 发送，Shift + Enter 换行
         </p>
         <div class="flex items-center gap-2">
-          <Button
-            variant="ghost"
+          <ElButton text
             class="h-9 rounded-full px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
             :disabled="!isRunning"
             @click="handleCancel"
           >
             停止
-          </Button>
-          <Button
+          </ElButton>
+          <ElButton
             class="h-9 rounded-full bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             :disabled="isComposerDisabled || !draftMessage.trim()"
             @click="handleSend"
           >
             {{ isRunning ? "协作中..." : "发送" }}
-          </Button>
+          </ElButton>
         </div>
       </div>
     </div>
   </aside>
 </template>
-
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { toast } from "vue-sonner";
-
-import { Button } from "@/components/ui/button";
+import { toast } from "@/lib/element-toast";
 import { useAiProviderConfig } from "@/composables/useAiProviderConfig";
 import { renderAiChatMarkdown } from "@/features/workflow/ai-chat-markdown";
 import {
@@ -181,7 +173,6 @@ import {
 } from "@/features/workflow/ai-chat";
 import type { AiChatMessage } from "@/features/workflow/ai-chat";
 import type { EventSourceSubscription } from "@/lib/sse";
-
 const props = defineProps<{
   runnerBaseUrl: string;
   runnerConnectionLabel: string;
@@ -192,7 +183,6 @@ const props = defineProps<{
   visibilityClass?: string;
   workflowId?: string;
 }>();
-
 const storage = resolveAiChatStorage();
 const { aiProviderConfig, hasCompleteAiProviderConfig } = useAiProviderConfig();
 const messageContainerRef = ref<HTMLElement | null>(null);
@@ -207,34 +197,29 @@ const gatewayConnectionState = ref<
   "idle" | "connecting" | "live" | "reconnecting"
 >("idle");
 let threadEventSubscription: EventSourceSubscription | null = null;
-
 const messageRoleLabelMap: Record<AiChatMessageRole, string> = {
   user: "需求",
   assistant: "Agent",
   "tool-status": "工具",
   error: "错误",
 };
-
 const messageClassMap: Record<AiChatMessageRole, string> = {
   user: "text-slate-900",
   assistant: "text-slate-800",
   "tool-status": "py-1 text-[12px] leading-5 text-amber-900",
   error: "text-rose-800",
 };
-
 const messageContentClassMap: Record<AiChatMessageRole, string> = {
   user: "mt-2",
   assistant: "mt-2",
   "tool-status": "mt-1",
   error: "mt-2",
 };
-
 const messageStatusClassMap: Record<AiChatMessageStatus, string> = {
   streaming: "bg-sky-100 text-sky-700",
   completed: "bg-slate-100 text-slate-600",
   error: "bg-rose-100 text-rose-700",
 };
-
 const isRunning = computed(() => threadSnapshot.value.status === "running");
 const claudeSessionId = computed(
   () => threadSnapshot.value.claudeSessionId ?? "",
@@ -289,47 +274,37 @@ const previewSyncLabel = computed(() => {
   if (!timestamp) {
     return "尚未同步";
   }
-
   return new Date(timestamp).toLocaleString("zh-CN");
 });
 const combinedError = computed(
   () => gatewayError.value || props.sessionError || "",
 );
 const isComposerDisabled = computed(() => !props.sessionId || isRunning.value);
-
 const formatMessageTime = (value: string) =>
   new Date(value).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
-
 const getMessageStatusLabel = (status: AiChatMessageStatus) => {
   if (status === "streaming") {
     return "进行中";
   }
-
   if (status === "error") {
     return "失败";
   }
-
   return "已完成";
 };
-
 const isMarkdownMessage = (message: AiChatMessage) =>
   message.role === "assistant" && Boolean(message.content);
-
 const renderMessageMarkdown = (message: AiChatMessage) =>
   renderAiChatMarkdown(message.content);
-
 const persistSnapshot = (snapshot: AiThreadSnapshot) => {
   if (!snapshot.editSessionId) {
     return;
   }
-
   persistAiThreadSnapshot(storage, snapshot);
 };
-
 const applySnapshot = (snapshot: AiThreadSnapshot) => {
   threadSnapshot.value = snapshot;
   persistSnapshot(snapshot);
@@ -340,12 +315,10 @@ const applySnapshot = (snapshot: AiThreadSnapshot) => {
     });
   });
 };
-
 const closeEventStream = () => {
   threadEventSubscription?.close();
   threadEventSubscription = null;
 };
-
 const ensureEventStream = (sessionId: string) => {
   closeEventStream();
   gatewayConnectionState.value = "connecting";
@@ -362,7 +335,6 @@ const ensureEventStream = (sessionId: string) => {
     },
   });
 };
-
 const hydrateThread = async (sessionId: string) => {
   if (!sessionId) {
     threadSnapshot.value = {
@@ -374,7 +346,6 @@ const hydrateThread = async (sessionId: string) => {
     gatewayConnectionState.value = "idle";
     return;
   }
-
   const cachedSnapshot = readPersistedAiThreadSnapshot(storage, sessionId);
   if (cachedSnapshot) {
     applySnapshot(cachedSnapshot);
@@ -385,7 +356,6 @@ const hydrateThread = async (sessionId: string) => {
       messages: [],
     };
   }
-
   try {
     const snapshot = await fetchAiThreadSnapshot(sessionId);
     applySnapshot(snapshot);
@@ -396,13 +366,11 @@ const hydrateThread = async (sessionId: string) => {
     toast.error(gatewayError.value);
   }
 };
-
 const handleSend = async () => {
   const message = draftMessage.value.trim();
   if (!message || !props.sessionId || isRunning.value) {
     return;
   }
-
   try {
     gatewayError.value = "";
     const currentAiProviderConfig = aiProviderConfig.value;
@@ -411,7 +379,6 @@ const handleSend = async () => {
       toast.error(gatewayError.value);
       return;
     }
-
     const snapshot = await sendAiThreadMessage(props.sessionId, {
       aiProvider: currentAiProviderConfig,
       message,
@@ -427,12 +394,10 @@ const handleSend = async () => {
     toast.error(gatewayError.value);
   }
 };
-
 const handleCancel = async () => {
   if (!props.sessionId || !isRunning.value) {
     return;
   }
-
   try {
     const snapshot = await cancelAiThreadTurn(props.sessionId);
     applySnapshot(snapshot);
@@ -442,7 +407,6 @@ const handleCancel = async () => {
     toast.error(gatewayError.value);
   }
 };
-
 watch(
   () => props.sessionId,
   (sessionId) => {
@@ -450,7 +414,6 @@ watch(
   },
   { immediate: true },
 );
-
 onBeforeUnmount(() => {
   closeEventStream();
 });

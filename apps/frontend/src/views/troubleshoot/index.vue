@@ -17,44 +17,42 @@
           </p> -->
         </div>
       </header>
-
       <section
         class="mt-6 rounded-2xl border border-white/70 bg-white/90 p-4 backdrop-blur"
       >
         <div class="grid gap-2.5 md:grid-cols-2 xl:grid-cols-5">
-          <Input
+          <ElInput
             v-model="filters.runId"
             class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="Run ID"
           />
-          <Input
+          <ElInput
             v-model="filters.requestId"
             class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="Request ID"
           />
-          <Input
+          <ElInput
             v-model="filters.orderNo"
             class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="订单号"
           />
-          <Input
+          <ElInput
             v-model="filters.waveNo"
             class="h-10 rounded-xl border-slate-200 bg-slate-50 px-3.5 text-sm"
             placeholder="波次号"
           />
-          <Button
+          <ElButton
             class="h-10 rounded-xl bg-slate-950 px-4 text-sm text-white hover:bg-slate-800"
             :disabled="isSearching"
             @click="handleSearch"
           >
             {{ isSearching ? "搜索中..." : "搜索" }}
-          </Button>
+          </ElButton>
         </div>
         <p v-if="searchError" class="mt-3 text-sm text-rose-600">
           {{ searchError }}
         </p>
       </section>
-
       <div class="mt-6 space-y-6">
         <section class="rounded-2xl border border-white/70 bg-white/92 p-4">
           <div class="flex items-center justify-between gap-3 px-2 pb-3">
@@ -65,14 +63,12 @@
               <p class="mt-1 text-sm text-slate-400">{{ total }} 条记录</p>
             </div>
           </div>
-
           <div
             v-if="results.length === 0"
             class="flex min-h-28 items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-6 text-center text-sm leading-6 text-slate-500"
           >
             输入检索条件后即可定位运行记录。
           </div>
-
           <div v-else class="flex gap-2.5 overflow-x-auto px-1 pb-1">
             <button
               v-for="item in results"
@@ -102,7 +98,6 @@
                   {{ item.status }}
                 </span>
               </div>
-
               <div class="mt-2 grid gap-0.5 text-[11px] leading-5 text-slate-500">
                 <p v-if="item.requestId" class="truncate">
                   Request: {{ item.requestId }}
@@ -123,7 +118,6 @@
             </button>
           </div>
         </section>
-
         <main class="space-y-6">
           <section class="rounded-2xl border border-white/70 bg-white/92 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -139,27 +133,23 @@
                   }}
                 </p>
               </div>
-              <Button
-                variant="outline"
+              <ElButton
                 class="rounded-full border-slate-200 bg-white px-4 text-slate-700 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
                 :disabled="!selectedRunId || isLoadingSummary"
                 @click="refreshSelectedRun"
               >
                 {{ isLoadingSummary ? "刷新中..." : "刷新详情" }}
-              </Button>
+              </ElButton>
             </div>
-
             <p v-if="summaryError" class="mt-3 text-sm text-rose-600">
               {{ summaryError }}
             </p>
-
             <div
               v-if="!selectedSummary"
               class="mt-4 flex min-h-60 items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-6 text-center text-sm leading-6 text-slate-500"
             >
               搜索后点击一条运行记录，这里会展示节点日志列表和详细内容。
             </div>
-
             <template v-else>
               <div class="mt-4 grid gap-3 md:grid-cols-4">
                 <div class="rounded-2xl bg-slate-50 px-4 py-3">
@@ -205,7 +195,6 @@
                   </p>
                 </div>
               </div>
-
               <div class="mt-5 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
                 <div
                   class="rounded-[22px] border border-slate-200 bg-slate-50/80 p-3"
@@ -222,7 +211,6 @@
                       {{ selectedSummary.timeline.length }} 条
                     </span>
                   </div>
-
                   <div class="space-y-2">
                     <button
                       v-for="(item, index) in selectedSummary.timeline"
@@ -254,7 +242,6 @@
                           {{ item.status }}
                         </span>
                       </div>
-
                       <div class="mt-2 space-y-1 text-[11px] text-slate-500">
                         <p v-if="item.startedAt">
                           开始：{{ formatDateTime(item.startedAt) }}
@@ -272,7 +259,6 @@
                     </button>
                   </div>
                 </div>
-
                 <div
                   class="rounded-[22px] border border-slate-200 bg-white p-4"
                 >
@@ -300,7 +286,6 @@
                         {{ selectedTimelineItem.status }}
                       </span>
                     </div>
-
                     <div class="grid gap-3 md:grid-cols-3">
                       <div class="rounded-2xl bg-slate-50 px-4 py-3">
                         <p
@@ -337,7 +322,6 @@
                         </p>
                       </div>
                     </div>
-
                     <div
                       v-if="
                         selectedTimelineItem.errorCode ||
@@ -365,7 +349,6 @@
                         建议：{{ selectedTimelineItem.recoveryHint }}
                       </p>
                     </div>
-
                     <div class="grid gap-4 xl:grid-cols-2">
                       <div>
                         <p
@@ -384,7 +367,6 @@
                           }}</pre
                         >
                       </div>
-
                       <div>
                         <p
                           class="text-xs font-semibold tracking-wide text-slate-500"
@@ -403,7 +385,6 @@
                         >
                       </div>
                     </div>
-
                     <div v-if="selectedTimelineItem.logs?.length">
                       <p
                         class="text-xs font-semibold tracking-wide text-slate-500"
@@ -421,7 +402,6 @@
                       </div>
                     </div>
                   </div>
-
                   <div
                     v-else
                     class="flex min-h-80 items-center justify-center rounded-[18px] border border-dashed border-slate-200 bg-slate-50/80 px-6 text-center text-sm leading-6 text-slate-500"
@@ -432,7 +412,6 @@
               </div>
             </template>
           </section>
-
           <section
             v-if="selectedSummary"
             class="rounded-2xl border border-white/70 bg-white/92 p-5"
@@ -449,7 +428,6 @@
                   }}</pre
                 >
               </div>
-
               <div>
                 <p class="text-xs font-semibold tracking-wide text-slate-500">
                   Last Output
@@ -466,13 +444,9 @@
     </div>
   </section>
 </template>
-
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   fetchWorkflowRunSummary,
   searchWorkflowRuns,
@@ -480,9 +454,7 @@ import {
   type WorkflowRunSearchItem,
   type WorkflowRunSummary,
 } from "@/features/workflow/runner";
-
 const router = useRouter();
-
 const filters = reactive({
   orderNo: "",
   requestId: "",
@@ -498,7 +470,6 @@ const isSearching = ref(false);
 const isLoadingSummary = ref(false);
 const searchError = ref("");
 const summaryError = ref("");
-
 const lastOutputValue = computed(
   () =>
     selectedSummary.value?.timeline[selectedSummary.value.timeline.length - 1]
@@ -506,29 +477,24 @@ const lastOutputValue = computed(
 );
 const lastOutputSummary = computed(() => {
   const output = lastOutputValue.value;
-
   if (!output || typeof output !== "object") {
     return String(output ?? "--");
   }
-
   const pairs = Object.entries(output as Record<string, unknown>)
     .filter(([, value]) =>
       ["string", "number", "boolean"].includes(typeof value),
     )
     .slice(0, 2)
     .map(([key, value]) => `${key}=${String(value)}`);
-
   return pairs[0] ?? "查看下方 Last Output";
 });
 const selectedTimelineItem = computed<WorkflowRunTimelineItem | null>(() => {
   if (!selectedSummary.value) {
     return null;
   }
-
   const item = selectedSummary.value.timeline[selectedTimelineIndex.value];
   return item ?? null;
 });
-
 const statusClass = (status: string) => {
   switch (status) {
     case "running":
@@ -543,24 +509,19 @@ const statusClass = (status: string) => {
       return "bg-slate-100 text-slate-600";
   }
 };
-
 const formatDateTime = (value?: string) => {
   if (!value) {
     return "--";
   }
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-
   return date.toLocaleString();
 };
-
 const loadRunSummary = async (runId: string) => {
   isLoadingSummary.value = true;
   summaryError.value = "";
-
   try {
     const summary = await fetchWorkflowRunSummary(runId);
     selectedRunId.value = runId;
@@ -573,12 +534,10 @@ const loadRunSummary = async (runId: string) => {
     isLoadingSummary.value = false;
   }
 };
-
 const handleSearch = async () => {
   isSearching.value = true;
   searchError.value = "";
   summaryError.value = "";
-
   try {
     const response = await searchWorkflowRuns({
       orderNo: filters.orderNo,
@@ -588,10 +547,8 @@ const handleSearch = async () => {
       runId: filters.runId,
       waveNo: filters.waveNo,
     });
-
     results.value = response.items;
     total.value = response.total;
-
     if (response.items[0]) {
       await loadRunSummary(response.items[0].runId);
     } else {
@@ -605,35 +562,27 @@ const handleSearch = async () => {
     isSearching.value = false;
   }
 };
-
 const handleSelectRun = async (runId: string) => {
   await loadRunSummary(runId);
 };
-
 const refreshSelectedRun = async () => {
   if (!selectedRunId.value) {
     return;
   }
-
   await loadRunSummary(selectedRunId.value);
 };
-
 const selectDefaultTimelineIndex = (summary: WorkflowRunSummary) => {
   const failedIndex = summary.timeline.findIndex(
     (item) => item.status === "failed",
   );
-
   if (failedIndex >= 0) {
     return failedIndex;
   }
-
   return Math.max(summary.timeline.length - 1, -1);
 };
-
 const handleSelectTimelineItem = (index: number) => {
   selectedTimelineIndex.value = index;
 };
-
 const handleBack = () => {
   void router.push({ name: "workflow-list" });
 };

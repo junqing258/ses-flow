@@ -1,19 +1,23 @@
 <template>
-  <Dialog :open="open" @update:open="handleOpenChange">
-    <DialogContent
+  <ElDialog
+    :model-value="open"
+    append-to-body
+    align-center
+    @update:model-value="handleOpenChange"
+  >
+    <div
       class="max-w-2xl rounded-[28px] border border-slate-200/80 bg-[#fcfcfb] p-0 shadow-[0_32px_80px_rgba(15,23,42,0.22)]"
     >
       <div class="border-b border-slate-200/80 px-6 py-5">
-        <DialogHeader class="space-y-1">
-          <DialogTitle class="text-lg font-semibold tracking-tight text-slate-950">
+        <div class="space-y-1">
+          <h2 class="text-lg font-semibold tracking-tight text-slate-950">
             {{ workflowName || "运行列表" }}
-          </DialogTitle>
-          <DialogDescription class="text-sm leading-6 text-slate-500">
+          </h2>
+          <p class="text-sm leading-6 text-slate-500">
             查看当前工作流仍在执行中的任务，并跳转到对应运行详情。
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
       </div>
-
       <div class="max-h-[60vh] overflow-y-auto px-6 py-5">
         <div
           v-if="isLoading"
@@ -73,7 +77,6 @@
                 </span>
               </span>
             </div>
-
             <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
               <span>启动于 {{ formatRunTime(run.createdAt) }}</span>
               <span>更新于 {{ formatRunTime(run.updatedAt) }}</span>
@@ -81,22 +84,13 @@
           </button>
         </div>
       </div>
-    </DialogContent>
-  </Dialog>
+    </div>
+  </ElDialog>
 </template>
-
 <script setup lang="ts">
 import dayjs from "dayjs";
 import { onBeforeUnmount, ref, watch } from "vue";
-import { toast } from "vue-sonner";
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { toast } from "@/lib/element-toast";
 import {
   subscribeWorkflowEvents,
   type WorkflowStreamNotification,
@@ -106,32 +100,26 @@ import {
   type WorkflowRunListItem,
 } from "@/features/workflow/api";
 import type { EventSourceSubscription } from "@/lib/sse";
-
 const props = defineProps<{
   open: boolean;
   workflowId: string;
   workflowName?: string;
 }>();
-
 const emit = defineEmits<{
   "update:open": [open: boolean];
   "select-run": [runId: string];
 }>();
-
 const isLoading = ref(false);
 const workflowRuns = ref<WorkflowRunListItem[]>([]);
 let workflowEventSubscription: EventSourceSubscription | null = null;
 let loadQueued = false;
 let latestLoadRequestId = 0;
-
 const closeWorkflowEventSubscription = () => {
   workflowEventSubscription?.close();
   workflowEventSubscription = null;
 };
-
 const startWorkflowEventSubscription = (workflowId: string) => {
   closeWorkflowEventSubscription();
-
   workflowEventSubscription = subscribeWorkflowEvents(workflowId, {
     onEvent: (notification: WorkflowStreamNotification) => {
       if (
@@ -140,7 +128,6 @@ const startWorkflowEventSubscription = (workflowId: string) => {
       ) {
         return;
       }
-
       void loadWorkflowRuns({ silent: true });
     },
     onError: () => {
@@ -148,26 +135,20 @@ const startWorkflowEventSubscription = (workflowId: string) => {
     },
   });
 };
-
 const handleOpenChange = (nextOpen: boolean) => {
   emit("update:open", nextOpen);
-
   if (!nextOpen) {
     closeWorkflowEventSubscription();
     workflowRuns.value = [];
   }
 };
-
 const formatRunStatusLabel = (status: WorkflowRunListItem["status"]) => {
   if (status === "waiting") {
     return "Waiting";
   }
-
   return "Running";
 };
-
 const formatRunTime = (value: string) => dayjs(value).format("MMM D · HH:mm:ss");
-
 const loadWorkflowRuns = async (
   options: {
     silent?: boolean;
@@ -177,26 +158,20 @@ const loadWorkflowRuns = async (
     workflowRuns.value = [];
     return;
   }
-
   if (isLoading.value) {
     loadQueued = true;
     return;
   }
-
   isLoading.value = true;
   const requestId = ++latestLoadRequestId;
-
   if (!options.silent) {
     workflowRuns.value = [];
   }
-
   try {
     const runs = await fetchWorkflowRuns(props.workflowId);
-
     if (requestId !== latestLoadRequestId) {
       return;
     }
-
     workflowRuns.value = runs;
   } catch (error) {
     if (!options.silent) {
@@ -205,19 +180,16 @@ const loadWorkflowRuns = async (
     }
   } finally {
     isLoading.value = false;
-
     if (loadQueued) {
       loadQueued = false;
       void loadWorkflowRuns({ silent: true });
     }
   }
 };
-
 const handleRunSelect = (runId: string) => {
   emit("select-run", runId);
   emit("update:open", false);
 };
-
 const handleCopyRunId = async (runId: string) => {
   try {
     await navigator.clipboard.writeText(runId);
@@ -226,17 +198,14 @@ const handleCopyRunId = async (runId: string) => {
     toast.error("复制运行 ID 失败");
   }
 };
-
 watch(
   () => [props.open, props.workflowId] as const,
   ([open, workflowId], previousValue) => {
     const [previousOpen, previousWorkflowId] = previousValue ?? [false, ""] as const;
-
     if (!open || !workflowId) {
       closeWorkflowEventSubscription();
       return;
     }
-
     if (!previousOpen || workflowId !== previousWorkflowId) {
       void loadWorkflowRuns();
       startWorkflowEventSubscription(workflowId);
@@ -244,7 +213,6 @@ watch(
   },
   { immediate: true },
 );
-
 onBeforeUnmount(() => {
   closeWorkflowEventSubscription();
 });

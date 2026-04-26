@@ -1,0 +1,36 @@
+$--colors: (
+  "primary": (
+    "base": #2ec5d5,
+  ),
+  "success": (
+    "base": #2f9d7e,
+  ),
+  "warning": (
+    "base": #c67f43,
+  ),
+  "danger": (
+    "base": #e67d84,
+  ),
+  "error": (
+    "base": #e67d84,
+  ),
+  "info": (
+    "base": #3398a3,
+  ),
+);
+
+@forward "element-plus/theme-chalk/src/common/var.scss" with (
+  $colors: $--colors,
+  $border-radius: (
+    "base": 8px,
+    "small": 6px,
+    "round": 999px,
+    "circle": 100%,
+  ),
+  $dialog: (
+    "width": fit-content,
+  )
+);
+
+@use "element-plus/theme-chalk/src/index.scss" as *;
+@use "./dark.scss";

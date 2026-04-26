@@ -10,7 +10,7 @@ use runner::app::WorkflowApp;
 use runner::config::RunnerConfig;
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
 use runner::utils::telemetry::init_tracing;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -64,14 +64,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(std::io::Error::other)?;
     if !auto_register_plugin_base_urls.is_empty() {
-        let descriptors = register_http_plugin_base_urls(&state, &auto_register_plugin_base_urls)
-            .await
-            .map_err(|error| std::io::Error::other(format!("failed to auto-register plugins: {error:?}")))?;
-        info!(
-            count = descriptors.len(),
-            plugin_ids = ?descriptors.iter().map(|descriptor| descriptor.id.clone()).collect::<Vec<_>>(),
-            "auto-registered http plugins"
-        );
+        match register_http_plugin_base_urls(&state, &auto_register_plugin_base_urls).await {
+            Ok(descriptors) => {
+                info!(
+                    count = descriptors.len(),
+                    plugin_ids = ?descriptors.iter().map(|descriptor| descriptor.id.clone()).collect::<Vec<_>>(),
+                    "auto-registered http plugins"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    error = ?error,
+                    base_urls = ?auto_register_plugin_base_urls,
+                    "failed to auto-register http plugins; continuing backend startup"
+                );
+            }
+        }
     }
 
     let router = build_router(state);
