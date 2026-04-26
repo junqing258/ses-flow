@@ -8,9 +8,9 @@
     width="min(92vw, 42rem)"
     @update:model-value="handleOpenChange"
   >
-    <p class="text-sm leading-6 text-slate-500">
+    <!-- <p class="text-sm leading-6 text-slate-500">
       查看当前工作流仍在执行中的任务，并跳转到对应运行详情。
-    </p>
+    </p> -->
     <div class="mt-4 max-h-[60vh] overflow-y-auto">
       <div
         v-if="isLoading"
