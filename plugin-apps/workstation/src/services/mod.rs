@@ -361,13 +361,26 @@ impl AppState {
     }
 
     pub(crate) async fn authenticated_worker_id(&self, headers: &axum::http::HeaderMap) -> Result<String, String> {
-        let token = bearer_token(headers).ok_or_else(|| "missing bearer token".to_string())?;
         let state = self.inner.read().await;
-        state
-            .tokens
-            .get(&token)
-            .cloned()
-            .ok_or_else(|| "invalid bearer token".to_string())
+        if let Some(token) = bearer_token(headers) {
+            if let Some(worker_id) = state.tokens.get(&token).cloned() {
+                return Ok(worker_id);
+            }
+        }
+
+        let mut connected_workers = state.worker_streams.keys().filter(|worker_id| worker_id.as_str() != DEFAULT_CONNECT_WORKER_ID);
+        let fallback_worker_id = connected_workers.next().cloned();
+        if fallback_worker_id.is_some() && connected_workers.next().is_none() {
+            let worker_id = fallback_worker_id.expect("fallback worker id should exist");
+            warn!(worker_id = %worker_id, "falling back to the only connected workstation for simulated WCS auth");
+            return Ok(worker_id);
+        }
+
+        if bearer_token(headers).is_some() {
+            Err("invalid bearer token".to_string())
+        } else {
+            Err("missing bearer token".to_string())
+        }
     }
 
     pub(crate) async fn health(&self) -> HealthResponse {

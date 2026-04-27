@@ -86,6 +86,16 @@ pub(crate) async fn scan_barcode(
     };
     let task = state.current_task_for_worker(&worker_id).await;
     base_result_ok(json!({
+        "Items": [
+            {
+                "Sku": task
+                    .as_ref()
+                    .map(|item| item.task_id.clone())
+                    .unwrap_or_else(|| format!("SKU-{}", request.barcode)),
+                "BarcodeName": format!("商品-{}", request.barcode),
+                "BarCode": request.barcode
+            }
+        ],
         "Barcode": request.barcode,
         "WorkerId": worker_id,
         "TaskId": task.as_ref().map(|item| item.task_id.clone()),
@@ -102,19 +112,31 @@ pub(crate) async fn get_task_info(
         Ok(worker_id) => worker_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
-    let task = match state.current_task_for_worker(&worker_id).await {
-        Some(task) => task,
-        None => return base_result_error(StatusCode::NOT_FOUND, "no active task for worker"),
-    };
+    let task = state.current_task_for_worker(&worker_id).await;
+    let task_id = task
+        .as_ref()
+        .map(|task| task.task_id.clone())
+        .unwrap_or_else(|| {
+            let task_key = request
+                .sku
+                .as_deref()
+                .or(request.barcode.as_deref())
+                .unwrap_or("MOCK");
+            format!("TASK-{}", task_key)
+        });
+    let order_id = task
+        .as_ref()
+        .map(|task| task.run_id.clone())
+        .unwrap_or_else(|| format!("ORDER-{}", worker_id));
     let data = TaskInfoResponseData {
-        task_id: task.task_id,
+        task_id,
         chute_id: request
             .sku
             .or(request.barcode)
             .map(|value| format!("C-{}", value.chars().take(3).collect::<String>()))
             .unwrap_or_else(|| "C01".to_string()),
         wave_id: request.wave_type.unwrap_or_else(|| "WAVE-DEMO".to_string()),
-        order_id: task.run_id,
+        order_id,
         count: request.completed.unwrap_or(0) + 1,
     };
     Json(BaseResult {
@@ -156,18 +178,37 @@ pub(crate) async fn robot_departure(
         "completed": request.completed,
         "requestId": request.request_id
     });
-    match state
-        .complete_task_with_success(
-            &worker_id,
-            request.request_id,
-            output,
-            state_patch,
-            Some(agv_event_payload),
-        )
-        .await
-    {
-        Ok(()) => base_result_ok(Value::Null),
-        Err(message) => base_result_error(StatusCode::BAD_REQUEST, &message),
+    if state.current_task_for_worker(&worker_id).await.is_some() {
+        match state
+            .complete_task_with_success(
+                &worker_id,
+                request.request_id,
+                output,
+                state_patch,
+                Some(agv_event_payload),
+            )
+            .await
+        {
+            Ok(()) => base_result_ok(json!({
+                "AgvId": request.agv_id,
+                "TaskId": request.task_id
+            })),
+            Err(message) => base_result_error(StatusCode::BAD_REQUEST, &message),
+        }
+    } else {
+        state
+            .queue_pending_event(&worker_id, None, "AGV_DEPART", agv_event_payload)
+            .await;
+        info!(
+            worker_id = %worker_id,
+            task_id = %request.task_id,
+            agv_id = %request.agv_id,
+            "simulated robot departure without active runner task"
+        );
+        base_result_ok(json!({
+            "AgvId": request.agv_id,
+            "TaskId": request.task_id
+        }))
     }
 }
 

@@ -268,6 +268,199 @@ async fn login_accepts_client_camel_case_payload() {
 }
 
 #[tokio::test]
+async fn scan_barcode_accepts_client_lowercase_payload_and_returns_items() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "username": "demo",
+                        "password": "demo",
+                        "platformId": "platform-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("login request should succeed");
+    let login_body = to_bytes(login_response.into_body(), usize::MAX)
+        .await
+        .expect("login body should be readable");
+    let login_payload: serde_json::Value =
+        serde_json::from_slice(&login_body).expect("login payload should be valid json");
+    let authorization = login_payload["Data"]["Authorization"]
+        .as_str()
+        .expect("authorization token should exist");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/scanBarcode")
+                .header("content-type", "application/json")
+                .header("authorization", authorization)
+                .body(Body::from(json!({ "barcode": "123" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("scan barcode request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("scan barcode body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("scan barcode response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Data"]["Items"][0]["BarCode"], json!("123"));
+    assert_eq!(payload["Data"]["Items"][0]["BarcodeName"], json!("商品-123"));
+    assert_eq!(payload["Data"]["Items"][0]["Sku"], json!("SKU-123"));
+}
+
+#[tokio::test]
+async fn scan_barcode_falls_back_to_connected_worker_for_simulation_auth() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let connect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "stationIds": ["station-1"] }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+    assert_eq!(connect_response.status(), axum::http::StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/scanBarcode")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "barcode": "123" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("scan barcode request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("scan barcode body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("scan barcode response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Data"]["WorkerId"], json!("station-1"));
+    assert_eq!(payload["Data"]["Items"][0]["BarCode"], json!("123"));
+}
+
+#[tokio::test]
+async fn get_task_info_returns_mock_task_without_active_runner_task() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let connect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "stationIds": ["station-1"] }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+    assert_eq!(connect_response.status(), axum::http::StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/getTaskInfo")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "sku": "SKU-123",
+                        "barcode": "123",
+                        "completed": 1,
+                        "waveType": "ORDER",
+                        "parcelId": null
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("get task info request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("get task info body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("get task info response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Data"]["TaskId"], json!("TASK-SKU-123"));
+    assert_eq!(payload["Data"]["ChuteId"], json!("C-SKU"));
+    assert_eq!(payload["Data"]["WaveId"], json!("ORDER"));
+    assert_eq!(payload["Data"]["OrderId"], json!("ORDER-station-1"));
+    assert_eq!(payload["Data"]["Count"], json!(2));
+}
+
+#[tokio::test]
+async fn robot_departure_succeeds_without_active_runner_task_for_simulation() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let connect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "stationIds": ["station-1"] }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+    assert_eq!(connect_response.status(), axum::http::StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/robotDeparture")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "taskId": "TASK-SKU-123",
+                        "agvId": "AGV-001",
+                        "completed": 1,
+                        "requestId": "8128831acda14b9220260427162429769"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("robot departure request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("robot departure body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("robot departure response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Data"]["TaskId"], json!("TASK-SKU-123"));
+    assert_eq!(payload["Data"]["AgvId"], json!("AGV-001"));
+}
+
+#[tokio::test]
 async fn simulate_agv_arrived_queues_legacy_sse_event() {
     let (app, _) = build_test_app(AppConfig::default());
     let response = app

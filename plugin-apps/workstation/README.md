@@ -38,7 +38,7 @@ cargo run -p workstation-plugin -- --host 127.0.0.1 --port 9102
 ```bash
 curl -X POST http://127.0.0.1:9102/station/operation/simulate/agvArrived \
   -H 'Content-Type: application/json' \
-  -d '{"stationId":"station-1","agvId":"AGV-001","requestId":1001}'
+  -d '{"stationId":"juFomZRB","agvId":"AGV-001","requestId":1001}'
 ```
 
 该接口会向对应 `stationId` 的 SSE 连接推送兼容旧客户端的 `AGV_ARRIVED` 事件。

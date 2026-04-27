@@ -16,7 +16,6 @@ dev-plugins:
   #!/usr/bin/env bash
   set -euo pipefail
   trap 'kill 0' EXIT INT TERM
-  just dev-plugin-hello-world &
   just dev-plugin-workstation &
   wait
 

@@ -204,6 +204,7 @@ fn default_station_status() -> i32 {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct VerifyNotifyRequest {
+    #[serde(alias = "sseRequestId", deserialize_with = "string_from_json_value")]
     pub(crate) request_id: String,
     #[serde(default)]
     pub(crate) execution_id: Option<String>,
@@ -212,6 +213,7 @@ pub(crate) struct VerifyNotifyRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct BarcodeRequest {
+    #[serde(alias = "barcode")]
     pub(crate) barcode: String,
 }
 
@@ -219,17 +221,17 @@ pub(crate) struct BarcodeRequest {
 #[serde(rename_all = "PascalCase")]
 #[allow(dead_code)]
 pub(crate) struct TaskInfoRequest {
-    #[serde(default)]
+    #[serde(default, alias = "stationId")]
     pub(crate) station_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "sku")]
     pub(crate) sku: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "barcode")]
     pub(crate) barcode: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "completed")]
     pub(crate) completed: Option<i64>,
-    #[serde(default)]
+    #[serde(default, alias = "waveType")]
     pub(crate) wave_type: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "lockId")]
     pub(crate) lock_id: Option<String>,
 }
 
@@ -246,9 +248,13 @@ pub(crate) struct TaskInfoResponseData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct RobotDepartureRequest {
+    #[serde(alias = "taskId")]
     pub(crate) task_id: String,
+    #[serde(alias = "agvId")]
     pub(crate) agv_id: String,
+    #[serde(alias = "completed")]
     pub(crate) completed: i64,
+    #[serde(alias = "requestId")]
     pub(crate) request_id: String,
 }
 
@@ -287,6 +293,19 @@ pub(crate) struct SimulateAgvArrivedRequest {
 
 fn default_simulated_agv_id() -> String {
     "AGV-001".to_string()
+}
+
+fn string_from_json_value<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    match value {
+        Value::String(value) => Ok(value),
+        Value::Number(value) => Ok(value.to_string()),
+        Value::Bool(value) => Ok(value.to_string()),
+        _ => Err(serde::de::Error::custom("expected string, number, or bool")),
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
