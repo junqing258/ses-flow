@@ -14,6 +14,9 @@ defineProps<NodeProps<WorkflowNodeData>>();
 
 <style scoped>
 .workflow-branch-chip-node {
-  border-radius: var(--el-dialog-border-radius, var(--el-border-radius-base));
+  border-radius: var(
+    --el-dialog-border-radius,
+    var(--app-radius-large, var(--el-border-radius-base))
+  );
 }
 </style>

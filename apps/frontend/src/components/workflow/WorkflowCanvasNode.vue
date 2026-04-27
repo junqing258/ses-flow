@@ -204,12 +204,12 @@ const containerClass = computed(() =>
   --workflow-node-border-width: 2px;
   --workflow-node-radius: var(
     --el-dialog-border-radius,
-    var(--el-border-radius-base)
+    var(--app-radius-large, var(--el-border-radius-base))
   );
   --workflow-node-inner-radius: calc(
     var(--workflow-node-radius) - var(--workflow-node-border-width)
   );
-  border-radius: var(--el-dialog-border-radius, var(--el-border-radius-base));
+  border-radius: var(--workflow-node-radius);
 }
 
 .workflow-canvas-node__pulse {
