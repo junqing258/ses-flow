@@ -82,7 +82,7 @@ const getNodeTitle = (nodeType: string) => {
     case "end":
       return "End";
     case "fetch":
-      return "Fetch";
+      return "HTTP";
     case "db_query":
       return "DB Query";
     case "set_state":

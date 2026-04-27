@@ -774,7 +774,7 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
       {
         id: "palette-fetch",
         kind: "fetch",
-        label: "Fetch",
+        label: "HTTP",
         icon: "database",
         accent: "#3B82F6",
       },
@@ -1974,7 +1974,7 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
             kind: "fetch",
             nodeKey: nodeId,
             subtitle,
-            title: "Fetch",
+            title: "HTTP",
           },
         },
         panel,

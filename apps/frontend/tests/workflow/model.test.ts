@@ -27,7 +27,7 @@ describe("createWorkflowNodeDraft", () => {
     expect(node.data.nodeKey).toBe("review_step");
   });
 
-  it("provides editable options for fetch request methods", () => {
+  it("provides editable options for HTTP request methods", () => {
     const fetchPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
       (category) => category.items,
     ).find((item) => item.id === "palette-fetch");

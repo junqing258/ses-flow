@@ -58,7 +58,7 @@ const createExampleWorkflowNodes = (): WorkflowFlowNode[] => [
       kind: "fetch",
       nodeKey: "fetch_order",
       subtitle: "查询订单",
-      title: "Fetch",
+      title: "HTTP",
     },
   },
   {

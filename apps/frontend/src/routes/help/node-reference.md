@@ -41,7 +41,7 @@ description: 参考 Runner 当前实现整理的节点能力说明。
 - If / Else
 - Switch
 - Sub-Workflow
-- Fetch
+- HTTP
 - Set State
 - Shell
 - Code
@@ -70,7 +70,7 @@ description: 参考 Runner 当前实现整理的节点能力说明。
 
 | 节点 | 作用 | 当前说明 |
 | --- | --- | --- |
-| Fetch | 发起 HTTP 请求 | 支持 `GET` / `POST`，返回结构中可读取 `data` 和 `response.status` |
+| HTTP | 发起 HTTP 请求 | 支持 `GET` / `POST`，返回结构中可读取 `data` 和 `response.status` |
 | Set State | 写入流程状态 | 将指定值写入 `state` 路径，便于后续节点通过 `state.*` 引用 |
 | Code | 执行内联代码 | 当前以 JavaScript / TypeScript 为主，可读 `trigger / input / state / env / params` |
 | Shell | 调用本机命令 | `inputMapping` 会被序列化为输入参数，适合本地脚本处理 |
@@ -94,7 +94,7 @@ description: 参考 Runner 当前实现整理的节点能力说明。
 - 当前配置里的 `path` 和 `responseMode` 主要仍是流程定义层面的元数据。
 - 现阶段不要把它理解成“配置完就自动生成独立 webhook 路由”。
 
-### Fetch
+### HTTP
 
 - 适合拉取外部接口数据。
 - 通常下个节点会从 `{{input.data}}` 或 `{{input.response.status}}` 读取结果。
