@@ -195,13 +195,92 @@
 - `editor.runDraft`
   运行页草稿，请保留已有结构，哪怕 AI 模式当前不直接使用。
 - `graph.nodes`
-  画布节点数组，节点 `id` 应与 `workflow.nodes[].id` 对齐。
+  画布节点数组。**必须包含完整的 `data` 对象**，否则前端会抛 `Cannot read properties of undefined (reading 'kind')`。格式详见下方"graph.nodes 节点格式"章节。
 - `graph.edges`
-  画布连线数组，边的 `source` / `target` 应与节点 id 对齐。
+  画布连线数组，边的 `source` / `target` 应与节点 id 对齐；`if_else` / `switch` 分支边需要加 `sourceHandle`（值与 transition `label` 一致）。
 - `graph.panels`
   右侧配置面板数据，key 是节点 id；AI 编辑时如果变更了节点配置，最好同步更新这里。
 - `workflow`
   前端展示用的工作流元数据快照，不替代 runner 的 `workflow.meta`。
+
+## 5b. graph.nodes 节点格式
+
+`graph.nodes` 中每个元素是 React Flow 节点，**必须包含 `data` 字段**。缺少 `data` 会导致前端崩溃。
+
+### 通用结构
+
+```json
+{
+  "id": "节点id",
+  "type": "terminal | workflow-card",
+  "position": { "x": 0, "y": 0 },
+  "sourcePosition": "right",
+  "targetPosition": "left",
+  "data": {
+    "kind": "...",
+    "accent": "#rrggbb",
+    "icon": "...",
+    "nodeKey": "节点id",
+    "title": "显示标题",
+    "subtitle": "副标题（可选）",
+    "runnerType": "plugin:xxx（plugin 节点必填）"
+  }
+}
+```
+
+- `type` 字段：`start` / `end` 节点用 `"terminal"`，其余全部用 `"workflow-card"`
+- `data.nodeKey` 必须与 `id` 相同
+
+### 各节点类型速查表
+
+| runner type | data.kind | data.accent | data.icon | React Flow type |
+|---|---|---|---|---|
+| `start` | `"start"` | `"#10B981"` | `"play"` | `"terminal"` |
+| `end` | `"end"` | `"#EF4444"` | `"shield"` | `"terminal"` |
+| `wait` | `"wait"` | `"#F59E0B"` | `"clock"` | `"workflow-card"` |
+| `if_else` | `"if-else"` | `"#F97316"` | `"gitBranch"` | `"workflow-card"` |
+| `switch` | `"switch"` | `"#EC4899"` | `"gitBranch"` | `"workflow-card"` |
+| `fetch` | `"fetch"` | `"#3B82F6"` | `"database"` | `"workflow-card"` |
+| `code` | `"effect"` | `"#0F766E"` | `"code"` | `"workflow-card"` |
+| `shell` | `"shell"` | `"#F97316"` | `"zap"` | `"workflow-card"` |
+| `sub_workflow` | `"sub-workflow"` | `"#6366F1"` | `"webhook"` | `"workflow-card"` |
+| `webhook_trigger` | `"trigger"` | `"#6366F1"` | `"webhook"` | `"workflow-card"` |
+| `plugin:*`（未注册） | `"effect"` | `"#8B5CF6"` | `"activity"` | `"workflow-card"` |
+| `plugin:scan_task` | `"effect"` | `"#F97316"` | `"scan-barcode"` | `"workflow-card"` |
+| `plugin:get_task_info` | `"effect"` | `"#6366F1"` | `"clipboard-list"` | `"workflow-card"` |
+| `plugin:robot_departure` | `"effect"` | `"#10B981"` | `"truck"` | `"workflow-card"` |
+| `plugin:pack_task` | `"effect"` | `"#14B8A6"` | `"badge-check"` | `"workflow-card"` |
+
+> 已注册插件的 `accent` / `icon` 以插件 descriptor 中定义的 `color` / `icon` 字段为准，优先于上表。
+
+### if_else 节点需额外带 branchHandles
+
+```json
+"data": {
+  "kind": "if-else",
+  "branchHandles": [
+    { "id": "then", "label": "then", "isDefault": false },
+    { "id": "else", "label": "else", "isDefault": true }
+  ]
+}
+```
+
+对应的出边需设置 `"sourceHandle": "then"` / `"sourceHandle": "else"`。
+
+### switch 节点需额外带 branchHandles
+
+每个分支一个条目，`isDefault: true` 标记默认分支：
+
+```json
+"data": {
+  "kind": "switch",
+  "branchHandles": [
+    { "id": "branch-a", "label": "A", "isDefault": false },
+    { "id": "branch-b", "label": "B", "isDefault": false },
+    { "id": "branch-default", "label": "default", "isDefault": true }
+  ]
+}
+```
 
 ## 6. 映射与表达式约定
 
