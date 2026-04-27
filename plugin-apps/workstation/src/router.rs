@@ -23,6 +23,14 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/resume", post(plugin::resume))
         .route("/station/operation/login", post(station::login))
         .route("/station/operation/connect", post(station::connect))
+        .route(
+            "/station/operation/simulate/agvArrived",
+            post(station::simulate_agv_arrived),
+        )
+        .route(
+            "/station/operation/simulateAgvArrived",
+            post(station::simulate_agv_arrived),
+        )
         .route("/station/operation/synchronize", post(station::synchronize))
         .route("/station/operation/verifyNotify", post(station::verify_notify))
         .route("/station/operation/scanBarcode", post(station::scan_barcode))

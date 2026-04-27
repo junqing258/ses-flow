@@ -268,6 +268,66 @@ async fn login_accepts_client_camel_case_payload() {
 }
 
 #[tokio::test]
+async fn simulate_agv_arrived_queues_legacy_sse_event() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/simulate/agvArrived")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "agvId": "AGV-9",
+                        "requestId": 42
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("simulate AGV arrival request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("simulate AGV arrival body should be readable");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("simulate AGV arrival response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Data"]["MessageType"], json!("AGV_ARRIVED"));
+    assert_eq!(payload["Data"]["RequestId"], json!("42"));
+
+    let connect_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationIds": ["station-1"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+    let connect_body = to_bytes(connect_response.into_body(), usize::MAX)
+        .await
+        .expect("connect body should be readable");
+    let connect_text = String::from_utf8(connect_body.to_vec()).expect("connect body should be utf-8");
+
+    assert!(connect_text.contains("\"messageType\":\"AGV_ARRIVED\""));
+    assert!(connect_text.contains("\"AgvId\":\"AGV-9\""));
+    assert!(connect_text.contains("\"StationId\":\"station-1\""));
+    assert!(connect_text.contains("\"RequestId\":42"));
+}
+
+#[tokio::test]
 async fn robot_departure_completes_active_task() {
     let (app, state) = build_test_app(AppConfig::default());
 

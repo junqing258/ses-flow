@@ -274,6 +274,21 @@ pub(crate) struct FailTaskRequest {
     pub(crate) error: TaskErrorPayload,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub(crate) struct SimulateAgvArrivedRequest {
+    #[serde(alias = "stationId")]
+    pub(crate) station_id: String,
+    #[serde(default = "default_simulated_agv_id", alias = "agvId")]
+    pub(crate) agv_id: String,
+    #[serde(default, alias = "requestId")]
+    pub(crate) request_id: Option<u64>,
+}
+
+fn default_simulated_agv_id() -> String {
+    "AGV-001".to_string()
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct TaskErrorPayload {

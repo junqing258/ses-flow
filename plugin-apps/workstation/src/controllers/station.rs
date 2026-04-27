@@ -7,8 +7,8 @@ use tracing::info;
 
 use crate::models::{
     BarcodeRequest, BaseResult, ConnectQuery, ConnectRequest, DriveOutRobotRequest, FailTaskRequest, LoginData,
-    LoginRequest, NoBarcodeForceDepartRequest, RobotDepartureRequest, StationStatusSyncData, StationStatusSyncRequest,
-    TaskInfoRequest, TaskInfoResponseData, VerifyNotifyRequest,
+    LoginRequest, NoBarcodeForceDepartRequest, RobotDepartureRequest, SimulateAgvArrivedRequest, StationStatusSyncData,
+    StationStatusSyncRequest, TaskInfoRequest, TaskInfoResponseData, VerifyNotifyRequest,
 };
 use crate::services::{AppState, worker_id_from_connect};
 use crate::views::{base_result_error, base_result_ok, sse_response};
@@ -42,6 +42,22 @@ pub(crate) async fn connect(
     let heartbeat_interval_secs = state.heartbeat_interval_secs();
     let (receiver, backlog, snapshots) = state.connect_context(&worker_id, query.since).await;
     sse_response(worker_id, heartbeat_interval_secs, receiver, backlog, snapshots)
+}
+
+pub(crate) async fn simulate_agv_arrived(
+    State(state): State<AppState>,
+    Json(request): Json<SimulateAgvArrivedRequest>,
+) -> Response {
+    let event = state
+        .simulate_agv_arrived(&request.station_id, &request.agv_id, request.request_id)
+        .await;
+    base_result_ok(json!({
+        "EventId": event.event_id,
+        "RequestId": event.request_id,
+        "StationId": event.worker_id,
+        "AgvId": request.agv_id,
+        "MessageType": event.message_type
+    }))
 }
 
 pub(crate) async fn verify_notify(

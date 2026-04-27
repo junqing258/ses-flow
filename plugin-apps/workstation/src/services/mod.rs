@@ -168,6 +168,48 @@ impl AppState {
         event
     }
 
+    pub(crate) async fn simulate_agv_arrived(
+        &self,
+        worker_id: &str,
+        agv_id: &str,
+        request_id: Option<u64>,
+    ) -> PendingEvent {
+        let event_id = self.event_seq.fetch_add(1, Ordering::SeqCst);
+        let request_id_value = request_id.unwrap_or(event_id);
+        let request_id_text = request_id_value.to_string();
+        let payload = json!({
+            "MessageType": "AGV_ARRIVED",
+            "messageType": "AGV_ARRIVED",
+            "AgvId": agv_id,
+            "StationId": worker_id,
+            "RequestId": request_id_value
+        });
+
+        let (sender, event) = {
+            let mut state = self.inner.write().await;
+            let sender = state.worker_sender(worker_id);
+            let event = PendingEvent {
+                event_id,
+                request_id: request_id_text,
+                worker_id: worker_id.to_string(),
+                execution_id: None,
+                message_type: "AGV_ARRIVED".to_string(),
+                payload,
+                acked_at: None,
+                created_at: Utc::now(),
+            };
+            state
+                .pending_events
+                .entry(worker_id.to_string())
+                .or_default()
+                .push(event.clone());
+            (sender, event)
+        };
+        let _ = sender.send(event.clone());
+        info!(worker_id = %worker_id, agv_id = %agv_id, request_id = %request_id_value, "simulated AGV arrival");
+        event
+    }
+
     pub(crate) async fn login(&self, worker_id: &str) -> String {
         let token = Uuid::new_v4().to_string();
         let mut state = self.inner.write().await;

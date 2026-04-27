@@ -33,6 +33,15 @@ cargo run -p workstation-plugin -- --host 127.0.0.1 --port 9102
 3. 在 backend 注册插件 baseUrl，例如 `http://127.0.0.1:9102`。
 4. workflow 使用 `plugin:scan_task` 或 `plugin:pack_task`。
 5. 工作站 App 调 `POST /station/operation/login` 获取 token，再通过 `POST /station/operation/connect` 建立 SSE。
+6. 手动模拟小车到达可调用：
+
+```bash
+curl -X POST http://127.0.0.1:9102/station/operation/simulate/agvArrived \
+  -H 'Content-Type: application/json' \
+  -d '{"stationId":"station-1","agvId":"AGV-001","requestId":1001}'
+```
+
+该接口会向对应 `stationId` 的 SSE 连接推送兼容旧客户端的 `AGV_ARRIVED` 事件。
 
 ## 当前边界
 
