@@ -23,7 +23,7 @@ pub(crate) fn plugin_waiting_response(task: &ExecutionTask) -> Response {
             "taskId": task.task_id
         }),
         state_patch: json!({
-            "wcs": {
+            "workstation": {
                 "executions": {
                     task.execution_id.clone(): {
                         "status": task.state.as_str(),
@@ -42,7 +42,7 @@ pub(crate) fn plugin_waiting_response(task: &ExecutionTask) -> Response {
         }),
         logs: vec![PluginLogRecord {
             level: "info".to_string(),
-            message: "manual task dispatched to WCS bridge".to_string(),
+            message: "manual task dispatched to workstation bridge".to_string(),
             fields: json!({
                 "executionId": task.execution_id,
                 "workerId": task.target_worker_id,

@@ -5,14 +5,15 @@ pub struct AppConfig {
 }
 
 pub const DEFAULT_RUNNER_RESUME_SIGNAL: &str = "human_task_done";
-pub const HEALTH_PLUGIN_ID: &str = "wcs_bridge";
+pub const HEALTH_PLUGIN_ID: &str = "workstation";
 pub const DEFAULT_CONNECT_WORKER_ID: &str = "anonymous";
 
 impl AppConfig {
     pub fn from_env() -> Self {
         Self {
             runner_base_url: std::env::var("RUNNER_BASE_URL").ok().map(normalize_runner_base_url),
-            heartbeat_interval_secs: std::env::var("WCS_HEARTBEAT_INTERVAL_SECS")
+            heartbeat_interval_secs: std::env::var("WORKSTATION_HEARTBEAT_INTERVAL_SECS")
+                .or_else(|_| std::env::var("WCS_HEARTBEAT_INTERVAL_SECS"))
                 .ok()
                 .and_then(|value| value.parse::<u64>().ok())
                 .filter(|value| *value > 0)

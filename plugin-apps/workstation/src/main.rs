@@ -3,14 +3,14 @@ use std::net::SocketAddr;
 
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
-use wcs_plugin::{AppConfig, build_app_with_config};
+use workstation_plugin::{AppConfig, build_app_with_config};
 
 #[tokio::main]
 async fn main() {
     init_tracing();
 
     if let Err(error) = run().await {
-        eprintln!("wcs-plugin failed: {error}");
+        eprintln!("workstation-plugin failed: {error}");
         std::process::exit(1);
     }
 }
@@ -22,7 +22,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind(address).await?;
     let config = AppConfig::from_env();
-    info!(address = %address, runner_base_url = ?config.runner_base_url, "wcs plugin listening");
+    info!(address = %address, runner_base_url = ?config.runner_base_url, "workstation plugin listening");
     axum::serve(listener, build_app_with_config(config)).await?;
     Ok(())
 }

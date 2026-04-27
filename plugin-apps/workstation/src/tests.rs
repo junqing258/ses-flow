@@ -261,7 +261,7 @@ fn builds_runner_resume_events() {
     let success = success_resume_event(
         &task,
         json!({ "taskId": "TASK-1" }),
-        json!({ "wcs": { "status": "done" } }),
+        json!({ "workstation": { "status": "done" } }),
     );
     let failure = failure_resume_event(
         &task,

@@ -18,7 +18,7 @@ pub(crate) async fn get_descriptor() -> Json<PluginDescriptor> {
         plugin_descriptors()
             .into_iter()
             .next()
-            .expect("wcs plugin should expose at least one descriptor"),
+            .expect("workstation plugin should expose at least one descriptor"),
     )
 }
 

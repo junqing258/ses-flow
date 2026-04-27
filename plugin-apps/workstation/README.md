@@ -1,6 +1,6 @@
-# WCS Plugin App
+# Workstation Plugin App
 
-`plugin-apps/wcs` 是一个面向人工工作台/WCS App 的 bridge 型 HTTP plugin。
+`plugin-apps/workstation` 是一个面向人工工作站 App 的 bridge 型 HTTP plugin，并保留兼容旧 WCS 协议的站点接口。
 
 它做两件事：
 
@@ -18,13 +18,13 @@
 ## 启动
 
 ```bash
-cargo run -p wcs-plugin -- --host 127.0.0.1 --port 9102
+cargo run -p workstation-plugin -- --host 127.0.0.1 --port 9102
 ```
 
 可选环境变量：
 
 - `RUNNER_BASE_URL=http://127.0.0.1:6302/runner-api`
-- `WCS_HEARTBEAT_INTERVAL_SECS=15`
+- `WORKSTATION_HEARTBEAT_INTERVAL_SECS=15`
 
 ## 本地联调
 

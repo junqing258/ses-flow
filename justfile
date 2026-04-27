@@ -17,7 +17,7 @@ dev-plugins:
   set -euo pipefail
   trap 'kill 0' EXIT INT TERM
   just dev-plugin-hello-world &
-  just dev-plugin-wcs &
+  just dev-plugin-workstation &
   wait
 
 dev-plugin-hello-world:
@@ -28,13 +28,13 @@ dev-plugin-hello-world:
     -w plugin-apps/hello-world \
     -x "run -p hello-world-plugin -- --host 0.0.0.0 --port ${HELLO_WORLD_PLUGIN_PORT:-9101}"
 
-dev-plugin-wcs:
+dev-plugin-workstation:
   cargo watch \
     -w Cargo.toml \
     -w Cargo.lock \
     -w .env \
-    -w plugin-apps/wcs \
-    -x "run -p wcs-plugin -- --host 0.0.0.0 --port ${WCS_PLUGIN_PORT:-9102}"
+    -w plugin-apps/workstation \
+    -x "run -p workstation-plugin -- --host 0.0.0.0 --port ${WORKSTATION_PLUGIN_PORT:-9102}"
 
 dev-ai-gateway:
   pnpm --filter ai-gateway dev
@@ -68,8 +68,8 @@ start:
 start-plugin-hello-world:
   cargo run --release -p hello-world-plugin -- --host 0.0.0.0 --port "${HELLO_WORLD_PLUGIN_PORT:-9101}"
 
-start-plugin-wcs:
-  cargo run --release -p wcs-plugin -- --host 0.0.0.0 --port "${WCS_PLUGIN_PORT:-9102}"
+start-plugin-workstation:
+  cargo run --release -p workstation-plugin -- --host 0.0.0.0 --port "${WORKSTATION_PLUGIN_PORT:-9102}"
 
 start-ai-gateway:
   pnpm --filter ai-gateway start
@@ -100,5 +100,5 @@ backend-test:
 runner-test:
   cargo test -p runner --lib
 
-wcs-plugin-test:
-  cargo test -p wcs-plugin
+workstation-plugin-test:
+  cargo test -p workstation-plugin

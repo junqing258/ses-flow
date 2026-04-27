@@ -121,7 +121,7 @@ pub(crate) async fn robot_departure(
         "RequestId": request.request_id
     });
     let state_patch = json!({
-        "wcs": {
+        "workstation": {
             "lastRobotDeparture": {
                 "taskId": request.task_id,
                 "agvId": request.agv_id,
@@ -182,7 +182,7 @@ pub(crate) async fn no_barcode_force_depart(
         "barcodeMissing": true
     });
     let state_patch = json!({
-        "wcs": {
+        "workstation": {
             "lastRobotDeparture": {
                 "taskId": request.task_id,
                 "agvId": request.agv_id,

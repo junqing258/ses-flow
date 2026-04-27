@@ -1,8 +1,8 @@
 [package]
-name = "wcs-plugin"
+name = "workstation-plugin"
 version = "0.1.0"
 edition = "2024"
-description = "WCS-compatible manual workbench bridge plugin app for SES Flow"
+description = "Workstation bridge plugin app for SES Flow"
 license = "UNLICENSED"
 
 [dependencies]

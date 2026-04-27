@@ -259,7 +259,7 @@ describe("createWorkflowNodeDraft", () => {
         version: "1.0.0",
         category: "人工工作台",
         displayName: "人工拣货",
-        pluginAppId: "wcs_bridge",
+        pluginAppId: "workstation",
         endpoint: "http://127.0.0.1:9102",
         status: "stable",
         transport: "http",
@@ -271,7 +271,7 @@ describe("createWorkflowNodeDraft", () => {
         version: "1.0.0",
         category: "人工工作台",
         displayName: "人工称货",
-        pluginAppId: "wcs_bridge",
+        pluginAppId: "workstation",
         endpoint: "http://127.0.0.1:9102",
         status: "stable",
         transport: "http",
@@ -281,12 +281,14 @@ describe("createWorkflowNodeDraft", () => {
     const helloWorldCategory = categories.find(
       (category) => category.label === "Hello World",
     );
-    const wcsCategory = categories.find((category) => category.label === "WCS");
+    const workstationCategory = categories.find(
+      (category) => category.label === "Workstation",
+    );
 
     expect(helloWorldCategory?.items.map((item) => item.label)).toEqual([
       "Hello World",
     ]);
-    expect(wcsCategory?.items.map((item) => item.label)).toEqual([
+    expect(workstationCategory?.items.map((item) => item.label)).toEqual([
       "人工拣货",
       "人工称货",
     ]);
