@@ -4,7 +4,12 @@ use crate::config::DEFAULT_RUNNER_RESUME_SIGNAL;
 use crate::models::PluginDescriptor;
 
 pub(crate) fn plugin_descriptors() -> Vec<PluginDescriptor> {
-    vec![build_scan_task_descriptor(), build_pack_task_descriptor()]
+    vec![
+        build_scan_task_descriptor(),
+        build_get_task_info_descriptor(),
+        build_robot_departure_descriptor(),
+        build_pack_task_descriptor(),
+    ]
 }
 
 fn build_scan_task_descriptor() -> PluginDescriptor {
@@ -14,10 +19,10 @@ fn build_scan_task_descriptor() -> PluginDescriptor {
         runner_type: "plugin:scan_task".to_string(),
         version: "1.0.0".to_string(),
         category: "人工工作台".to_string(),
-        display_name: "工作站扫码拣货".to_string(),
-        description: "人工工作台扫码拣货桥接节点".to_string(),
+        display_name: "等待扫码".to_string(),
+        description: "下发扫码任务到 App，挂起等待工人扫码；App 调用 scanBarcode 接口后携带 itemId 触发 resume".to_string(),
         color: Some("#F97316".to_string()),
-        icon: Some("package-check".to_string()),
+        icon: Some("scan-barcode".to_string()),
         status: "stable".to_string(),
         transport: "http".to_string(),
         timeout_ms: 0,
@@ -29,19 +34,12 @@ fn build_scan_task_descriptor() -> PluginDescriptor {
             "properties": {
                 "stationId": {
                     "type": "string",
-                    "title": "工作站 ID（platformId）",
-                    "description": "RCS 地图站点 ID；Bridge 以此作为 targetWorkerId 派发任务"
-                },
-                "waveType": {
-                    "type": "string",
-                    "title": "波次类型",
-                    "enum": ["ORDER", "PICKING"],
-                    "default": "ORDER",
-                    "description": "透传给工作站 getTaskInfo 接口的 WaveType 字段"
+                    "title": "工作站 ID",
+                    "description": "RCS 地图站点 ID；Bridge 以此作为 targetWorkerId 派发扫码任务"
                 },
                 "timeoutMs": {
                     "type": "integer",
-                    "title": "任务超时（ms）",
+                    "title": "扫码超时（ms）",
                     "default": 0,
                     "description": "0 表示不超时"
                 },
@@ -57,34 +55,171 @@ fn build_scan_task_descriptor() -> PluginDescriptor {
             }
         }),
         defaults: json!({
-            "waveType": "ORDER",
             "timeoutMs": 0,
             "waitSignalType": DEFAULT_RUNNER_RESUME_SIGNAL
         }),
         input_schema: json!({
             "type": "object",
-            "required": ["orderId", "waveId", "barcode", "chuteId", "count"],
+            "required": ["agvId"],
             "properties": {
-                "orderId": { "type": "string", "title": "订单 ID" },
-                "waveId": { "type": "string", "title": "波次 ID" },
-                "sku": { "type": "string", "title": "商品 SKU（可选）" },
-                "barcode": { "type": "string", "title": "期望扫描条码" },
-                "chuteId": { "type": "string", "title": "目标格口 ID" },
-                "count": { "type": "integer", "title": "本次需拣数量" },
-                "lockId": {
+                "agvId": {
                     "type": "string",
-                    "title": "库存锁 ID（可选，透传给 getTaskInfo.LockId）"
+                    "title": "AGV 编号",
+                    "description": "当前停靠工作站的小车 ID，由上游 wait(car_arrived) resume 写入 state"
                 }
             }
         }),
         output_schema: json!({
             "type": "object",
+            "required": ["itemId"],
             "properties": {
-                "taskId": { "type": "string", "title": "WCS 内部任务 ID（来自 getTaskInfo 响应）" },
-                "scannedBarcode": { "type": "string", "title": "操作员实际扫描到的条码" },
-                "agvId": { "type": "string", "title": "执行本次任务的 AGV 编号" },
-                "completed": { "type": "integer", "title": "本次实际完成件数" },
-                "chuteId": { "type": "string", "title": "WCS 确认的实际投放格口" }
+                "itemId": {
+                    "type": "string",
+                    "title": "商品唯一 ID",
+                    "description": "scanBarcode 接口返回的 itemId，由 resume 携带写入 state"
+                }
+            }
+        }),
+        input_mapping_schema: json!({
+            "type": "object"
+        }),
+        output_mapping_schema: json!({
+            "type": "object"
+        }),
+    }
+}
+
+fn build_get_task_info_descriptor() -> PluginDescriptor {
+    PluginDescriptor {
+        id: "get_task_info".to_string(),
+        kind: "effect".to_string(),
+        runner_type: "plugin:get_task_info".to_string(),
+        version: "1.0.0".to_string(),
+        category: "人工工作台".to_string(),
+        display_name: "获取任务/订单信息".to_string(),
+        description: "串联 getTaskInfo → lockTask，锁定库存并获取 taskId；结果通过 statePatch 写回 run state".to_string(),
+        color: Some("#6366F1".to_string()),
+        icon: Some("clipboard-list".to_string()),
+        status: "stable".to_string(),
+        transport: "http".to_string(),
+        timeout_ms: 10_000,
+        supports_cancel: false,
+        supports_resume: false,
+        config_schema: json!({
+            "type": "object",
+            "required": ["sesBaseUrl"],
+            "properties": {
+                "sesBaseUrl": {
+                    "type": "string",
+                    "title": "SES API Base URL",
+                    "description": "工作站接口根路径，如 http://ses-host/station/operation"
+                },
+                "timeoutMs": {
+                    "type": "integer",
+                    "title": "请求超时（ms）",
+                    "default": 10000
+                }
+            }
+        }),
+        defaults: json!({
+            "timeoutMs": 10000
+        }),
+        input_schema: json!({
+            "type": "object",
+            "required": ["stationId", "itemId"],
+            "properties": {
+                "stationId": {
+                    "type": "string",
+                    "title": "工作站 ID",
+                    "description": "来自 state.stationId，由上游波次流程写入"
+                },
+                "itemId": {
+                    "type": "string",
+                    "title": "商品唯一 ID",
+                    "description": "来自 state.itemId，由 plugin:scan_task resume 写入"
+                }
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["taskId", "orderId", "orderDetailId", "targetId", "count"],
+            "properties": {
+                "taskId": {
+                    "type": "string",
+                    "title": "任务 ID",
+                    "description": "lockTask 返回，用于后续 robotDeparture"
+                },
+                "orderId": { "type": "string", "title": "订单 ID" },
+                "orderDetailId": { "type": "string", "title": "订单明细 ID" },
+                "targetId": { "type": "string", "title": "目的地 ID（格口）" },
+                "count": { "type": "integer", "title": "本次发车件数" }
+            }
+        }),
+        input_mapping_schema: json!({
+            "type": "object"
+        }),
+        output_mapping_schema: json!({
+            "type": "object"
+        }),
+    }
+}
+
+fn build_robot_departure_descriptor() -> PluginDescriptor {
+    PluginDescriptor {
+        id: "robot_departure".to_string(),
+        kind: "effect".to_string(),
+        runner_type: "plugin:robot_departure".to_string(),
+        version: "1.0.0".to_string(),
+        category: "人工工作台".to_string(),
+        display_name: "发车".to_string(),
+        description: "调用 robotDeparture 接口通知 RCS 小车离站；result 枚举：SUCCESS(0) / NO_AGV(1) / NO_TASK(2)".to_string(),
+        color: Some("#10B981".to_string()),
+        icon: Some("truck".to_string()),
+        status: "stable".to_string(),
+        transport: "http".to_string(),
+        timeout_ms: 10_000,
+        supports_cancel: false,
+        supports_resume: false,
+        config_schema: json!({
+            "type": "object",
+            "required": ["sesBaseUrl"],
+            "properties": {
+                "sesBaseUrl": {
+                    "type": "string",
+                    "title": "SES API Base URL",
+                    "description": "工作站接口根路径，如 http://ses-host/station/operation"
+                },
+                "timeoutMs": {
+                    "type": "integer",
+                    "title": "请求超时（ms）",
+                    "default": 10000
+                }
+            }
+        }),
+        defaults: json!({
+            "timeoutMs": 10000
+        }),
+        input_schema: json!({
+            "type": "object",
+            "required": ["taskId"],
+            "properties": {
+                "taskId": {
+                    "type": "string",
+                    "title": "任务 ID",
+                    "description": "来自 state.taskId，由 plugin:get_task_info statePatch 写入"
+                }
+            }
+        }),
+        output_schema: json!({
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+                "result": {
+                    "type": "integer",
+                    "title": "发车结果",
+                    "description": "0=SUCCESS，1=NO_AGV（无小车），2=NO_TASK（任务不存在）",
+                    "enum": [0, 1, 2]
+                }
             }
         }),
         input_mapping_schema: json!({
