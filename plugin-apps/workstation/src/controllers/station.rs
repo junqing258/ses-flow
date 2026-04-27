@@ -75,6 +75,41 @@ pub(crate) async fn verify_notify(
     }
 }
 
+pub(crate) async fn offline(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let worker_id = match state.authenticated_worker_id(&headers).await {
+        Ok(worker_id) => worker_id,
+        Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
+    };
+    base_result_ok(json!({
+        "StationId": worker_id,
+        "Status": 0,
+        "Online": false
+    }))
+}
+
+pub(crate) async fn online(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let worker_id = match state.authenticated_worker_id(&headers).await {
+        Ok(worker_id) => worker_id,
+        Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
+    };
+    base_result_ok(json!({
+        "StationId": worker_id,
+        "Status": 1,
+        "Online": true
+    }))
+}
+
+pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let worker_id = match state.authenticated_worker_id(&headers).await {
+        Ok(worker_id) => worker_id,
+        Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
+    };
+    base_result_ok(json!({
+        "StationId": worker_id,
+        "LoggedOut": true
+    }))
+}
+
 pub(crate) async fn scan_barcode(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -23,6 +23,9 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/resume", post(plugin::resume))
         .route("/station/operation/login", post(station::login))
         .route("/station/operation/connect", post(station::connect))
+        .route("/station/operation/offline", post(station::offline))
+        .route("/station/operation/online", post(station::online))
+        .route("/station/operation/logout", post(station::logout))
         .route(
             "/station/operation/simulate/agvArrived",
             post(station::simulate_agv_arrived),

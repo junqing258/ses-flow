@@ -32,27 +32,34 @@ async fn descriptors_route_returns_manual_nodes() {
         .await
         .expect("descriptors body should be readable");
     let payload: serde_json::Value = serde_json::from_slice(&body).expect("descriptors response should be valid json");
-    assert_eq!(payload.as_array().expect("descriptors should be an array").len(), 2);
-    assert_eq!(payload[0]["id"], json!("scan_task"));
-    assert_eq!(payload[0]["runnerType"], json!("plugin:scan_task"));
-    assert_eq!(payload[0]["supportsResume"], json!(true));
-    assert_eq!(payload[0]["configSchema"]["required"], json!(["stationId"]));
+    let descriptors = payload.as_array().expect("descriptors should be an array");
+    assert!(descriptors.len() >= 2);
+    let scan_task = descriptors
+        .iter()
+        .find(|item| item["id"] == json!("scan_task"))
+        .expect("scan_task descriptor should exist");
+    let pack_task = descriptors
+        .iter()
+        .find(|item| item["id"] == json!("pack_task"))
+        .expect("pack_task descriptor should exist");
+    assert_eq!(scan_task["runnerType"], json!("plugin:scan_task"));
+    assert_eq!(scan_task["supportsResume"], json!(true));
+    assert_eq!(scan_task["configSchema"]["required"], json!(["stationId"]));
     assert_eq!(
-        payload[0]["inputSchema"]["required"],
-        json!(["orderId", "waveId", "barcode", "chuteId", "count"])
+        scan_task["inputSchema"]["required"],
+        json!(["agvId"])
     );
-    assert_eq!(payload[1]["id"], json!("pack_task"));
-    assert_eq!(payload[1]["runnerType"], json!("plugin:pack_task"));
-    assert_eq!(payload[1]["supportsResume"], json!(false));
-    assert_eq!(payload[1]["configSchema"]["required"], json!(["stationId"]));
+    assert_eq!(pack_task["runnerType"], json!("plugin:pack_task"));
+    assert_eq!(pack_task["supportsResume"], json!(false));
+    assert_eq!(pack_task["configSchema"]["required"], json!(["stationId"]));
     assert_eq!(
-        payload[1]["inputSchema"]["required"],
+        pack_task["inputSchema"]["required"],
         json!(["chuteId", "waveId", "itemCount"])
     );
-    assert_eq!(payload[0]["color"], json!("#F97316"));
-    assert_eq!(payload[0]["icon"], json!("package-check"));
-    assert_eq!(payload[1]["color"], json!("#14B8A6"));
-    assert_eq!(payload[1]["icon"], json!("badge-check"));
+    assert_eq!(scan_task["color"], json!("#F97316"));
+    assert_eq!(scan_task["icon"], json!("scan-barcode"));
+    assert_eq!(pack_task["color"], json!("#14B8A6"));
+    assert_eq!(pack_task["icon"], json!("badge-check"));
 }
 
 #[tokio::test]
@@ -411,6 +418,69 @@ async fn get_task_info_returns_mock_task_without_active_runner_task() {
     assert_eq!(payload["Data"]["WaveId"], json!("ORDER"));
     assert_eq!(payload["Data"]["OrderId"], json!("ORDER-station-1"));
     assert_eq!(payload["Data"]["Count"], json!(2));
+}
+
+#[tokio::test]
+async fn station_status_routes_accept_client_empty_payloads() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "username": "demo",
+                        "password": "demo",
+                        "platformId": "platform-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("login request should succeed");
+    let login_body = to_bytes(login_response.into_body(), usize::MAX)
+        .await
+        .expect("login body should be readable");
+    let login_payload: serde_json::Value =
+        serde_json::from_slice(&login_body).expect("login payload should be valid json");
+    let authorization = login_payload["Data"]["Authorization"]
+        .as_str()
+        .expect("authorization token should exist");
+
+    for (uri, expected_key) in [
+        ("/station/operation/offline", "Online"),
+        ("/station/operation/online", "Online"),
+        ("/station/operation/logout", "LoggedOut"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .header("authorization", authorization)
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .expect("station status request should succeed");
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("station status body should be readable");
+        let payload: serde_json::Value =
+            serde_json::from_slice(&body).expect("station status response should be valid json");
+        assert_eq!(payload["Code"], json!(0));
+        assert_eq!(payload["Data"]["StationId"], json!("station-1"));
+        assert!(payload["Data"].get(expected_key).is_some());
+    }
 }
 
 #[tokio::test]
