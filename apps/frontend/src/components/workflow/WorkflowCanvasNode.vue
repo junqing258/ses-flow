@@ -82,7 +82,7 @@ const statusClass = computed(() => {
 });
 const containerClass = computed(() =>
   cn(
-    'group relative w-[220px] rounded-[18px] border-2 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)] transition-all duration-200',
+    'workflow-canvas-node group relative w-[220px] border-2 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)] transition-all duration-200',
     executionStatus.value === "running"
       ? 'translate-y-[-2px] border-[var(--node-accent)] ring-4 ring-cyan-100 shadow-[0_22px_54px_rgba(34,211,238,0.18)]'
       : executionStatus.value === "failed"
@@ -105,7 +105,7 @@ const containerClass = computed(() =>
   >
     <div
       v-if="executionStatus === 'running'"
-      class="pointer-events-none absolute -inset-1 rounded-[22px] animate-pulse bg-cyan-200/20"
+      class="workflow-canvas-node__pulse pointer-events-none absolute -inset-1 animate-pulse bg-cyan-200/20"
     />
 
     <Handle
@@ -116,11 +116,11 @@ const containerClass = computed(() =>
     />
 
     <div
-      class="flex overflow-hidden rounded-2xl"
+      class="workflow-canvas-node__body flex overflow-hidden"
       :style="{ height: `${branchNodeHeight}px` }"
     >
       <div
-        class="flex w-14 items-center justify-center bg-(--node-accent) text-white"
+        class="workflow-canvas-node__accent flex w-14 items-center justify-center bg-(--node-accent) text-white"
       >
         <WorkflowIcon
           :icon="data.icon"
@@ -198,3 +198,32 @@ const containerClass = computed(() =>
     </template>
   </div>
 </template>
+
+<style scoped>
+.workflow-canvas-node {
+  --workflow-node-border-width: 2px;
+  --workflow-node-radius: var(
+    --el-dialog-border-radius,
+    var(--el-border-radius-base)
+  );
+  --workflow-node-inner-radius: calc(
+    var(--workflow-node-radius) - var(--workflow-node-border-width)
+  );
+  border-radius: var(--el-dialog-border-radius, var(--el-border-radius-base));
+}
+
+.workflow-canvas-node__pulse {
+  border-radius: calc(
+    var(--el-dialog-border-radius, var(--el-border-radius-base)) + 4px
+  );
+}
+
+.workflow-canvas-node__body {
+  border-radius: var(--workflow-node-inner-radius);
+}
+
+.workflow-canvas-node__accent {
+  border-bottom-left-radius: var(--workflow-node-inner-radius);
+  border-top-left-radius: var(--workflow-node-inner-radius);
+}
+</style>
