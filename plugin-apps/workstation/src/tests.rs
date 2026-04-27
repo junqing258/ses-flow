@@ -144,6 +144,32 @@ async fn synchronize_returns_station_status_sync_data() {
 }
 
 #[tokio::test]
+async fn synchronize_defaults_to_enabled_status() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/synchronize")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .expect("synchronize request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("synchronize body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("synchronize response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Message"], json!("Success"));
+    assert_eq!(payload["Data"]["Status"], json!(1));
+    assert!(payload["Data"].get("status").is_none());
+}
+
+#[tokio::test]
 async fn robot_departure_completes_active_task() {
     let (app, state) = build_test_app(AppConfig::default());
 
