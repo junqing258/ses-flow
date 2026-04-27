@@ -5,13 +5,18 @@ use tower::ServiceExt;
 
 use crate::models::{ExecutionTask, TaskErrorPayload, TaskState};
 use crate::router::build_router;
-use crate::services::AppState;
-use crate::views::{failure_resume_event, success_resume_event};
+use crate::services::{AppState, worker_id_from_connect};
+use crate::views::{failure_resume_event, heartbeat_payload, success_resume_event};
 use crate::{AppConfig, DEFAULT_CONNECT_WORKER_ID};
 
 fn build_test_app(config: AppConfig) -> (axum::Router, AppState) {
     let state = AppState::new(config);
     (build_router(state.clone()), state)
+}
+
+#[test]
+fn default_heartbeat_interval_is_shorter_than_client_read_timeout() {
+    assert_eq!(AppConfig::default().heartbeat_interval_secs, 5);
 }
 
 #[tokio::test]
@@ -109,6 +114,29 @@ async fn connect_succeeds_with_empty_payload() {
     );
 }
 
+#[test]
+fn heartbeat_payload_uses_legacy_wcs_online_status() {
+    let payload = heartbeat_payload("station-1");
+
+    assert_eq!(payload["messageType"], json!("HEART_BEAT"));
+    assert_eq!(payload["MessageType"], json!("HEART_BEAT"));
+    assert_eq!(payload["RcsStatus"], json!("ONLINE"));
+    assert_eq!(payload["StationList"][0]["Stationid"], json!("station-1"));
+    assert_eq!(payload["StationList"][0]["StationStatus"], json!("OPEN"));
+}
+
+#[test]
+fn connect_request_accepts_client_camel_case_payload_and_prefers_station_id() {
+    let request: crate::models::ConnectRequest = serde_json::from_value(json!({
+        "clientId": "random-client-id",
+        "platformId": "platform-1",
+        "stationIds": ["station-1"]
+    }))
+    .expect("client connect payload should deserialize");
+
+    assert_eq!(worker_id_from_connect(&request), "station-1");
+}
+
 #[tokio::test]
 async fn synchronize_returns_station_status_sync_data() {
     let (app, _) = build_test_app(AppConfig::default());
@@ -167,6 +195,76 @@ async fn synchronize_defaults_to_enabled_status() {
     assert_eq!(payload["Message"], json!("Success"));
     assert_eq!(payload["Data"]["Status"], json!(1));
     assert!(payload["Data"].get("status").is_none());
+}
+
+#[tokio::test]
+async fn synchronize_accepts_client_camel_case_payload() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/synchronize")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "status": 0,
+                        "platformId": "platform-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("synchronize request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("synchronize body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("synchronize response should be valid json");
+    assert_eq!(payload["Data"]["StationId"], json!("station-1"));
+    assert_eq!(payload["Data"]["Status"], json!(0));
+    assert_eq!(payload["Data"]["PlatformId"], json!("platform-1"));
+}
+
+#[tokio::test]
+async fn login_accepts_client_camel_case_payload() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "username": "admin",
+                        "password": "123456",
+                        "platformId": "platform-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("login request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("login body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("login response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Message"], json!("Success"));
+    assert!(
+        payload["Data"]["Authorization"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("Bearer ")),
+        "login should return a bearer token"
+    );
 }
 
 #[tokio::test]

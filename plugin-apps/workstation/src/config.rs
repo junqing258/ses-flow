@@ -17,7 +17,7 @@ impl AppConfig {
                 .ok()
                 .and_then(|value| value.parse::<u64>().ok())
                 .filter(|value| *value > 0)
-                .unwrap_or(15),
+                .unwrap_or(5),
         }
     }
 }
@@ -26,7 +26,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             runner_base_url: None,
-            heartbeat_interval_secs: 15,
+            heartbeat_interval_secs: 5,
         }
     }
 }

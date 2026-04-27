@@ -91,16 +91,23 @@ pub(crate) fn sync_snapshot_event(worker_id: &str, tasks: Vec<TaskSnapshot>) -> 
 }
 
 pub(crate) fn heartbeat_event(worker_id: &str) -> Event {
-    Event::default().event("Heart_Beat").data(
-        json!({
-            "MessageType": "Heart_Beat",
+    Event::default()
+        .event("Heart_Beat")
+        .data(heartbeat_payload(worker_id).to_string())
+}
+
+pub(crate) fn heartbeat_payload(worker_id: &str) -> Value {
+    json!({
+            "MessageType": "HEART_BEAT",
+            "messageType": "HEART_BEAT",
             "WorkerId": worker_id,
-            "RcsStatus": "connected",
-            "StationList": [worker_id],
+            "RcsStatus": "ONLINE",
+            "StationList": [{
+                "Stationid": worker_id,
+                "StationStatus": "OPEN"
+            }],
             "Ts": Utc::now().to_rfc3339()
-        })
-        .to_string(),
-    )
+    })
 }
 
 pub(crate) fn sse_response(
@@ -111,6 +118,8 @@ pub(crate) fn sse_response(
     snapshots: Vec<TaskSnapshot>,
 ) -> Response {
     let stream = stream! {
+        yield Ok(heartbeat_event(&worker_id));
+
         for event in backlog {
             yield Ok::<Event, Infallible>(event.to_sse_event());
         }

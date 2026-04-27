@@ -141,12 +141,13 @@ pub(crate) struct BaseResult<T> {
 #[serde(rename_all = "PascalCase")]
 #[allow(dead_code)]
 pub(crate) struct LoginRequest {
+    #[serde(alias = "stationId")]
     pub(crate) station_id: String,
-    #[serde(default)]
+    #[serde(default, alias = "platformId")]
     pub(crate) platform_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "username")]
     pub(crate) username: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "password")]
     pub(crate) password: Option<String>,
 }
 
@@ -160,13 +161,13 @@ pub(crate) struct LoginData {
 #[serde(rename_all = "PascalCase")]
 #[allow(dead_code)]
 pub(crate) struct ConnectRequest {
-    #[serde(default)]
+    #[serde(default, alias = "clientId")]
     pub(crate) client_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "stationId")]
     pub(crate) station_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "platformId")]
     pub(crate) platform_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "stationIds")]
     pub(crate) station_ids: Vec<String>,
 }
 
@@ -178,11 +179,11 @@ pub(crate) struct ConnectQuery {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct StationStatusSyncRequest {
-    #[serde(default)]
+    #[serde(default, alias = "stationId")]
     pub(crate) station_id: Option<String>,
-    #[serde(default = "default_station_status")]
+    #[serde(default = "default_station_status", alias = "status")]
     pub(crate) status: i32,
-    #[serde(default)]
+    #[serde(default, alias = "platformId")]
     pub(crate) platform_id: Option<String>,
 }
 

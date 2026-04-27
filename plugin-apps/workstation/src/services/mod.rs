@@ -414,10 +414,10 @@ impl BridgeState {
 
 pub(crate) fn worker_id_from_connect(request: &ConnectRequest) -> String {
     request
-        .client_id
+        .station_id
         .clone()
-        .or_else(|| request.station_id.clone())
         .or_else(|| request.station_ids.first().cloned())
+        .or_else(|| request.client_id.clone())
         .unwrap_or_else(|| DEFAULT_CONNECT_WORKER_ID.to_string())
 }
 

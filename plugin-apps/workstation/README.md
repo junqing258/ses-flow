@@ -24,7 +24,7 @@ cargo run -p workstation-plugin -- --host 127.0.0.1 --port 9102
 可选环境变量：
 
 - `RUNNER_BASE_URL=http://127.0.0.1:6302/runner-api`
-- `WORKSTATION_HEARTBEAT_INTERVAL_SECS=15`
+- `WORKSTATION_HEARTBEAT_INTERVAL_SECS=5`
 
 ## 本地联调
 
