@@ -177,6 +177,24 @@ pub(crate) struct ConnectQuery {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+pub(crate) struct StationStatusSyncRequest {
+    pub(crate) station_id: String,
+    pub(crate) status: i32,
+    #[serde(default)]
+    pub(crate) platform_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub(crate) struct StationStatusSyncData {
+    pub(crate) station_id: String,
+    pub(crate) status: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) platform_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub(crate) struct VerifyNotifyRequest {
     pub(crate) request_id: String,
     #[serde(default)]

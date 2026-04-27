@@ -7,8 +7,8 @@ use tracing::info;
 
 use crate::models::{
     BarcodeRequest, BaseResult, ConnectQuery, ConnectRequest, DriveOutRobotRequest, FailTaskRequest, LoginData,
-    LoginRequest, NoBarcodeForceDepartRequest, RobotDepartureRequest, TaskInfoRequest, TaskInfoResponseData,
-    VerifyNotifyRequest,
+    LoginRequest, NoBarcodeForceDepartRequest, RobotDepartureRequest, StationStatusSyncData, StationStatusSyncRequest,
+    TaskInfoRequest, TaskInfoResponseData, VerifyNotifyRequest,
 };
 use crate::services::{AppState, worker_id_from_connect};
 use crate::views::{base_result_error, base_result_ok, sse_response};
@@ -25,8 +25,12 @@ pub(crate) async fn login(State(state): State<AppState>, Json(request): Json<Log
     .into_response()
 }
 
-pub(crate) async fn synchronize() -> Response {
-    base_result_ok(Value::Null)
+pub(crate) async fn synchronize(Json(request): Json<StationStatusSyncRequest>) -> Response {
+    base_result_ok(json!(StationStatusSyncData {
+        station_id: request.station_id,
+        status: request.status,
+        platform_id: request.platform_id,
+    }))
 }
 
 pub(crate) async fn connect(

@@ -110,7 +110,7 @@ async fn connect_succeeds_with_empty_payload() {
 }
 
 #[tokio::test]
-async fn synchronize_returns_success_placeholder() {
+async fn synchronize_returns_station_status_sync_data() {
     let (app, _) = build_test_app(AppConfig::default());
     let response = app
         .oneshot(
@@ -118,7 +118,14 @@ async fn synchronize_returns_success_placeholder() {
                 .method("POST")
                 .uri("/station/operation/synchronize")
                 .header("content-type", "application/json")
-                .body(Body::from("{}"))
+                .body(Body::from(
+                    json!({
+                        "StationId": "station-1",
+                        "Status": 1,
+                        "PlatformId": "platform-1"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -131,6 +138,9 @@ async fn synchronize_returns_success_placeholder() {
     let payload: serde_json::Value = serde_json::from_slice(&body).expect("synchronize response should be valid json");
     assert_eq!(payload["Code"], json!(0));
     assert_eq!(payload["Message"], json!("Success"));
+    assert_eq!(payload["Data"]["StationId"], json!("station-1"));
+    assert_eq!(payload["Data"]["Status"], json!(1));
+    assert_eq!(payload["Data"]["PlatformId"], json!("platform-1"));
 }
 
 #[tokio::test]
