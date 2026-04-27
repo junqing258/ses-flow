@@ -75,6 +75,38 @@ describe("createWorkflowNodeDraft", () => {
     expect(valueField?.value).toContain("handledBy");
   });
 
+  it("creates db query nodes with PostgreSQL config fields", () => {
+    const dbQueryPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+      (category) => category.items,
+    ).find((item) => item.id === "palette-db-query");
+
+    expect(dbQueryPaletteItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      dbQueryPaletteItem!,
+      { x: 180, y: 240 },
+      [],
+    );
+    const modeField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "mode",
+    );
+
+    expect(node.data.kind).toBe("db-query");
+    expect(node.data.title).toBe("DB Query");
+    expect(
+      panel.fieldsByTab.base?.find((field) => field.key === "connectionKey")
+        ?.value,
+    ).toBe("default");
+    expect(panel.fieldsByTab.base?.find((field) => field.key === "sql")?.value)
+      .toContain(":order_no");
+    expect(panel.fieldsByTab.mapping?.find((field) => field.key === "params"))
+      .toBeDefined();
+    expect(getWorkflowFieldSelectOptions(panel, modeField!)).toEqual([
+      { label: "read", value: "read" },
+      { label: "write", value: "write" },
+    ]);
+  });
+
   it("maps switch fallback select options from current branches", () => {
     const switchPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
       (category) => category.items,

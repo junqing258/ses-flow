@@ -447,6 +447,10 @@ const extractNodeType = (node: WorkflowFlowNode) => {
     return "fetch";
   }
 
+  if (node.data.kind === "db-query") {
+    return "db_query";
+  }
+
   if (node.data.kind === "set-state") {
     return "set_state";
   }
@@ -538,6 +542,19 @@ const buildNodeDefinition = (
     }
     definition.inputMapping = parseMappingValue(
       getFieldValue(panel, "mapping", "inputFrom"),
+    );
+  }
+
+  if (type === "db_query") {
+    definition.config = {
+      connectionKey: getFieldValue(panel, "base", "connectionKey") || "default",
+      mode: getFieldValue(panel, "base", "mode") || "read",
+      sql:
+        getFieldValue(panel, "base", "sql") ||
+        "select * from orders where order_no = :order_no limit 20",
+    };
+    definition.inputMapping = parseMappingValue(
+      getFieldValue(panel, "mapping", "params"),
     );
   }
 

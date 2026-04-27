@@ -8,6 +8,7 @@ import {
   createWorkflowPanels,
   setSwitchBranches,
   setSwitchFallbackHandle,
+  WORKFLOW_PALETTE_CATEGORIES,
   type WorkflowFlowNode,
 } from "@/features/workflow/model";
 import {
@@ -729,5 +730,73 @@ describe("shouldPollWorkflowRunSummary", () => {
     expect(shouldPollWorkflowRunSummary("completed")).toBe(false);
     expect(shouldPollWorkflowRunSummary("failed")).toBe(false);
     expect(shouldPollWorkflowRunSummary("terminated")).toBe(false);
+  });
+
+  it("maps db query nodes into runner definitions", () => {
+    const paletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+      (category) => category.items,
+    ).find((item) => item.id === "palette-db-query");
+
+    expect(paletteItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      paletteItem!,
+      { x: 260, y: 176 },
+      [],
+    );
+
+    panel.fieldsByTab.base?.forEach((field) => {
+      if (field.key === "connectionKey") {
+        field.value = "orders";
+      }
+      if (field.key === "mode") {
+        field.value = "write";
+      }
+      if (field.key === "sql") {
+        field.value =
+          "insert into orders(order_no) values(:order_no) returning id";
+      }
+    });
+    panel.fieldsByTab.mapping?.forEach((field) => {
+      if (field.key === "params") {
+        field.value = "{\n  order_no: trigger.body.orderNo\n}";
+      }
+    });
+
+    const definition = buildRunnerWorkflowDefinition(
+      [
+        createExampleWorkflowNodes()[0],
+        {
+          ...node,
+          id: "db_query_1",
+          data: {
+            ...node.data,
+            nodeKey: "db_query_1",
+          },
+        },
+      ],
+      [{ id: "edge:start->db", source: "start", target: "db_query_1" }],
+      {
+        db_query_1: panel,
+        start: createWorkflowPanels().start,
+      },
+      {
+        workflowId: "db-flow",
+        workflowName: "DB Flow",
+        workflowVersion: "1",
+      },
+    );
+
+    expect(definition.nodes.find((item) => item.id === "db_query_1")).toMatchObject({
+      type: "db_query",
+      config: {
+        connectionKey: "orders",
+        mode: "write",
+        sql: "insert into orders(order_no) values(:order_no) returning id",
+      },
+      inputMapping: {
+        order_no: "{{trigger.body.orderNo}}",
+      },
+    });
   });
 });

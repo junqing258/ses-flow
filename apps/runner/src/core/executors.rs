@@ -1,4 +1,5 @@
 mod code_executor;
+mod db_executor;
 mod end_executor;
 mod fetch_executor;
 mod if_else_executor;
@@ -26,6 +27,7 @@ use crate::error::RunnerError;
 use crate::services::WorkflowServices;
 
 use self::code_executor::CodeExecutor;
+use self::db_executor::DbQueryExecutor;
 use self::end_executor::EndExecutor;
 use self::fetch_executor::FetchExecutor;
 use self::if_else_executor::IfElseExecutor;
@@ -62,6 +64,7 @@ impl ExecutorRegistry {
         registry.register(EndExecutor);
         registry.register(WebhookTriggerExecutor);
         registry.register(FetchExecutor);
+        registry.register(DbQueryExecutor);
         registry.register(SetStateExecutor);
         registry.register(IfElseExecutor);
         registry.register(SwitchExecutor);

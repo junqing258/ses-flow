@@ -16,6 +16,10 @@ pub enum RunnerError {
     MissingExecutor(String),
     #[error("fetch request failed: {0}")]
     FetchRequest(String),
+    #[error("db query configuration invalid: {0}")]
+    InvalidDbConfig(String),
+    #[error("db query failed: {0}")]
+    DbQuery(String),
     #[error("shell configuration invalid: {0}")]
     InvalidShellConfig(String),
     #[error("shell node execution failed: {0}")]

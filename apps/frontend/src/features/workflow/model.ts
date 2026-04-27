@@ -53,6 +53,7 @@ export type WorkflowNodeKind =
   | "trigger"
   | "sub-workflow"
   | "fetch"
+  | "db-query"
   | "set-state"
   | "if-else"
   | "switch"
@@ -223,6 +224,10 @@ const DEFAULT_SELECT_FIELD_OPTIONS: Partial<
     { label: "GET", value: "GET" },
     { label: "POST", value: "POST" },
   ],
+  mode: [
+    { label: "read", value: "read" },
+    { label: "write", value: "write" },
+  ],
   onError: [
     { label: "retry", value: "retry" },
     { label: "fail_fast", value: "fail_fast" },
@@ -263,6 +268,7 @@ const isWorkflowNodeKind = (value: string): value is WorkflowNodeKind =>
     "trigger",
     "sub-workflow",
     "fetch",
+    "db-query",
     "set-state",
     "if-else",
     "switch",
@@ -771,6 +777,13 @@ export const WORKFLOW_PALETTE_CATEGORIES: WorkflowPaletteCategory[] = [
         label: "Fetch",
         icon: "database",
         accent: "#3B82F6",
+      },
+      {
+        id: "palette-db-query",
+        kind: "db-query",
+        label: "DB Query",
+        icon: "database",
+        accent: "#2563EB",
       },
       {
         id: "palette-set-state",
@@ -1461,6 +1474,74 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
       ],
     },
   },
+  db_query: {
+    tabs: ["base", "mapping", "retry"],
+    fieldsByTab: {
+      base: [
+        {
+          key: "connectionKey",
+          label: "连接键",
+          type: "input",
+          value: "default",
+        },
+        {
+          key: "mode",
+          label: "执行模式",
+          type: "select",
+          value: "read",
+        },
+        {
+          key: "sql",
+          label: "SQL",
+          type: "textarea",
+          value:
+            "select *\nfrom orders\nwhere order_no = :order_no\nlimit 20",
+        },
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: "查询数据库",
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: "3000",
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: "db_query",
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value:
+            "使用服务端白名单环境变量 SES_FLOW_DB_<KEY>_URL 连接 PostgreSQL，SQL 支持 :name 命名参数。",
+        },
+      ],
+      mapping: [
+        {
+          key: "params",
+          label: "SQL 参数",
+          type: "textarea",
+          value: "{\n  order_no: trigger.body.orderNo\n}",
+        },
+      ],
+      retry: [
+        {
+          key: "retryPolicy",
+          label: "重试策略",
+          type: "select",
+          value: "none",
+        },
+        { key: "retryCount", label: "重试次数", type: "input", value: "1" },
+      ],
+    },
+  },
   set_state: {
     tabs: ["base", "mapping"],
     fieldsByTab: {
@@ -1727,6 +1808,8 @@ export const resolvePaletteItemForRunnerType = (
       return items.find((item) => item.id === "palette-end") ?? items[0];
     case "fetch":
       return items.find((item) => item.id === "palette-fetch") ?? items[0];
+    case "db_query":
+      return items.find((item) => item.id === "palette-db-query") ?? items[0];
     case "set_state":
       return items.find((item) => item.id === "palette-set-state") ?? items[0];
     case "switch":
@@ -1892,6 +1975,33 @@ export const createWorkflowNodeDraft: CreateWorkflowNodeDraft = (
             nodeKey: nodeId,
             subtitle,
             title: "Fetch",
+          },
+        },
+        panel,
+      };
+    }
+    case "palette-db-query": {
+      const nodeId = getUniqueNodeId(baseNodeId, existingNodes);
+      const panel = clonePanel("db_query");
+      const subtitle = "新建数据库查询";
+
+      setFieldValue(panel, "nodeId", nodeId);
+      setFieldValue(panel, "nodeName", subtitle);
+
+      return {
+        node: {
+          id: nodeId,
+          type: "workflow-card",
+          position,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          data: {
+            accent: item.accent,
+            icon: item.icon,
+            kind: "db-query",
+            nodeKey: nodeId,
+            subtitle,
+            title: "DB Query",
           },
         },
         panel,

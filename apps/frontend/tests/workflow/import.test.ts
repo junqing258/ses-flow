@@ -186,6 +186,76 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
     ).toBe("set-state");
   });
 
+  it("restores db query config into editor fields", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "db-flow",
+        name: "DB Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: {
+        type: "manual",
+      },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "load_orders",
+          type: "db_query",
+          name: "Load Orders",
+          config: {
+            connectionKey: "orders",
+            mode: "read",
+            sql: "select * from orders where order_no = :order_no",
+          },
+          inputMapping: {
+            order_no: "{{input.orderNo}}",
+          },
+        },
+        {
+          id: "end_1",
+          type: "end",
+          name: "End",
+        },
+      ],
+      transitions: [
+        { from: "start_1", to: "load_orders" },
+        { from: "load_orders", to: "end_1" },
+      ],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition);
+    const dbPanel = state.panelByNodeId.load_orders;
+
+    expect(
+      state.nodes.find((node) => node.id === "load_orders")?.data.kind,
+    ).toBe("db-query");
+    expect(
+      dbPanel.fieldsByTab.base?.find((field) => field.key === "connectionKey")
+        ?.value,
+    ).toBe("orders");
+    expect(
+      dbPanel.fieldsByTab.base?.find((field) => field.key === "mode")?.value,
+    ).toBe("read");
+    expect(
+      dbPanel.fieldsByTab.base?.find((field) => field.key === "sql")?.value,
+    ).toBe("select * from orders where order_no = :order_no");
+    expect(
+      dbPanel.fieldsByTab.mapping?.find((field) => field.key === "params")
+        ?.value,
+    ).toBe('{\n  "order_no": "{{input.orderNo}}"\n}');
+  });
+
   it("keeps legacy task nodes readable in the editor", () => {
     const definition: RunnerWorkflowDefinition = {
       meta: {

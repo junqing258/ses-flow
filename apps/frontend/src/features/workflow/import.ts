@@ -44,6 +44,8 @@ const getPaletteIdForRunnerNodeType = (nodeType: string) => {
       return "palette-end";
     case "fetch":
       return "palette-fetch";
+    case "db_query":
+      return "palette-db-query";
     case "set_state":
       return "palette-set-state";
     case "switch":
@@ -81,6 +83,8 @@ const getNodeTitle = (nodeType: string) => {
       return "End";
     case "fetch":
       return "Fetch";
+    case "db_query":
+      return "DB Query";
     case "set_state":
       return "Set State";
     case "switch":
@@ -118,6 +122,8 @@ const getNodeKind = (nodeType: string): WorkflowNodeKind => {
       return "end";
     case "fetch":
       return "fetch";
+    case "db_query":
+      return "db-query";
     case "set_state":
       return "set-state";
     case "switch":
@@ -327,6 +333,21 @@ const createImportedNode = (
       nextPanel,
       "outputTo",
       serializeMappingValue(node.outputMapping),
+    );
+  }
+
+  if (node.type === "db_query") {
+    setPanelFieldValue(
+      nextPanel,
+      "connectionKey",
+      String(node.config?.connectionKey ?? "default"),
+    );
+    setPanelFieldValue(nextPanel, "mode", String(node.config?.mode ?? "read"));
+    setPanelFieldValue(nextPanel, "sql", String(node.config?.sql ?? ""));
+    setPanelFieldValue(
+      nextPanel,
+      "params",
+      serializeMappingValue(node.inputMapping),
     );
   }
 

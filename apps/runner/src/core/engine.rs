@@ -980,6 +980,8 @@ fn failed_summary(
 fn error_code_for_runner_error(error: &RunnerError) -> String {
     match error {
         RunnerError::FetchRequest(_) | RunnerError::InvalidFetchConfig(_) => "HTTP_ERROR".to_string(),
+        RunnerError::InvalidDbConfig(_) => "INVALID_DB_CONFIG".to_string(),
+        RunnerError::DbQuery(_) => "DB_QUERY_FAILED".to_string(),
         RunnerError::Validation(_) => "VALIDATION_FAILED".to_string(),
         RunnerError::ResumeValidation(_) => "RESUME_MISMATCH".to_string(),
         RunnerError::CodeExecution(message) | RunnerError::ShellExecution(message)
