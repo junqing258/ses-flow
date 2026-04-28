@@ -624,6 +624,10 @@ fn executes_registered_http_plugin_node() {
     let (plugin_url, capture) = spawn_test_plugin_server(TestPluginMode::Success);
     let definition = plugin_workflow_definition("plugin:barcode_scan");
     let engine = WorkflowEngine::with_services(plugin_services(&plugin_url));
+    let env = RunEnvironment {
+        ses_base_url: Some("http://ses.example/station/operation".to_string()),
+        ..RunEnvironment::default()
+    };
     let summary = engine
         .run(
             &definition,
@@ -636,7 +640,7 @@ fn executes_registered_http_plugin_node() {
                     "orderNo": "SO-PLUGIN-1"
                 }
             }),
-            RunEnvironment::default(),
+            env,
         )
         .expect("plugin workflow should succeed");
 
@@ -664,6 +668,10 @@ fn executes_registered_http_plugin_node() {
     assert_eq!(execute_requests[0]["runnerType"], json!("plugin:barcode_scan"));
     assert_eq!(execute_requests[0]["context"]["input"]["orderNo"], json!("SO-PLUGIN-1"));
     assert_eq!(execute_requests[0]["context"]["requestId"], json!("req-plugin-1"));
+    assert_eq!(
+        execute_requests[0]["context"]["env"]["sesBaseUrl"],
+        json!("http://ses.example/station/operation")
+    );
 }
 
 #[test]

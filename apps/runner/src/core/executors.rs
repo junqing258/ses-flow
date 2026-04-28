@@ -227,6 +227,7 @@ pub(super) fn clone_env(env: &RunEnvironment) -> RunEnvironment {
         tenant_id: env.tenant_id.clone(),
         warehouse_id: env.warehouse_id.clone(),
         operator_id: env.operator_id.clone(),
+        ses_base_url: env.ses_base_url.clone(),
     }
 }
 // endregion 上下文与子流程辅助函数

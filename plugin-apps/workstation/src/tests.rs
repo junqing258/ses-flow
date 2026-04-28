@@ -42,13 +42,18 @@ async fn descriptors_route_returns_manual_nodes() {
         .iter()
         .find(|item| item["id"] == json!("pack_task"))
         .expect("pack_task descriptor should exist");
+    let get_task_info = descriptors
+        .iter()
+        .find(|item| item["id"] == json!("get_task_info"))
+        .expect("get_task_info descriptor should exist");
+    let robot_departure = descriptors
+        .iter()
+        .find(|item| item["id"] == json!("robot_departure"))
+        .expect("robot_departure descriptor should exist");
     assert_eq!(scan_task["runnerType"], json!("plugin:scan_task"));
     assert_eq!(scan_task["supportsResume"], json!(true));
     assert_eq!(scan_task["configSchema"]["required"], json!(["stationId"]));
-    assert_eq!(
-        scan_task["inputSchema"]["required"],
-        json!(["agvId"])
-    );
+    assert_eq!(scan_task["inputSchema"]["required"], json!(["agvId"]));
     assert_eq!(pack_task["runnerType"], json!("plugin:pack_task"));
     assert_eq!(pack_task["supportsResume"], json!(false));
     assert_eq!(pack_task["configSchema"]["required"], json!(["stationId"]));
@@ -60,6 +65,18 @@ async fn descriptors_route_returns_manual_nodes() {
     assert_eq!(scan_task["icon"], json!("scan-barcode"));
     assert_eq!(pack_task["color"], json!("#14B8A6"));
     assert_eq!(pack_task["icon"], json!("badge-check"));
+    assert!(
+        get_task_info["configSchema"].get("required").is_none(),
+        "SES base URL should be allowed to come from the execution context"
+    );
+    assert!(
+        get_task_info["configSchema"]["properties"].get("sesBaseUrl").is_none(),
+        "get_task_info should not expose SES base URL as plugin config"
+    );
+    assert!(
+        robot_departure["configSchema"]["properties"].get("sesBaseUrl").is_none(),
+        "robot_departure should not expose SES base URL as plugin config"
+    );
 }
 
 #[tokio::test]
@@ -411,7 +428,8 @@ async fn get_task_info_returns_mock_task_without_active_runner_task() {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("get task info body should be readable");
-    let payload: serde_json::Value = serde_json::from_slice(&body).expect("get task info response should be valid json");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("get task info response should be valid json");
     assert_eq!(payload["Code"], json!(0));
     assert_eq!(payload["Data"]["TaskId"], json!("TASK-SKU-123"));
     assert_eq!(payload["Data"]["ChuteId"], json!("C-SKU"));
@@ -524,7 +542,8 @@ async fn robot_departure_succeeds_without_active_runner_task_for_simulation() {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("robot departure body should be readable");
-    let payload: serde_json::Value = serde_json::from_slice(&body).expect("robot departure response should be valid json");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("robot departure response should be valid json");
     assert_eq!(payload["Code"], json!(0));
     assert_eq!(payload["Data"]["TaskId"], json!("TASK-SKU-123"));
     assert_eq!(payload["Data"]["AgvId"], json!("AGV-001"));
@@ -648,7 +667,9 @@ async fn robot_departure_completes_active_task() {
                                 "orderNo": "SO-1"
                             },
                             "state": {},
-                            "env": {}
+                            "env": {
+                                "sesBaseUrl": "http://ses.example/station/operation"
+                            }
                         }
                     })
                     .to_string(),
@@ -693,6 +714,10 @@ async fn robot_departure_completes_active_task() {
     let state = state.inner.read().await;
     let task = state.tasks.get(&execution_id).expect("task should exist after execute");
     assert!(matches!(task.state, TaskState::Succeeded));
+    assert_eq!(
+        task.payload["sesBaseUrl"],
+        json!("http://ses.example/station/operation")
+    );
 }
 
 #[test]

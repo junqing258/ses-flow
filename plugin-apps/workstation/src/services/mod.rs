@@ -65,6 +65,7 @@ impl AppState {
             .and_then(Value::as_str)
             .map(|value| normalize_runner_base_url(value.to_string()))
             .or_else(|| self.config.runner_base_url.clone());
+        let ses_base_url = resolve_ses_base_url(&request);
         let signal_type = request
             .config
             .get("waitSignalType")
@@ -85,6 +86,7 @@ impl AppState {
                 "config": request.config,
                 "input": request.context.input,
                 "env": request.context.env,
+                "sesBaseUrl": ses_base_url,
             }),
             task_id: request
                 .config
@@ -368,7 +370,10 @@ impl AppState {
             }
         }
 
-        let mut connected_workers = state.worker_streams.keys().filter(|worker_id| worker_id.as_str() != DEFAULT_CONNECT_WORKER_ID);
+        let mut connected_workers = state
+            .worker_streams
+            .keys()
+            .filter(|worker_id| worker_id.as_str() != DEFAULT_CONNECT_WORKER_ID);
         let fallback_worker_id = connected_workers.next().cloned();
         if fallback_worker_id.is_some() && connected_workers.next().is_none() {
             let worker_id = fallback_worker_id.expect("fallback worker id should exist");
@@ -479,6 +484,10 @@ pub(crate) fn worker_id_from_connect(request: &ConnectRequest) -> String {
 fn resolve_worker_id(request: &ExecuteRequest) -> Option<String> {
     value_string(&request.config, &["workerId", "stationId", "targetWorkerId"])
         .or_else(|| value_string(&request.context.input, &["workerId", "stationId", "targetWorkerId"]))
+}
+
+fn resolve_ses_base_url(request: &ExecuteRequest) -> Option<String> {
+    value_string(&request.context.env, &["sesBaseUrl"])
 }
 
 fn task_lookup_key(run_id: &str, node_id: &str, request_id: &str) -> String {

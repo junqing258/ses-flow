@@ -12,6 +12,8 @@ pub struct RunEnvironment {
     pub warehouse_id: Option<String>,
     #[serde(rename = "operatorId", default)]
     pub operator_id: Option<String>,
+    #[serde(rename = "sesBaseUrl", default, skip_serializing_if = "Option::is_none")]
+    pub ses_base_url: Option<String>,
 }
 
 impl Default for RunEnvironment {
@@ -20,6 +22,7 @@ impl Default for RunEnvironment {
             tenant_id: "tenant-a".to_string(),
             warehouse_id: Some("WH-1".to_string()),
             operator_id: Some("system".to_string()),
+            ses_base_url: None,
         }
     }
 }

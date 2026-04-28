@@ -20,7 +20,8 @@ fn build_scan_task_descriptor() -> PluginDescriptor {
         version: "1.0.0".to_string(),
         category: "人工工作台".to_string(),
         display_name: "等待扫码".to_string(),
-        description: "下发扫码任务到 App，挂起等待工人扫码；App 调用 scanBarcode 接口后携带 itemId 触发 resume".to_string(),
+        description: "下发扫码任务到 App，挂起等待工人扫码；App 调用 scanBarcode 接口后携带 itemId 触发 resume"
+            .to_string(),
         color: Some("#F97316".to_string()),
         icon: Some("scan-barcode".to_string()),
         status: "stable".to_string(),
@@ -97,7 +98,8 @@ fn build_get_task_info_descriptor() -> PluginDescriptor {
         version: "1.0.0".to_string(),
         category: "人工工作台".to_string(),
         display_name: "获取任务/订单信息".to_string(),
-        description: "串联 getTaskInfo → lockTask，锁定库存并获取 taskId；结果通过 statePatch 写回 run state".to_string(),
+        description: "串联 getTaskInfo → lockTask，锁定库存并获取 taskId；结果通过 statePatch 写回 run state"
+            .to_string(),
         color: Some("#6366F1".to_string()),
         icon: Some("clipboard-list".to_string()),
         status: "stable".to_string(),
@@ -107,13 +109,7 @@ fn build_get_task_info_descriptor() -> PluginDescriptor {
         supports_resume: false,
         config_schema: json!({
             "type": "object",
-            "required": ["sesBaseUrl"],
             "properties": {
-                "sesBaseUrl": {
-                    "type": "string",
-                    "title": "SES API Base URL",
-                    "description": "工作站接口根路径，如 http://ses-host/station/operation"
-                },
                 "timeoutMs": {
                     "type": "integer",
                     "title": "请求超时（ms）",
@@ -172,7 +168,8 @@ fn build_robot_departure_descriptor() -> PluginDescriptor {
         version: "1.0.0".to_string(),
         category: "人工工作台".to_string(),
         display_name: "发车".to_string(),
-        description: "调用 robotDeparture 接口通知 RCS 小车离站；result 枚举：SUCCESS(0) / NO_AGV(1) / NO_TASK(2)".to_string(),
+        description: "调用 robotDeparture 接口通知 RCS 小车离站；result 枚举：SUCCESS(0) / NO_AGV(1) / NO_TASK(2)"
+            .to_string(),
         color: Some("#10B981".to_string()),
         icon: Some("truck".to_string()),
         status: "stable".to_string(),
@@ -182,13 +179,7 @@ fn build_robot_departure_descriptor() -> PluginDescriptor {
         supports_resume: false,
         config_schema: json!({
             "type": "object",
-            "required": ["sesBaseUrl"],
             "properties": {
-                "sesBaseUrl": {
-                    "type": "string",
-                    "title": "SES API Base URL",
-                    "description": "工作站接口根路径，如 http://ses-host/station/operation"
-                },
                 "timeoutMs": {
                     "type": "integer",
                     "title": "请求超时（ms）",
