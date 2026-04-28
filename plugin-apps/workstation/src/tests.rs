@@ -555,6 +555,53 @@ async fn robot_departure_succeeds_without_active_runner_task_for_simulation() {
 }
 
 #[tokio::test]
+async fn driver_empty_robot_alias_accepts_legacy_java_payload() {
+    let (app, _) = build_test_app(AppConfig::default());
+    let connect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "stationIds": ["station-1"] }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+    assert_eq!(connect_response.status(), axum::http::StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/driverEmptyRobot")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "agvId": "AGV-001"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("driverEmptyRobot request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("driverEmptyRobot body should be readable");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("driverEmptyRobot response should be valid json");
+    assert_eq!(payload["Code"], json!(0));
+    assert_eq!(payload["Data"]["StationId"], json!("station-1"));
+    assert_eq!(payload["Data"]["AgvId"], json!("AGV-001"));
+    assert_eq!(payload["Data"]["Forced"], json!(true));
+}
+
+#[tokio::test]
 async fn simulate_agv_arrived_queues_legacy_sse_event() {
     let (app, _) = build_test_app(AppConfig::default());
     let response = app

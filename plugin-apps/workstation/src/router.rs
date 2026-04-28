@@ -36,6 +36,7 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/station/operation/getTaskInfo", post(station::get_task_info))
         .route("/station/operation/robotDeparture", post(station::robot_departure))
         .route("/station/operation/driveOutRobot", post(station::drive_out_robot))
+        .route("/station/operation/driverEmptyRobot", post(station::drive_out_robot))
         .route(
             "/station/operation/noBarcodeForceDepart",
             post(station::no_barcode_force_depart),

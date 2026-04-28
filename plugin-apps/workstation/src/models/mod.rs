@@ -261,7 +261,9 @@ pub(crate) struct RobotDepartureRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct DriveOutRobotRequest {
+    #[serde(alias = "agvId")]
     pub(crate) agv_id: String,
+    #[serde(alias = "stationId")]
     pub(crate) station_id: String,
 }
 
