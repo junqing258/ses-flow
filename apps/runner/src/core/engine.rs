@@ -139,6 +139,12 @@ impl WorkflowEngine {
         }
         let started_at = Utc::now();
         if let Err(error) = self.validate_resume_input(waiting_node, &snapshot, &resume_input) {
+            warn!(
+                run_id = %snapshot.run_id,
+                node_id = %waiting_node.id,
+                error = %error,
+                "resume validation failed"
+            );
             let summary = failed_summary(
                 snapshot.run_id,
                 snapshot.workflow_key,
