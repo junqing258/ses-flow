@@ -74,7 +74,9 @@ async fn descriptors_route_returns_manual_nodes() {
         "get_task_info should not expose SES base URL as plugin config"
     );
     assert!(
-        robot_departure["configSchema"]["properties"].get("sesBaseUrl").is_none(),
+        robot_departure["configSchema"]["properties"]
+            .get("sesBaseUrl")
+            .is_none(),
         "robot_departure should not expose SES base URL as plugin config"
     );
 }
@@ -607,6 +609,41 @@ async fn simulate_agv_arrived_queues_legacy_sse_event() {
     assert!(connect_text.contains("\"AgvId\":\"AGV-9\""));
     assert!(connect_text.contains("\"StationId\":\"station-1\""));
     assert!(connect_text.contains("\"RequestId\":42"));
+}
+
+#[tokio::test]
+async fn simulate_agv_arrived_skips_runner_resume_without_database_url() {
+    let (app, _) = build_test_app(AppConfig {
+        runner_base_url: Some("http://127.0.0.1:1/runner-api".to_string()),
+        database_url: None,
+        heartbeat_interval_secs: 5,
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/simulate/agvArrived")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "agvId": "AGV-9"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("simulate AGV arrival request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("simulate AGV arrival body should be readable");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("simulate AGV arrival response should be valid json");
+    assert_eq!(payload["Data"]["ResumedRunIds"], json!([]));
 }
 
 #[tokio::test]

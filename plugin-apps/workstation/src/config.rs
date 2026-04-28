@@ -1,6 +1,7 @@
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub runner_base_url: Option<String>,
+    pub database_url: Option<String>,
     pub heartbeat_interval_secs: u64,
 }
 
@@ -12,6 +13,7 @@ impl AppConfig {
     pub fn from_env() -> Self {
         Self {
             runner_base_url: std::env::var("RUNNER_BASE_URL").ok().map(normalize_runner_base_url),
+            database_url: std::env::var("DATABASE_URL").ok(),
             heartbeat_interval_secs: std::env::var("WORKSTATION_HEARTBEAT_INTERVAL_SECS")
                 .or_else(|_| std::env::var("WCS_HEARTBEAT_INTERVAL_SECS"))
                 .ok()
@@ -26,6 +28,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             runner_base_url: None,
+            database_url: None,
             heartbeat_interval_secs: 5,
         }
     }

@@ -48,15 +48,16 @@ pub(crate) async fn simulate_agv_arrived(
     State(state): State<AppState>,
     Json(request): Json<SimulateAgvArrivedRequest>,
 ) -> Response {
-    let event = state
+    let simulation = state
         .simulate_agv_arrived(&request.station_id, &request.agv_id, request.request_id)
         .await;
     base_result_ok(json!({
-        "EventId": event.event_id,
-        "RequestId": event.request_id,
-        "StationId": event.worker_id,
+        "EventId": simulation.event.event_id,
+        "RequestId": simulation.event.request_id,
+        "StationId": simulation.event.worker_id,
         "AgvId": request.agv_id,
-        "MessageType": event.message_type
+        "MessageType": simulation.event.message_type,
+        "ResumedRunIds": simulation.resumed_run_ids
     }))
 }
 
@@ -148,17 +149,10 @@ pub(crate) async fn get_task_info(
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     let task = state.current_task_for_worker(&worker_id).await;
-    let task_id = task
-        .as_ref()
-        .map(|task| task.task_id.clone())
-        .unwrap_or_else(|| {
-            let task_key = request
-                .sku
-                .as_deref()
-                .or(request.barcode.as_deref())
-                .unwrap_or("MOCK");
-            format!("TASK-{}", task_key)
-        });
+    let task_id = task.as_ref().map(|task| task.task_id.clone()).unwrap_or_else(|| {
+        let task_key = request.sku.as_deref().or(request.barcode.as_deref()).unwrap_or("MOCK");
+        format!("TASK-{}", task_key)
+    });
     let order_id = task
         .as_ref()
         .map(|task| task.run_id.clone())

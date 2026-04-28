@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use chrono::{Duration, Utc};
 use reqwest::Client;
 use serde_json::{Value, json};
+use sqlx::Row;
+use sqlx::postgres::{PgPool, PgPoolOptions};
 use tokio::sync::{RwLock, broadcast};
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -24,15 +26,27 @@ pub(crate) struct AppState {
     pub(crate) inner: Arc<RwLock<BridgeState>>,
     event_seq: Arc<AtomicU64>,
     client: Client,
+    db_pool: Option<PgPool>,
 }
 
 impl AppState {
     pub(crate) fn new(config: AppConfig) -> Self {
+        let db_pool = config.database_url.as_ref().and_then(|database_url| {
+            match PgPoolOptions::new().max_connections(2).connect_lazy(database_url) {
+                Ok(pool) => Some(pool),
+                Err(error) => {
+                    warn!(error = %error, "failed to create lazy database pool for workstation plugin");
+                    None
+                }
+            }
+        });
+
         Self {
             config,
             inner: Arc::new(RwLock::new(BridgeState::default())),
             event_seq: Arc::new(AtomicU64::new(1)),
             client: Client::new(),
+            db_pool,
         }
     }
 
@@ -175,7 +189,7 @@ impl AppState {
         worker_id: &str,
         agv_id: &str,
         request_id: Option<u64>,
-    ) -> PendingEvent {
+    ) -> AgvArrivalSimulation {
         let event_id = self.event_seq.fetch_add(1, Ordering::SeqCst);
         let request_id_value = request_id.unwrap_or(event_id);
         let request_id_text = request_id_value.to_string();
@@ -209,7 +223,8 @@ impl AppState {
         };
         let _ = sender.send(event.clone());
         info!(worker_id = %worker_id, agv_id = %agv_id, request_id = %request_id_value, "simulated AGV arrival");
-        event
+        let resumed_run_ids = self.resume_agv_arrival_waits(worker_id, agv_id).await;
+        AgvArrivalSimulation { event, resumed_run_ids }
     }
 
     pub(crate) async fn login(&self, worker_id: &str) -> String {
@@ -452,6 +467,102 @@ impl AppState {
         }
         Ok(())
     }
+
+    async fn resume_agv_arrival_waits(&self, station_id: &str, agv_id: &str) -> Vec<String> {
+        let Some(base_url) = self.config.runner_base_url.as_ref() else {
+            warn!(station_id = %station_id, "AGV arrival resume skipped because RUNNER_BASE_URL is not configured");
+            return Vec::new();
+        };
+        let run_ids = self.search_agv_arrival_wait_run_ids(station_id).await;
+
+        let mut resumed_run_ids = Vec::new();
+        for run_id in run_ids {
+            if self.resume_agv_arrival_run(base_url, &run_id, station_id, agv_id).await {
+                resumed_run_ids.push(run_id.to_string());
+            }
+        }
+        resumed_run_ids
+    }
+
+    async fn search_agv_arrival_wait_run_ids(&self, station_id: &str) -> Vec<String> {
+        let Some(db_pool) = self.db_pool.as_ref() else {
+            warn!(station_id = %station_id, "AGV arrival run search skipped because DATABASE_URL is not configured");
+            return Vec::new();
+        };
+
+        let rows = match sqlx::query(
+            r#"
+            SELECT run_id
+            FROM workflow_runs
+            WHERE status IN ($1, $2)
+              AND last_signal->>'type' = $3
+              AND last_signal->'payload'->>'stationId' = $4
+            ORDER BY updated_at DESC
+            LIMIT 100
+            "#,
+        )
+        .bind("\"waiting\"")
+        .bind("waiting")
+        .bind("agv.arrived")
+        .bind(station_id)
+        .fetch_all(db_pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                warn!(station_id = %station_id, error = %error, "failed to search AGV arrival waiting runs from database");
+                return Vec::new();
+            }
+        };
+
+        rows.into_iter()
+            .filter_map(|row| row.try_get::<String, _>("run_id").ok())
+            .collect()
+    }
+
+    async fn resume_agv_arrival_run(&self, base_url: &str, run_id: &str, station_id: &str, agv_id: &str) -> bool {
+        let response = self
+            .client
+            .post(format!("{}/runs/{}/resume", base_url.trim_end_matches('/'), run_id))
+            .json(&json!({
+                "event": {
+                    "event": "agv.arrived",
+                    "stationId": station_id,
+                    "agvId": agv_id,
+                    "payload": {
+                        "stationId": station_id,
+                        "agvId": agv_id
+                    }
+                }
+            }))
+            .send()
+            .await;
+
+        match response {
+            Ok(response) if response.status().is_success() => {
+                info!(run_id = %run_id, station_id = %station_id, agv_id = %agv_id, "resumed AGV arrival wait");
+                true
+            }
+            Ok(response) => {
+                warn!(
+                    run_id = %run_id,
+                    station_id = %station_id,
+                    status = %response.status(),
+                    "runner resume returned non-success status for AGV arrival"
+                );
+                false
+            }
+            Err(error) => {
+                warn!(run_id = %run_id, station_id = %station_id, error = %error, "failed to resume AGV arrival wait");
+                false
+            }
+        }
+    }
+}
+
+pub(crate) struct AgvArrivalSimulation {
+    pub(crate) event: PendingEvent,
+    pub(crate) resumed_run_ids: Vec<String>,
 }
 
 #[derive(Default)]
