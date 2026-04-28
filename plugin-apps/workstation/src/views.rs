@@ -19,7 +19,7 @@ pub(crate) fn plugin_waiting_response(task: &ExecutionTask) -> Response {
         status: "waiting".to_string(),
         output: json!({
             "executionId": task.execution_id,
-            "workerId": task.target_worker_id,
+            "workerId": task.target_station_id,
             "taskId": task.task_id
         }),
         state_patch: json!({
@@ -27,7 +27,7 @@ pub(crate) fn plugin_waiting_response(task: &ExecutionTask) -> Response {
                 "executions": {
                     task.execution_id.clone(): {
                         "status": task.state.as_str(),
-                        "workerId": task.target_worker_id,
+                        "workerId": task.target_station_id,
                         "taskId": task.task_id
                     }
                 }
@@ -45,7 +45,7 @@ pub(crate) fn plugin_waiting_response(task: &ExecutionTask) -> Response {
             message: "manual task dispatched to workstation bridge".to_string(),
             fields: json!({
                 "executionId": task.execution_id,
-                "workerId": task.target_worker_id,
+                "workerId": task.target_station_id,
                 "pluginType": task.plugin_type
             }),
         }],
@@ -79,31 +79,31 @@ pub(crate) fn failure_resume_event(task: &ExecutionTask, error: &TaskErrorPayloa
     })
 }
 
-pub(crate) fn sync_snapshot_event(worker_id: &str, tasks: Vec<TaskSnapshot>) -> Event {
+pub(crate) fn sync_snapshot_event(station_id: &str, tasks: Vec<TaskSnapshot>) -> Event {
     Event::default().event("sync.snapshot").data(
         json!({
             "MessageType": "sync.snapshot",
-            "WorkerId": worker_id,
+            "WorkerId": station_id,
             "Tasks": tasks
         })
         .to_string(),
     )
 }
 
-pub(crate) fn heartbeat_event(worker_id: &str) -> Event {
+pub(crate) fn heartbeat_event(station_id: &str) -> Event {
     Event::default()
         .event("Heart_Beat")
-        .data(heartbeat_payload(worker_id).to_string())
+        .data(heartbeat_payload(station_id).to_string())
 }
 
-pub(crate) fn heartbeat_payload(worker_id: &str) -> Value {
+pub(crate) fn heartbeat_payload(station_id: &str) -> Value {
     json!({
             "MessageType": "HEART_BEAT",
             "messageType": "HEART_BEAT",
-            "WorkerId": worker_id,
+            "WorkerId": station_id,
             "RcsStatus": "ONLINE",
             "StationList": [{
-                "Stationid": worker_id,
+                "Stationid": station_id,
                 "StationStatus": "OPEN"
             }],
             "Ts": Utc::now().to_rfc3339()
@@ -111,19 +111,19 @@ pub(crate) fn heartbeat_payload(worker_id: &str) -> Value {
 }
 
 pub(crate) fn sse_response(
-    worker_id: String,
+    station_id: String,
     heartbeat_interval_secs: u64,
     mut receiver: broadcast::Receiver<PendingEvent>,
     backlog: Vec<PendingEvent>,
     snapshots: Vec<TaskSnapshot>,
 ) -> Response {
     let stream = stream! {
-        yield Ok(heartbeat_event(&worker_id));
+        yield Ok(heartbeat_event(&station_id));
 
         for event in backlog {
             yield Ok::<Event, Infallible>(event.to_sse_event());
         }
-        yield Ok(sync_snapshot_event(&worker_id, snapshots));
+        yield Ok(sync_snapshot_event(&station_id, snapshots));
 
         let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(heartbeat_interval_secs));
         loop {
@@ -136,7 +136,7 @@ pub(crate) fn sse_response(
                     }
                 }
                 _ = heartbeat.tick() => {
-                    yield Ok(heartbeat_event(&worker_id));
+                    yield Ok(heartbeat_event(&station_id));
                 }
             }
         }

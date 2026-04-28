@@ -5,9 +5,9 @@ use tower::ServiceExt;
 
 use crate::models::{ExecutionTask, TaskErrorPayload, TaskState};
 use crate::router::build_router;
-use crate::services::{AppState, worker_id_from_connect};
+use crate::services::{AppState, station_id_from_connect};
 use crate::views::{failure_resume_event, heartbeat_payload, success_resume_event};
-use crate::{AppConfig, DEFAULT_CONNECT_WORKER_ID};
+use crate::{AppConfig, DEFAULT_CONNECT_STATION_ID};
 
 fn build_test_app(config: AppConfig) -> (axum::Router, AppState) {
     let state = AppState::new(config);
@@ -135,7 +135,7 @@ async fn connect_succeeds_with_empty_payload() {
         .expect("connect body should be readable");
     let body_text = String::from_utf8(body.to_vec()).expect("connect body should be utf-8");
     assert!(
-        body_text.contains(DEFAULT_CONNECT_WORKER_ID),
+        body_text.contains(DEFAULT_CONNECT_STATION_ID),
         "empty connect should fall back to the anonymous worker id"
     );
 }
@@ -160,7 +160,7 @@ fn connect_request_accepts_client_camel_case_payload_and_prefers_station_id() {
     }))
     .expect("client connect payload should deserialize");
 
-    assert_eq!(worker_id_from_connect(&request), "station-1");
+    assert_eq!(station_id_from_connect(&request), "station-1");
 }
 
 #[tokio::test]
@@ -552,6 +552,7 @@ async fn robot_departure_succeeds_without_active_runner_task_for_simulation() {
     assert_eq!(payload["Code"], json!(0));
     assert_eq!(payload["Data"]["TaskId"], json!("TASK-SKU-123"));
     assert_eq!(payload["Data"]["AgvId"], json!("AGV-001"));
+    assert_eq!(payload["Data"]["ResumedRunIds"], json!([]));
 }
 
 #[tokio::test]
@@ -807,6 +808,61 @@ async fn robot_departure_completes_active_task() {
     );
 }
 
+#[tokio::test]
+async fn execute_resolves_station_id_from_workstation_state() {
+    let (app, _) = build_test_app(AppConfig::default());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/execute")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "pluginId": "robot_departure",
+                        "runnerType": "plugin:robot_departure",
+                        "nodeId": "robot_departure",
+                        "config": {},
+                        "context": {
+                            "runId": "run-1",
+                            "requestId": "req-robot-1",
+                            "workflowKey": "workflow.demo",
+                            "workflowVersion": 1,
+                            "input": {
+                                "taskId": "TASK-SKU-123",
+                                "agvId": "AGV-001"
+                            },
+                            "state": {
+                                "workstation": {
+                                    "executions": {
+                                        "exec-1": {
+                                            "status": "pending",
+                                            "taskId": "exec-1",
+                                            "workerId": "station-1"
+                                        }
+                                    }
+                                }
+                            },
+                            "env": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("execute request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("execute body should be readable");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("execute payload should be valid json");
+    assert_eq!(payload["status"], json!("waiting"));
+    assert_eq!(payload["output"]["workerId"], json!("station-1"));
+}
+
 #[test]
 fn builds_runner_resume_events() {
     let task = ExecutionTask {
@@ -817,7 +873,7 @@ fn builds_runner_resume_events() {
         trace_id: None,
         plugin_type: "plugin:scan_task".to_string(),
         plugin_id: "scan_task".to_string(),
-        target_worker_id: "station-1".to_string(),
+        target_station_id: "station-1".to_string(),
         payload: json!({}),
         task_id: "TASK-1".to_string(),
         wait_signal_type: "human_task_done".to_string(),

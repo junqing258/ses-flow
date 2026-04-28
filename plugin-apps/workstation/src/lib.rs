@@ -10,7 +10,7 @@ use crate::router::build_router;
 use crate::services::AppState;
 use axum::Router;
 
-pub use config::{AppConfig, DEFAULT_CONNECT_WORKER_ID, DEFAULT_RUNNER_RESUME_SIGNAL, HEALTH_PLUGIN_ID};
+pub use config::{AppConfig, DEFAULT_CONNECT_STATION_ID, DEFAULT_RUNNER_RESUME_SIGNAL, HEALTH_PLUGIN_ID};
 
 pub fn build_app() -> Router {
     build_app_with_config(AppConfig::from_env())

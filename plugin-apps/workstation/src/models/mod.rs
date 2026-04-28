@@ -327,7 +327,7 @@ pub(crate) struct ExecutionTask {
     pub(crate) trace_id: Option<String>,
     pub(crate) plugin_type: String,
     pub(crate) plugin_id: String,
-    pub(crate) target_worker_id: String,
+    pub(crate) target_station_id: String,
     pub(crate) payload: Value,
     pub(crate) task_id: String,
     pub(crate) wait_signal_type: String,
@@ -385,7 +385,7 @@ impl TaskState {
 pub(crate) struct PendingEvent {
     pub(crate) event_id: u64,
     pub(crate) request_id: String,
-    pub(crate) worker_id: String,
+    pub(crate) station_id: String,
     pub(crate) execution_id: Option<String>,
     pub(crate) message_type: String,
     pub(crate) payload: Value,
@@ -405,7 +405,7 @@ impl PendingEvent {
                     "RequestId": self.request_id,
                     "ExecutionId": self.execution_id,
                     "CreatedAt": self.created_at.to_rfc3339(),
-                    "WorkerId": self.worker_id,
+                    "WorkerId": self.station_id,
                 })
                 .as_object()
                 .cloned()

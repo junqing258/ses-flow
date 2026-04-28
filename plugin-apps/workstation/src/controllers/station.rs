@@ -10,7 +10,7 @@ use crate::models::{
     LoginRequest, NoBarcodeForceDepartRequest, RobotDepartureRequest, SimulateAgvArrivedRequest, StationStatusSyncData,
     StationStatusSyncRequest, TaskInfoRequest, TaskInfoResponseData, VerifyNotifyRequest,
 };
-use crate::services::{AppState, worker_id_from_connect};
+use crate::services::{AppState, station_id_from_connect};
 use crate::views::{base_result_error, base_result_ok, sse_response};
 
 pub(crate) async fn login(State(state): State<AppState>, Json(request): Json<LoginRequest>) -> Response {
@@ -38,10 +38,10 @@ pub(crate) async fn connect(
     Query(query): Query<ConnectQuery>,
     Json(request): Json<ConnectRequest>,
 ) -> Response {
-    let worker_id = worker_id_from_connect(&request);
+    let station_id = station_id_from_connect(&request);
     let heartbeat_interval_secs = state.heartbeat_interval_secs();
-    let (receiver, backlog, snapshots) = state.connect_context(&worker_id, query.since).await;
-    sse_response(worker_id, heartbeat_interval_secs, receiver, backlog, snapshots)
+    let (receiver, backlog, snapshots) = state.connect_context(&station_id, query.since).await;
+    sse_response(station_id, heartbeat_interval_secs, receiver, backlog, snapshots)
 }
 
 pub(crate) async fn simulate_agv_arrived(
@@ -54,7 +54,7 @@ pub(crate) async fn simulate_agv_arrived(
     base_result_ok(json!({
         "EventId": simulation.event.event_id,
         "RequestId": simulation.event.request_id,
-        "StationId": simulation.event.worker_id,
+        "StationId": simulation.event.station_id,
         "AgvId": request.agv_id,
         "MessageType": simulation.event.message_type,
         "ResumedRunIds": simulation.resumed_run_ids
@@ -66,47 +66,47 @@ pub(crate) async fn verify_notify(
     headers: HeaderMap,
     Json(request): Json<VerifyNotifyRequest>,
 ) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
-    match state.verify_notify(&worker_id, request).await {
+    match state.verify_notify(&station_id, request).await {
         Ok(()) => base_result_ok(Value::Null),
         Err(message) => base_result_error(StatusCode::NOT_FOUND, &message),
     }
 }
 
 pub(crate) async fn offline(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     base_result_ok(json!({
-        "StationId": worker_id,
+        "StationId": station_id,
         "Status": 0,
         "Online": false
     }))
 }
 
 pub(crate) async fn online(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     base_result_ok(json!({
-        "StationId": worker_id,
+        "StationId": station_id,
         "Status": 1,
         "Online": true
     }))
 }
 
 pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     base_result_ok(json!({
-        "StationId": worker_id,
+        "StationId": station_id,
         "LoggedOut": true
     }))
 }
@@ -116,17 +116,17 @@ pub(crate) async fn scan_barcode(
     headers: HeaderMap,
     Json(request): Json<BarcodeRequest>,
 ) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
-    let task = state.current_task_for_worker(&worker_id).await;
+    let task = state.current_task_for_worker(&station_id).await;
     let barcode = request.barcode;
     let sku = task
         .as_ref()
         .map(|item| item.task_id.clone())
         .unwrap_or_else(|| format!("SKU-{}", barcode));
-    let resumed_run_ids = state.resume_scan_barcode_waits(&worker_id, &barcode, &sku).await;
+    let resumed_run_ids = state.resume_scan_barcode_waits(&station_id, &barcode, &sku).await;
     base_result_ok(json!({
         "Items": [
             {
@@ -137,7 +137,7 @@ pub(crate) async fn scan_barcode(
             }
         ],
         "Barcode": barcode,
-        "WorkerId": worker_id,
+        "WorkerId": station_id,
         "TaskId": task.as_ref().map(|item| item.task_id.clone()),
         "ExecutionId": task.as_ref().map(|item| item.execution_id.clone()),
         "ResumedRunIds": resumed_run_ids
@@ -149,11 +149,11 @@ pub(crate) async fn get_task_info(
     headers: HeaderMap,
     Json(request): Json<TaskInfoRequest>,
 ) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
-    let task = state.current_task_for_worker(&worker_id).await;
+    let task = state.current_task_for_worker(&station_id).await;
     let task_id = task.as_ref().map(|task| task.task_id.clone()).unwrap_or_else(|| {
         let task_key = request.sku.as_deref().or(request.barcode.as_deref()).unwrap_or("MOCK");
         format!("TASK-{}", task_key)
@@ -161,7 +161,7 @@ pub(crate) async fn get_task_info(
     let order_id = task
         .as_ref()
         .map(|task| task.run_id.clone())
-        .unwrap_or_else(|| format!("ORDER-{}", worker_id));
+        .unwrap_or_else(|| format!("ORDER-{}", station_id));
     let data = TaskInfoResponseData {
         task_id,
         chute_id: request
@@ -186,13 +186,13 @@ pub(crate) async fn robot_departure(
     headers: HeaderMap,
     Json(request): Json<RobotDepartureRequest>,
 ) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     let agv_event_payload = json!({
         "AgvId": request.agv_id,
-        "StationId": worker_id,
+        "StationId": station_id,
         "TaskId": request.task_id,
         "RequestId": request.request_id
     });
@@ -212,38 +212,45 @@ pub(crate) async fn robot_departure(
         "completed": request.completed,
         "requestId": request.request_id
     });
-    if state.current_task_for_worker(&worker_id).await.is_some() {
+    let resumed_run_ids = if state.current_task_for_worker(&station_id).await.is_some() {
         match state
             .complete_task_with_success(
-                &worker_id,
+                &station_id,
                 request.request_id,
-                output,
-                state_patch,
+                output.clone(),
+                state_patch.clone(),
                 Some(agv_event_payload),
             )
             .await
         {
-            Ok(()) => base_result_ok(json!({
-                "AgvId": request.agv_id,
-                "TaskId": request.task_id
-            })),
-            Err(message) => base_result_error(StatusCode::BAD_REQUEST, &message),
+            Ok(()) => Vec::new(),
+            Err(message) => return base_result_error(StatusCode::BAD_REQUEST, &message),
         }
     } else {
         state
-            .queue_pending_event(&worker_id, None, "AGV_DEPART", agv_event_payload)
+            .queue_pending_event(&station_id, None, "AGV_DEPART", agv_event_payload)
             .await;
         info!(
-            worker_id = %worker_id,
+            station_id = %station_id,
             task_id = %request.task_id,
             agv_id = %request.agv_id,
             "simulated robot departure without active runner task"
         );
-        base_result_ok(json!({
-            "AgvId": request.agv_id,
-            "TaskId": request.task_id
-        }))
-    }
+        state
+            .resume_robot_departure_waits(
+                &station_id,
+                &request.task_id,
+                &request.agv_id,
+                request.completed,
+                &request.request_id,
+            )
+            .await
+    };
+    base_result_ok(json!({
+        "AgvId": request.agv_id,
+        "TaskId": request.task_id,
+        "ResumedRunIds": resumed_run_ids
+    }))
 }
 
 pub(crate) async fn drive_out_robot(
@@ -251,7 +258,7 @@ pub(crate) async fn drive_out_robot(
     headers: HeaderMap,
     Json(request): Json<DriveOutRobotRequest>,
 ) -> Response {
-    match state.authenticated_worker_id(&headers).await {
+    match state.authenticated_station_id(&headers).await {
         Ok(_) => base_result_ok(json!({
             "AgvId": request.agv_id,
             "StationId": request.station_id,
@@ -266,8 +273,8 @@ pub(crate) async fn no_barcode_force_depart(
     headers: HeaderMap,
     Json(request): Json<NoBarcodeForceDepartRequest>,
 ) -> Response {
-    let worker_id = match state.authenticated_worker_id(&headers).await {
-        Ok(worker_id) => worker_id,
+    let station_id = match state.authenticated_station_id(&headers).await {
+        Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     let output = json!({
@@ -287,7 +294,7 @@ pub(crate) async fn no_barcode_force_depart(
         }
     });
     match state
-        .complete_task_with_success(&worker_id, request.request_id, output, state_patch, None)
+        .complete_task_with_success(&station_id, request.request_id, output, state_patch, None)
         .await
     {
         Ok(()) => base_result_ok(Value::Null),
@@ -301,7 +308,7 @@ pub(crate) async fn fail_task(
     Path(execution_id): Path<String>,
     Json(request): Json<FailTaskRequest>,
 ) -> Response {
-    if let Err(message) = state.authenticated_worker_id(&headers).await {
+    if let Err(message) = state.authenticated_station_id(&headers).await {
         return base_result_error(StatusCode::UNAUTHORIZED, &message);
     }
     match state.fail_task(&execution_id, request.error).await {

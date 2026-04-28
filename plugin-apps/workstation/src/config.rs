@@ -7,7 +7,7 @@ pub struct AppConfig {
 
 pub const DEFAULT_RUNNER_RESUME_SIGNAL: &str = "human_task_done";
 pub const HEALTH_PLUGIN_ID: &str = "workstation";
-pub const DEFAULT_CONNECT_WORKER_ID: &str = "anonymous";
+pub const DEFAULT_CONNECT_STATION_ID: &str = "anonymous";
 
 impl AppConfig {
     pub fn from_env() -> Self {

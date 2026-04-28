@@ -12,7 +12,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::config::{
-    AppConfig, DEFAULT_CONNECT_WORKER_ID, DEFAULT_RUNNER_RESUME_SIGNAL, HEALTH_PLUGIN_ID, normalize_runner_base_url,
+    AppConfig, DEFAULT_CONNECT_STATION_ID, DEFAULT_RUNNER_RESUME_SIGNAL, HEALTH_PLUGIN_ID, normalize_runner_base_url,
 };
 use crate::models::{
     CancelRequest, ConnectRequest, ExecuteRequest, ExecutionTask, HealthResponse, PendingEvent, ResumeRequest,
@@ -55,7 +55,7 @@ impl AppState {
     }
 
     pub(crate) async fn create_or_get_task(&self, request: ExecuteRequest) -> Result<ExecutionTask, String> {
-        let target_worker_id = resolve_worker_id(&request)
+        let target_station_id = resolve_station_id(&request)
             .ok_or_else(|| "missing workerId/stationId/targetWorkerId in config or input".to_string())?;
         let dedupe_key = task_lookup_key(&request.context.run_id, &request.node_id, &request.context.request_id);
 
@@ -95,7 +95,7 @@ impl AppState {
             trace_id: request.context.trace_id.clone(),
             plugin_type: request.runner_type.clone(),
             plugin_id: request.plugin_id.clone(),
-            target_worker_id: target_worker_id.clone(),
+            target_station_id: target_station_id.clone(),
             payload: json!({
                 "config": request.config,
                 "input": request.context.input,
@@ -118,7 +118,7 @@ impl AppState {
 
         let event = self
             .queue_pending_event(
-                &target_worker_id,
+                &target_station_id,
                 Some(execution_id.clone()),
                 "task.dispatch",
                 json!({
@@ -142,7 +142,7 @@ impl AppState {
 
         info!(
             execution_id = %task.execution_id,
-            worker_id = %task.target_worker_id,
+            station_id = %task.target_station_id,
             event_id = event.event_id,
             "queued WCS manual task"
         );
@@ -152,7 +152,7 @@ impl AppState {
 
     pub(crate) async fn queue_pending_event(
         &self,
-        worker_id: &str,
+        station_id: &str,
         execution_id: Option<String>,
         message_type: &str,
         payload: Value,
@@ -162,11 +162,11 @@ impl AppState {
 
         let (sender, event) = {
             let mut state = self.inner.write().await;
-            let sender = state.worker_sender(worker_id);
+            let sender = state.worker_sender(station_id);
             let event = PendingEvent {
                 event_id,
                 request_id,
-                worker_id: worker_id.to_string(),
+                station_id: station_id.to_string(),
                 execution_id,
                 message_type: message_type.to_string(),
                 payload,
@@ -175,7 +175,7 @@ impl AppState {
             };
             state
                 .pending_events
-                .entry(worker_id.to_string())
+                .entry(station_id.to_string())
                 .or_default()
                 .push(event.clone());
             (sender, event)
@@ -186,7 +186,7 @@ impl AppState {
 
     pub(crate) async fn simulate_agv_arrived(
         &self,
-        worker_id: &str,
+        station_id: &str,
         agv_id: &str,
         request_id: Option<u64>,
     ) -> AgvArrivalSimulation {
@@ -197,17 +197,17 @@ impl AppState {
             "MessageType": "AGV_ARRIVED",
             "messageType": "AGV_ARRIVED",
             "AgvId": agv_id,
-            "StationId": worker_id,
+            "StationId": station_id,
             "RequestId": request_id_value
         });
 
         let (sender, event) = {
             let mut state = self.inner.write().await;
-            let sender = state.worker_sender(worker_id);
+            let sender = state.worker_sender(station_id);
             let event = PendingEvent {
                 event_id,
                 request_id: request_id_text,
-                worker_id: worker_id.to_string(),
+                station_id: station_id.to_string(),
                 execution_id: None,
                 message_type: "AGV_ARRIVED".to_string(),
                 payload,
@@ -216,34 +216,34 @@ impl AppState {
             };
             state
                 .pending_events
-                .entry(worker_id.to_string())
+                .entry(station_id.to_string())
                 .or_default()
                 .push(event.clone());
             (sender, event)
         };
         let _ = sender.send(event.clone());
-        info!(worker_id = %worker_id, agv_id = %agv_id, request_id = %request_id_value, "simulated AGV arrival");
-        let resumed_run_ids = self.resume_agv_arrival_waits(worker_id, agv_id).await;
+        info!(station_id = %station_id, agv_id = %agv_id, request_id = %request_id_value, "simulated AGV arrival");
+        let resumed_run_ids = self.resume_agv_arrival_waits(station_id, agv_id).await;
         AgvArrivalSimulation { event, resumed_run_ids }
     }
 
-    pub(crate) async fn login(&self, worker_id: &str) -> String {
+    pub(crate) async fn login(&self, station_id: &str) -> String {
         let token = Uuid::new_v4().to_string();
         let mut state = self.inner.write().await;
-        state.tokens.insert(token.clone(), worker_id.to_string());
+        state.tokens.insert(token.clone(), station_id.to_string());
         token
     }
 
     pub(crate) async fn connect_context(
         &self,
-        worker_id: &str,
+        station_id: &str,
         since: Option<u64>,
     ) -> (broadcast::Receiver<PendingEvent>, Vec<PendingEvent>, Vec<TaskSnapshot>) {
         let mut state = self.inner.write().await;
-        let receiver = state.worker_sender(worker_id).subscribe();
+        let receiver = state.worker_sender(station_id).subscribe();
         let backlog = state
             .pending_events
-            .get(worker_id)
+            .get(station_id)
             .cloned()
             .unwrap_or_default()
             .into_iter()
@@ -253,15 +253,15 @@ impl AppState {
         let snapshots = state
             .tasks
             .values()
-            .filter(|task| task.target_worker_id == worker_id && !task.state.is_terminal())
+            .filter(|task| task.target_station_id == station_id && !task.state.is_terminal())
             .map(TaskSnapshot::from)
             .collect::<Vec<_>>();
         (receiver, backlog, snapshots)
     }
 
-    pub(crate) async fn verify_notify(&self, worker_id: &str, request: VerifyNotifyRequest) -> Result<(), String> {
+    pub(crate) async fn verify_notify(&self, station_id: &str, request: VerifyNotifyRequest) -> Result<(), String> {
         let mut state = self.inner.write().await;
-        let events = state.pending_events.entry(worker_id.to_string()).or_default();
+        let events = state.pending_events.entry(station_id.to_string()).or_default();
         let maybe_event = events.iter_mut().find(|event| {
             event.request_id == request.request_id
                 && request
@@ -276,35 +276,35 @@ impl AppState {
         Ok(())
     }
 
-    pub(crate) async fn current_task_for_worker(&self, worker_id: &str) -> Option<ExecutionTask> {
+    pub(crate) async fn current_task_for_worker(&self, station_id: &str) -> Option<ExecutionTask> {
         let state = self.inner.read().await;
         state
             .tasks
             .values()
-            .filter(|task| task.target_worker_id == worker_id && !task.state.is_terminal())
+            .filter(|task| task.target_station_id == station_id && !task.state.is_terminal())
             .max_by_key(|task| task.updated_at)
             .cloned()
     }
 
     pub(crate) async fn complete_task_with_success(
         &self,
-        worker_id: &str,
+        station_id: &str,
         request_id: String,
         output: Value,
         state_patch: Value,
         agv_depart_payload: Option<Value>,
     ) -> Result<(), String> {
         let task = self
-            .current_task_for_worker(worker_id)
+            .current_task_for_worker(station_id)
             .await
             .ok_or_else(|| "no active task for worker".to_string())?;
         self.transition_task_success(&task.execution_id, output, state_patch)
             .await?;
         if let Some(payload) = agv_depart_payload {
-            self.queue_pending_event(worker_id, Some(task.execution_id), "AGV_DEPART", payload)
+            self.queue_pending_event(station_id, Some(task.execution_id), "AGV_DEPART", payload)
                 .await;
         }
-        info!(worker_id = %worker_id, request_id = %request_id, "worker completed WCS task");
+        info!(station_id = %station_id, request_id = %request_id, "worker completed WCS task");
         Ok(())
     }
 
@@ -338,7 +338,7 @@ impl AppState {
                 .ok_or_else(|| "execution task not found".to_string())?
         };
         self.queue_pending_event(
-            &task.target_worker_id,
+            &task.target_station_id,
             Some(task.execution_id.clone()),
             "task.cancel",
             json!({
@@ -365,7 +365,7 @@ impl AppState {
                 .ok_or_else(|| "execution task not found".to_string())?
         };
         self.queue_pending_event(
-            &task.target_worker_id,
+            &task.target_station_id,
             Some(task.execution_id.clone()),
             "task.resume",
             json!({
@@ -377,23 +377,23 @@ impl AppState {
         Ok(())
     }
 
-    pub(crate) async fn authenticated_worker_id(&self, headers: &axum::http::HeaderMap) -> Result<String, String> {
+    pub(crate) async fn authenticated_station_id(&self, headers: &axum::http::HeaderMap) -> Result<String, String> {
         let state = self.inner.read().await;
         if let Some(token) = bearer_token(headers) {
-            if let Some(worker_id) = state.tokens.get(&token).cloned() {
-                return Ok(worker_id);
+            if let Some(station_id) = state.tokens.get(&token).cloned() {
+                return Ok(station_id);
             }
         }
 
         let mut connected_workers = state
             .worker_streams
             .keys()
-            .filter(|worker_id| worker_id.as_str() != DEFAULT_CONNECT_WORKER_ID);
-        let fallback_worker_id = connected_workers.next().cloned();
-        if fallback_worker_id.is_some() && connected_workers.next().is_none() {
-            let worker_id = fallback_worker_id.expect("fallback worker id should exist");
-            warn!(worker_id = %worker_id, "falling back to the only connected workstation for simulated WCS auth");
-            return Ok(worker_id);
+            .filter(|station_id| station_id.as_str() != DEFAULT_CONNECT_STATION_ID);
+        let fallback_station_id = connected_workers.next().cloned();
+        if fallback_station_id.is_some() && connected_workers.next().is_none() {
+            let station_id = fallback_station_id.expect("fallback worker id should exist");
+            warn!(station_id = %station_id, "模拟登录验证");
+            return Ok(station_id);
         }
 
         if bearer_token(headers).is_some() {
@@ -505,6 +505,32 @@ impl AppState {
         resumed_run_ids
     }
 
+    pub(crate) async fn resume_robot_departure_waits(
+        &self,
+        station_id: &str,
+        task_id: &str,
+        agv_id: &str,
+        completed: i64,
+        request_id: &str,
+    ) -> Vec<String> {
+        let Some(base_url) = self.config.runner_base_url.as_ref() else {
+            warn!(station_id = %station_id, task_id = %task_id, "robot departure resume skipped because RUNNER_BASE_URL is not configured");
+            return Vec::new();
+        };
+        let run_ids = self.search_robot_departure_wait_run_ids(station_id, task_id).await;
+
+        let mut resumed_run_ids = Vec::new();
+        for run_id in run_ids {
+            if self
+                .resume_robot_departure_run(base_url, &run_id, task_id, agv_id, completed, request_id)
+                .await
+            {
+                resumed_run_ids.push(run_id.to_string());
+            }
+        }
+        resumed_run_ids
+    }
+
     async fn search_wait_run_ids(&self, station_id: &str, event: &str) -> Vec<String> {
         let Some(db_pool) = self.db_pool.as_ref() else {
             warn!(station_id = %station_id, event = %event, "waiting run search skipped because DATABASE_URL is not configured");
@@ -532,6 +558,50 @@ impl AppState {
             Ok(rows) => rows,
             Err(error) => {
                 warn!(station_id = %station_id, event = %event, error = %error, "failed to search waiting runs from database");
+                return Vec::new();
+            }
+        };
+
+        rows.into_iter()
+            .filter_map(|row| row.try_get::<String, _>("run_id").ok())
+            .collect()
+    }
+
+    async fn search_robot_departure_wait_run_ids(&self, station_id: &str, task_id: &str) -> Vec<String> {
+        let Some(db_pool) = self.db_pool.as_ref() else {
+            warn!(station_id = %station_id, task_id = %task_id, "robot departure run search skipped because DATABASE_URL is not configured");
+            return Vec::new();
+        };
+
+        let rows = match sqlx::query(
+            r#"
+            SELECT run_id
+            FROM workflow_runs
+            WHERE status IN ($1, $2)
+              AND current_node_id = $3
+              AND last_signal->>'type' = $4
+              AND state->'workstation'->'lastRobotDeparture'->>'taskId' = $5
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_each(state->'workstation'->'executions') AS execution(id, payload)
+                WHERE execution.payload->>'workerId' = $6
+              )
+            ORDER BY updated_at DESC
+            LIMIT 100
+            "#,
+        )
+        .bind("\"waiting\"")
+        .bind("waiting")
+        .bind("robot_departure")
+        .bind(DEFAULT_RUNNER_RESUME_SIGNAL)
+        .bind(task_id)
+        .bind(station_id)
+        .fetch_all(db_pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                warn!(station_id = %station_id, task_id = %task_id, error = %error, "failed to search robot departure waiting runs from database");
                 return Vec::new();
             }
         };
@@ -630,6 +700,67 @@ impl AppState {
             }
         }
     }
+
+    async fn resume_robot_departure_run(
+        &self,
+        base_url: &str,
+        run_id: &str,
+        task_id: &str,
+        agv_id: &str,
+        completed: i64,
+        request_id: &str,
+    ) -> bool {
+        let response = self
+            .client
+            .post(format!("{}/runs/{}/resume", base_url.trim_end_matches('/'), run_id))
+            .json(&json!({
+                "event": {
+                    "type": DEFAULT_RUNNER_RESUME_SIGNAL,
+                    "payload": {
+                        "status": "success",
+                        "output": {
+                            "taskId": task_id,
+                            "agvId": agv_id,
+                            "completed": completed,
+                            "requestId": request_id
+                        },
+                        "statePatch": {
+                            "workstation": {
+                                "lastRobotDeparture": {
+                                    "taskId": task_id,
+                                    "agvId": agv_id,
+                                    "completed": completed,
+                                    "requestId": request_id
+                                }
+                            }
+                        }
+                    }
+                }
+            }))
+            .send()
+            .await;
+
+        match response {
+            Ok(response) if response.status().is_success() => {
+                info!(run_id = %run_id, task_id = %task_id, agv_id = %agv_id, "resumed robot departure wait");
+                true
+            }
+            Ok(response) => {
+                warn!(
+                    run_id = %run_id,
+                    task_id = %task_id,
+                    agv_id = %agv_id,
+                    status = %response.status(),
+                    "runner resume returned non-success status for robot departure"
+                );
+                false
+            }
+            Err(error) => {
+                warn!(run_id = %run_id, task_id = %task_id, agv_id = %agv_id, error = %error, "failed to resume robot departure wait");
+                false
+            }
+        }
+    }
 }
 
 pub(crate) struct AgvArrivalSimulation {
@@ -647,26 +778,28 @@ pub(crate) struct BridgeState {
 }
 
 impl BridgeState {
-    fn worker_sender(&mut self, worker_id: &str) -> broadcast::Sender<PendingEvent> {
+    fn worker_sender(&mut self, station_id: &str) -> broadcast::Sender<PendingEvent> {
         self.worker_streams
-            .entry(worker_id.to_string())
+            .entry(station_id.to_string())
             .or_insert_with(|| broadcast::channel(128).0)
             .clone()
     }
 }
 
-pub(crate) fn worker_id_from_connect(request: &ConnectRequest) -> String {
+pub(crate) fn station_id_from_connect(request: &ConnectRequest) -> String {
     request
         .station_id
         .clone()
         .or_else(|| request.station_ids.first().cloned())
         .or_else(|| request.client_id.clone())
-        .unwrap_or_else(|| DEFAULT_CONNECT_WORKER_ID.to_string())
+        .unwrap_or_else(|| DEFAULT_CONNECT_STATION_ID.to_string())
 }
 
-fn resolve_worker_id(request: &ExecuteRequest) -> Option<String> {
+fn resolve_station_id(request: &ExecuteRequest) -> Option<String> {
     value_string(&request.config, &["workerId", "stationId", "targetWorkerId"])
         .or_else(|| value_string(&request.context.input, &["workerId", "stationId", "targetWorkerId"]))
+        .or_else(|| value_string(&request.context.state, &["workerId", "stationId", "targetWorkerId"]))
+        .or_else(|| workstation_execution_station_id(&request.context.state))
 }
 
 fn resolve_ses_base_url(request: &ExecuteRequest) -> Option<String> {
@@ -687,4 +820,21 @@ fn value_string(value: &Value, candidates: &[&str]) -> Option<String> {
                 .map(str::to_string)
         })
     })
+}
+
+fn workstation_execution_station_id(state: &Value) -> Option<String> {
+    let mut station_ids = state
+        .get("workstation")
+        .and_then(|workstation| workstation.get("executions"))
+        .and_then(Value::as_object)?
+        .values()
+        .filter_map(|execution| execution.get("workerId").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    station_ids.sort();
+    station_ids.dedup();
+    match station_ids.as_slice() {
+        [station_id] => Some(station_id.clone()),
+        _ => None,
+    }
 }
