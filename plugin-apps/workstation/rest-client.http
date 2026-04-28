@@ -1,0 +1,71 @@
+@backendBaseUrl = http://127.0.0.1:6302/runner-api
+@workstationBaseUrl = http://127.0.0.1:9102
+@workflowId = wf-1777282051275-1
+@stationId = juFomZRB
+@agvId = AGV-001
+@requestId = 1001
+@taskId = TASK-AGV-001
+
+### 1. 运行工作流
+# @name startWorkflow
+POST {{backendBaseUrl}}/workflows/{{workflowId}}/run
+Content-Type: application/json
+
+{
+  "trigger": {
+    "headers": {
+      "requestId": "{{requestId}}"
+    },
+    "body": {
+      "stationId": "{{stationId}}",
+      "agvId": "{{agvId}}",
+      "requestId": "{{requestId}}"
+    }
+  },
+  "env": {
+    "tenantId": "tenant-a",
+    "warehouseId": "WH-1",
+    "sesBaseUrl": "{{workstationBaseUrl}}/station/operation",
+    "operatorId": "rest-client"
+  }
+}
+
+### 查询运行状态
+GET {{backendBaseUrl}}/runs/{{startWorkflow.response.body.$.runId}}
+
+### 2. 小车到达
+POST {{workstationBaseUrl}}/station/operation/simulate/agvArrived
+Content-Type: application/json
+
+{
+  "stationId": "{{stationId}}",
+  "agvId": "{{agvId}}",
+  "requestId": {{requestId}}
+}
+
+### 工作站登录，供发车接口复用 Authorization
+# @name login
+POST {{workstationBaseUrl}}/station/operation/login
+Content-Type: application/json
+
+{
+  "stationId": "{{stationId}}",
+  "platformId": "{{stationId}}",
+  "username": "rest-client",
+  "password": "rest-client"
+}
+
+### 3. 发车
+POST {{workstationBaseUrl}}/station/operation/robotDeparture
+Content-Type: application/json
+Authorization: {{login.response.body.$.data.Authorization}}
+
+{
+  "taskId": "{{taskId}}",
+  "agvId": "{{agvId}}",
+  "completed": 1,
+  "requestId": "{{requestId}}"
+}
+
+### 查询运行状态
+GET {{backendBaseUrl}}/runs/{{startWorkflow.response.body.$.runId}}
