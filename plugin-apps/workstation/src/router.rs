@@ -8,7 +8,7 @@ use axum::http::Request;
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{get, post};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::controllers::{plugin, station};
 use crate::services::AppState;
@@ -69,15 +69,30 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
 
     let response = next.run(request).await;
 
-    info!(
-        method = %method,
-        matched_path = %matched_path,
-        uri = %uri,
-        request_id = %request_id,
-        status = response.status().as_u16(),
-        latency_ms = start.elapsed().as_millis(),
-        "finished request",
-    );
+    let status = response.status();
+    let latency_ms = start.elapsed().as_millis();
+
+    if status.is_client_error() {
+        warn!(
+            method = %method,
+            matched_path = %matched_path,
+            uri = %uri,
+            request_id = %request_id,
+            status = status.as_u16(),
+            latency_ms,
+            "finished request",
+        );
+    } else {
+        info!(
+            method = %method,
+            matched_path = %matched_path,
+            uri = %uri,
+            request_id = %request_id,
+            status = status.as_u16(),
+            latency_ms,
+            "finished request",
+        );
+    }
 
     response
 }

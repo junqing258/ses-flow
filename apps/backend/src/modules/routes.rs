@@ -14,7 +14,7 @@ use runner::error::RunnerError;
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::modules::system::system_store::SystemSettingsStore;
 use crate::modules::{ai_gateway, edit_session, node_registry, run, system, workflow};
@@ -138,15 +138,30 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
 
     let response = next.run(request).await;
 
-    info!(
-        method = %method,
-        matched_path = %matched_path,
-        uri = %uri,
-        request_id = %request_id,
-        status = response.status().as_u16(),
-        latency_ms = start.elapsed().as_millis(),
-        "finished request",
-    );
+    let status = response.status();
+    let latency_ms = start.elapsed().as_millis();
+
+    if status.is_client_error() {
+        warn!(
+            method = %method,
+            matched_path = %matched_path,
+            uri = %uri,
+            request_id = %request_id,
+            status = status.as_u16(),
+            latency_ms,
+            "finished request",
+        );
+    } else {
+        info!(
+            method = %method,
+            matched_path = %matched_path,
+            uri = %uri,
+            request_id = %request_id,
+            status = status.as_u16(),
+            latency_ms,
+            "finished request",
+        );
+    }
 
     response
 }
