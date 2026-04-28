@@ -7,6 +7,7 @@ use workstation_plugin::{AppConfig, build_app_with_config};
 
 #[tokio::main]
 async fn main() {
+    dotenv::dotenv().ok();
     init_tracing();
 
     if let Err(error) = run().await {
@@ -22,7 +23,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind(address).await?;
     let config = AppConfig::from_env();
-    info!(address = %address, runner_base_url = ?config.runner_base_url, "workstation plugin listening");
+    info!(
+        address = %address,
+        runner_base_url = ?config.runner_base_url,
+        database_configured = config.database_url.is_some(),
+        "workstation plugin listening"
+    );
     axum::serve(listener, build_app_with_config(config)).await?;
     Ok(())
 }

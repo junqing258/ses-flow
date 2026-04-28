@@ -574,19 +574,15 @@ impl WorkflowApp {
         event: serde_json::Value,
     ) -> Result<WorkflowRunSummary, AppError> {
         info!(run_id = %run_id, "preparing workflow resume");
-        let workflow_id = self
-            .run_registry
-            .resolve(run_id)
+        let existing_summary = self
+            .store
+            .load_summary(run_id)?
             .ok_or_else(|| AppError::NotFound(format!("workflow run not found: {run_id}")))?;
-        let stored_workflow = self
-            .catalog
-            .load_workflow(&workflow_id)?
-            .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
+        let stored_workflow = self.resolve_workflow_for_run(run_id, &existing_summary)?;
         let permit = self
             .concurrency_gate
             .acquire(&stored_workflow.definition.meta.key)
             .await?;
-        let existing_summary = self.store.load_summary(run_id)?;
         let runner = self.build_runner()?;
 
         let running_summary = WorkflowRunSummary {
@@ -594,17 +590,9 @@ impl WorkflowApp {
             workflow_key: stored_workflow.definition.meta.key.clone(),
             workflow_version: stored_workflow.definition.meta.version,
             status: WorkflowRunStatus::Running,
-            current_node_id: existing_summary
-                .as_ref()
-                .and_then(|summary| summary.current_node_id.clone()),
-            state: existing_summary
-                .as_ref()
-                .map(|summary| summary.state.clone())
-                .unwrap_or_else(|| json!({})),
-            timeline: existing_summary
-                .as_ref()
-                .map(|summary| summary.timeline.clone())
-                .unwrap_or_default(),
+            current_node_id: existing_summary.current_node_id.clone(),
+            state: existing_summary.state.clone(),
+            timeline: existing_summary.timeline.clone(),
             last_signal: None,
             resume_state: None,
         };
@@ -639,6 +627,41 @@ impl WorkflowApp {
         });
 
         Ok(running_summary)
+    }
+
+    fn resolve_workflow_for_run(
+        &self,
+        run_id: &str,
+        summary: &WorkflowRunSummary,
+    ) -> Result<StoredWorkflowDefinition, AppError> {
+        if let Some(workflow_id) = self.run_registry.resolve(run_id) {
+            return self
+                .catalog
+                .load_workflow(&workflow_id)?
+                .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")));
+        }
+
+        let stored_workflow = self
+            .catalog
+            .load_workflow(&summary.workflow_key)?
+            .or_else(|| {
+                self.catalog.load_all_workflows().ok()?.into_iter().find(|workflow| {
+                    workflow.definition.meta.key == summary.workflow_key
+                        && workflow.definition.meta.version == summary.workflow_version
+                })
+            })
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "workflow not found for run {}: key={}, version={}",
+                    run_id, summary.workflow_key, summary.workflow_version
+                ))
+            })?;
+        self.run_registry.bind(
+            run_id,
+            stored_workflow.id.clone(),
+            stored_workflow.definition.meta.key.clone(),
+        );
+        Ok(stored_workflow)
     }
 
     pub fn terminate_workflow(&self, run_id: &str) -> Result<WorkflowRunSummary, AppError> {

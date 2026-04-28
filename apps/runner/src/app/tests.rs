@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
@@ -10,6 +11,7 @@ use tokio::time::{Duration, sleep};
 use crate::app::{AppError, ConcurrencyConfig, EditSessionDraftOperation, OverflowPolicy, WorkflowApp};
 use crate::core::definition::WorkflowDefinition;
 use crate::core::runtime::WorkflowRunStatus;
+use crate::store::{InMemoryCatalogStore, InMemoryRunStore};
 
 fn sample_workflow(key: &str) -> WorkflowDefinition {
     serde_json::from_value(json!({
@@ -34,6 +36,40 @@ fn sample_workflow(key: &str) -> WorkflowDefinition {
         "policies": {}
     }))
     .expect("sample workflow should deserialize")
+}
+
+fn wait_workflow(key: &str) -> WorkflowDefinition {
+    serde_json::from_value(json!({
+        "meta": {
+            "key": key,
+            "name": "Wait Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "wait_1",
+                "type": "wait",
+                "name": "Wait",
+                "config": {
+                    "event": "agv.arrived"
+                }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "wait_1" },
+            { "from": "wait_1", "to": "end_1" }
+        ],
+        "policies": {}
+    }))
+    .expect("wait workflow should deserialize")
 }
 
 fn delayed_fetch_workflow(key: &str, url: &str) -> WorkflowDefinition {
@@ -490,6 +526,54 @@ async fn starts_workflow_and_persists_completed_summary() {
 }
 
 #[tokio::test]
+async fn resumes_waiting_run_after_registry_restart_from_persisted_summary() {
+    let store = Arc::new(InMemoryRunStore::new());
+    let catalog = Arc::new(InMemoryCatalogStore::new());
+    let first_app = WorkflowApp::with_store_and_catalog(store.clone(), catalog.clone());
+    let registration = first_app
+        .register_workflow(
+            Some("ws-run".to_string()),
+            Some("Run Workspace".to_string()),
+            None,
+            wait_workflow("restart-resume-flow"),
+            None,
+        )
+        .expect("workflow should register");
+
+    let started = first_app
+        .start_workflow(
+            &registration.workflow_id,
+            json!({
+                "body": {
+                    "stationId": "station-1"
+                }
+            }),
+            Default::default(),
+        )
+        .await
+        .expect("workflow should start");
+    let waiting = wait_for_waiting_summary(&first_app, &started.run_id).await;
+    assert!(matches!(waiting.status, WorkflowRunStatus::Waiting));
+    assert_eq!(waiting.current_node_id.as_deref(), Some("wait_1"));
+
+    let restarted_app = WorkflowApp::with_store_and_catalog(store, catalog);
+    let accepted = restarted_app
+        .resume_workflow(
+            &waiting.run_id,
+            json!({
+                "event": "agv.arrived",
+                "stationId": "station-1"
+            }),
+        )
+        .await
+        .expect("resume should be accepted after registry restart");
+    assert!(matches!(accepted.status, WorkflowRunStatus::Running));
+
+    let final_summary = wait_for_terminal_summary(&restarted_app, &waiting.run_id).await;
+    assert!(matches!(final_summary.status, WorkflowRunStatus::Completed));
+}
+
+#[tokio::test]
 async fn rejects_second_start_when_workflow_concurrency_limit_is_reached() {
     let app = WorkflowApp::with_concurrency_config(ConcurrencyConfig {
         max_global: 5,
@@ -581,4 +665,17 @@ async fn wait_for_terminal_summary(app: &WorkflowApp, run_id: &str) -> crate::co
     }
 
     panic!("workflow run did not reach a terminal state in time");
+}
+
+async fn wait_for_waiting_summary(app: &WorkflowApp, run_id: &str) -> crate::core::runtime::WorkflowRunSummary {
+    for _ in 0..40 {
+        if let Some(summary) = app.get_summary(run_id).expect("summary should load") {
+            if matches!(summary.status, WorkflowRunStatus::Waiting) {
+                return summary;
+            }
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("workflow run did not reach waiting state in time");
 }
