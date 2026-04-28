@@ -152,17 +152,16 @@ dependencies = [
  "futures-core",
  "futures-util",
  "http-body-util",
- "opentelemetry",
  "reqwest",
  "runner",
  "serde",
  "serde_json",
+ "ses-flow-telemetry",
  "sqlx",
  "tokio",
  "tower",
  "tower-http",
  "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -1738,22 +1737,15 @@ dependencies = [
  "chrono",
  "futures-core",
  "futures-util",
- "opentelemetry",
- "opentelemetry-appender-tracing",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
  "reqwest",
  "serde",
  "serde_json",
+ "ses-flow-telemetry",
  "sqlx",
  "thiserror",
  "tokio",
  "toml",
  "tracing",
- "tracing-appender",
- "tracing-log",
- "tracing-opentelemetry",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1938,6 +1930,23 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "ses-flow-telemetry"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "http",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "tracing",
+ "tracing-appender",
+ "tracing-log",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3368,16 +3377,14 @@ dependencies = [
  "axum",
  "chrono",
  "dotenv",
- "opentelemetry",
  "reqwest",
- "runner",
  "serde",
  "serde_json",
+ "ses-flow-telemetry",
  "sqlx",
  "tokio",
  "tower",
  "tracing",
- "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
 ]

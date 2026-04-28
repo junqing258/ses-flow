@@ -1,7 +1,7 @@
 use std::env;
 use std::net::SocketAddr;
 
-use runner::utils::telemetry::init_tracing_with_service_name;
+use ses_flow_telemetry::init_tracing_with_service_name;
 use tracing::info;
 use workstation_plugin::{AppConfig, build_app_with_config};
 

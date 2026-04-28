@@ -4,20 +4,18 @@ use std::time::Instant;
 
 use axum::body::Body;
 use axum::extract::MatchedPath;
-use axum::http::{HeaderMap, Method, Request, StatusCode};
+use axum::http::{Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{any, get, post, put};
 use axum::{Json, Router};
-use opentelemetry::global;
-use opentelemetry::propagation::Extractor;
 use runner::app::{AppError, WorkflowApp};
 use runner::error::RunnerError;
 use serde::Serialize;
+use ses_flow_telemetry::set_span_parent_from_headers;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{Instrument, debug, field, info, info_span, warn};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::modules::system::system_store::SystemSettingsStore;
 use crate::modules::{ai_gateway, edit_session, node_registry, run, system, workflow};
@@ -150,9 +148,7 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
         "request.id" = %request_id,
         "latency_ms" = field::Empty,
     );
-    let parent_context =
-        global::get_text_map_propagator(|propagator| propagator.extract(&HeaderExtractor(request.headers())));
-    let _ = request_span.set_parent(parent_context);
+    set_span_parent_from_headers(&request_span, request.headers());
 
     async move {
         let start = Instant::now();
@@ -197,18 +193,6 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
     }
     .instrument(request_span)
     .await
-}
-
-struct HeaderExtractor<'a>(&'a HeaderMap);
-
-impl Extractor for HeaderExtractor<'_> {
-    fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(|value| value.to_str().ok())
-    }
-
-    fn keys(&self) -> Vec<&str> {
-        self.0.keys().map(|name| name.as_str()).collect()
-    }
 }
 
 #[derive(Debug)]

@@ -4,14 +4,12 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
 use axum::extract::MatchedPath;
-use axum::http::{HeaderMap, Request};
+use axum::http::Request;
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{get, post};
-use opentelemetry::global;
-use opentelemetry::propagation::Extractor;
+use ses_flow_telemetry::set_span_parent_from_headers;
 use tracing::{Instrument, debug, field, info, info_span, warn};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::controllers::{plugin, station};
 use crate::services::AppState;
@@ -81,9 +79,7 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
         "request.id" = %request_id,
         "latency_ms" = field::Empty,
     );
-    let parent_context =
-        global::get_text_map_propagator(|propagator| propagator.extract(&HeaderExtractor(request.headers())));
-    let _ = request_span.set_parent(parent_context);
+    set_span_parent_from_headers(&request_span, request.headers());
 
     async move {
         let start = Instant::now();
@@ -128,16 +124,4 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
     }
     .instrument(request_span)
     .await
-}
-
-struct HeaderExtractor<'a>(&'a HeaderMap);
-
-impl Extractor for HeaderExtractor<'_> {
-    fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(|value| value.to_str().ok())
-    }
-
-    fn keys(&self) -> Vec<&str> {
-        self.0.keys().map(|name| name.as_str()).collect()
-    }
 }

@@ -5,8 +5,10 @@ use std::sync::Once;
 use std::time::Duration;
 
 use chrono::Local;
+use http::HeaderMap;
 use opentelemetry::KeyValue;
 use opentelemetry::global;
+use opentelemetry::propagation::Extractor;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{LogExporter, Protocol, SpanExporter, WithExportConfig};
@@ -18,6 +20,7 @@ use tracing::Level;
 use tracing::field::Field;
 use tracing::{Event, Subscriber};
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::field::Visit;
 use tracing_subscriber::fmt;
@@ -164,6 +167,23 @@ pub fn init_tracing_with_service_name(default_service_name: &'static str) -> Opt
     });
 
     guard
+}
+
+pub fn set_span_parent_from_headers(span: &tracing::Span, headers: &HeaderMap) {
+    let parent_context = global::get_text_map_propagator(|propagator| propagator.extract(&HeaderExtractor(headers)));
+    let _ = span.set_parent(parent_context);
+}
+
+struct HeaderExtractor<'a>(&'a HeaderMap);
+
+impl Extractor for HeaderExtractor<'_> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(|value| value.to_str().ok())
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(|name| name.as_str()).collect()
+    }
 }
 
 fn otel_layer<S>(

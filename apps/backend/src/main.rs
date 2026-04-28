@@ -9,7 +9,7 @@ use backend::modules::{ApiState, ai_gateway, build_router};
 use runner::app::WorkflowApp;
 use runner::config::RunnerConfig;
 use runner::store::{PostgresCatalogStore, PostgresEditSessionStore, PostgresRunStore};
-use runner::utils::telemetry::init_tracing;
+use ses_flow_telemetry::init_tracing;
 use tracing::{error, info, warn};
 
 #[tokio::main]
