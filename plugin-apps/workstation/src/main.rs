@@ -1,14 +1,14 @@
 use std::env;
 use std::net::SocketAddr;
 
-use tracing::{info, warn};
-use tracing_subscriber::EnvFilter;
+use runner::utils::telemetry::init_tracing_with_service_name;
+use tracing::info;
 use workstation_plugin::{AppConfig, build_app_with_config};
 
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-    init_tracing();
+    let _telemetry_guard = init_tracing_with_service_name("ses-flow-workstation-plugin");
 
     if let Err(error) = run().await {
         eprintln!("workstation-plugin failed: {error}");
@@ -31,18 +31,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     );
     axum::serve(listener, build_app_with_config(config)).await?;
     Ok(())
-}
-
-fn init_tracing() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    if tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .try_init()
-        .is_err()
-    {
-        warn!("tracing subscriber already initialized");
-    }
 }
 
 fn parse_arg(flag: &str) -> Option<String> {

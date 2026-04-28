@@ -3,7 +3,12 @@ members = ["apps/backend", "apps/runner", "plugin-apps/hello-world", "plugin-app
 resolver = "3"
 
 [workspace.dependencies]
+opentelemetry = { version = "0.31", features = ["logs"] }
+opentelemetry-appender-tracing = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["trace", "logs", "http-proto", "reqwest-blocking-client", "reqwest-rustls", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.31", features = ["logs", "rt-tokio"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 tracing-log = "0.2"
 tracing-appender = "0.2"
+tracing-opentelemetry = "0.32"

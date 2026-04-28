@@ -4,11 +4,14 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
 use axum::extract::MatchedPath;
-use axum::http::Request;
+use axum::http::{HeaderMap, Request};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{get, post};
-use tracing::{debug, info, warn};
+use opentelemetry::global;
+use opentelemetry::propagation::Extractor;
+use tracing::{Instrument, debug, field, info, info_span, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::controllers::{plugin, station};
 use crate::services::AppState;
@@ -63,36 +66,78 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
         .map(MatchedPath::as_str)
         .unwrap_or(uri.path())
         .to_string();
-    let start = Instant::now();
+    let route_name = format!("{method} {matched_path}");
+    let request_span = info_span!(
+        "http.request",
+        "otel.name" = %route_name,
+        "otel.kind" = "server",
+        "otel.status_code" = field::Empty,
+        "otel.status_description" = field::Empty,
+        "http.request.method" = %method,
+        "http.route" = %matched_path,
+        "url.path" = %uri.path(),
+        "url.query" = uri.query().unwrap_or(""),
+        "http.response.status_code" = field::Empty,
+        "request.id" = %request_id,
+        "latency_ms" = field::Empty,
+    );
+    let parent_context =
+        global::get_text_map_propagator(|propagator| propagator.extract(&HeaderExtractor(request.headers())));
+    let _ = request_span.set_parent(parent_context);
 
-    debug!(method = %method, uri = %uri, "started request");
+    async move {
+        let start = Instant::now();
 
-    let response = next.run(request).await;
+        debug!(method = %method, uri = %uri, "started request");
 
-    let status = response.status();
-    let latency_ms = start.elapsed().as_millis();
+        let response = next.run(request).await;
 
-    if status.is_client_error() {
-        warn!(
-            method = %method,
-            matched_path = %matched_path,
-            uri = %uri,
-            request_id = %request_id,
-            status = status.as_u16(),
-            latency_ms,
-            "finished request",
-        );
-    } else {
-        info!(
-            method = %method,
-            matched_path = %matched_path,
-            uri = %uri,
-            request_id = %request_id,
-            status = status.as_u16(),
-            latency_ms,
-            "finished request",
-        );
+        let status = response.status();
+        let latency_ms = start.elapsed().as_millis();
+        let current_span = tracing::Span::current();
+        current_span.record("http.response.status_code", status.as_u16());
+        current_span.record("latency_ms", latency_ms as u64);
+        if status.is_server_error() {
+            current_span.record("otel.status_code", "error");
+            current_span.record("otel.status_description", format!("HTTP {}", status.as_u16()));
+        }
+
+        if status.is_client_error() {
+            warn!(
+                method = %method,
+                matched_path = %matched_path,
+                uri = %uri,
+                request_id = %request_id,
+                status = status.as_u16(),
+                latency_ms,
+                "finished request",
+            );
+        } else {
+            info!(
+                method = %method,
+                matched_path = %matched_path,
+                uri = %uri,
+                request_id = %request_id,
+                status = status.as_u16(),
+                latency_ms,
+                "finished request",
+            );
+        }
+
+        response
+    }
+    .instrument(request_span)
+    .await
+}
+
+struct HeaderExtractor<'a>(&'a HeaderMap);
+
+impl Extractor for HeaderExtractor<'_> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(|value| value.to_str().ok())
     }
 
-    response
+    fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(|name| name.as_str()).collect()
+    }
 }

@@ -34,6 +34,13 @@ services:
       BACKEND_LOG: ${BACKEND_LOG:-info}
       BACKEND_STATIC_DIR: /app/views
       AI_GATEWAY_PROXY_TARGET: http://ai-gateway:6307
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://192.168.110.45:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_SERVICE_NAME: ses-flow-backend
+      OTEL_SERVICE_NAMESPACE: ${OTEL_SERVICE_NAMESPACE:-ses-flow}
+      OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-dev}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

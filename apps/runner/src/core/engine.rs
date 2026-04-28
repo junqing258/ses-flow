@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use serde_json::{Value, json};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, field, info, info_span, warn};
 
 use super::definition::{
     NodeType, ResponseMode, TransitionDefinition, TriggerType, WorkflowDefinition, deserialize_workflow_definition,
@@ -497,6 +497,18 @@ impl WorkflowEngine {
         let workflow_version = definition.meta.version;
         let max_steps = definition.nodes.len().saturating_mul(8).max(16);
         let mut last_signal = None;
+        let workflow_span = info_span!(
+            "workflow.run",
+            "otel.name" = %format!("workflow {}", workflow_key),
+            "workflow.key" = %workflow_key,
+            "workflow.version" = workflow_version,
+            "workflow.run_id" = %run_id,
+            "workflow.status" = field::Empty,
+            "workflow.current_node_id" = %current_node_id,
+            "otel.status_code" = field::Empty,
+            "otel.status_description" = field::Empty,
+        );
+        let _workflow_enter = workflow_span.enter();
         info!(
             run_id = %run_id,
             workflow_key = %workflow_key,
@@ -520,6 +532,7 @@ impl WorkflowEngine {
 
         for _ in 0..max_steps {
             if self.controller.should_terminate(&run_id) {
+                workflow_span.record("workflow.status", "terminated");
                 let summary = self.terminated_summary(
                     &run_id,
                     &workflow_key,
@@ -547,6 +560,22 @@ impl WorkflowEngine {
                 .registry
                 .resolve(&node.node_type)
                 .ok_or_else(|| RunnerError::MissingExecutor(node.node_type.as_str().to_string()))?;
+            workflow_span.record("workflow.current_node_id", node.id.as_str());
+            let node_span = info_span!(
+                "workflow.node",
+                "otel.name" = %format!("{} {}", node.node_type.as_str(), node.id),
+                "workflow.key" = %workflow_key,
+                "workflow.version" = workflow_version,
+                "workflow.run_id" = %run_id,
+                "workflow.node_id" = %node.id,
+                "workflow.node_type" = node.node_type.as_str(),
+                "workflow.node_status" = field::Empty,
+                "workflow.branch_key" = field::Empty,
+                "workflow.terminal" = field::Empty,
+                "otel.status_code" = field::Empty,
+                "otel.status_description" = field::Empty,
+            );
+            let _node_enter = node_span.enter();
             let context = NodeExecutionContext {
                 run_id: &run_id,
                 workflow_key: &workflow_key,
@@ -569,6 +598,8 @@ impl WorkflowEngine {
             let result = match executor.execute(node, &context) {
                 Ok(result) => result,
                 Err(RunnerError::Terminated(_)) if self.controller.should_terminate(&run_id) => {
+                    node_span.record("workflow.node_status", "terminated");
+                    workflow_span.record("workflow.status", "terminated");
                     let summary = self.terminated_summary(
                         &run_id,
                         &workflow_key,
@@ -582,6 +613,13 @@ impl WorkflowEngine {
                     return Ok(summary);
                 }
                 Err(error) => {
+                    let error_message = error.to_string();
+                    node_span.record("workflow.node_status", "failed");
+                    node_span.record("otel.status_code", "error");
+                    node_span.record("otel.status_description", error_message.as_str());
+                    workflow_span.record("workflow.status", "failed");
+                    workflow_span.record("otel.status_code", "error");
+                    workflow_span.record("otel.status_description", error_message.as_str());
                     let summary = failed_summary(
                         run_id,
                         workflow_key,
@@ -605,6 +643,15 @@ impl WorkflowEngine {
                 }
             };
             let ended_at = Utc::now();
+            node_span.record("workflow.node_status", format!("{:?}", result.status));
+            if let Some(branch_key) = result.branch_key.as_deref() {
+                node_span.record("workflow.branch_key", branch_key);
+            }
+            node_span.record("workflow.terminal", result.terminal);
+            if let Some(error) = result.error.as_ref() {
+                node_span.record("otel.status_code", "error");
+                node_span.record("otel.status_description", error.message.as_str());
+            }
             info!(
                 run_id = %run_id,
                 workflow_key = %workflow_key,
@@ -635,6 +682,8 @@ impl WorkflowEngine {
             ));
 
             if self.controller.should_terminate(&run_id) {
+                node_span.record("workflow.node_status", "terminated");
+                workflow_span.record("workflow.status", "terminated");
                 let summary = self.terminated_summary(
                     &run_id,
                     &workflow_key,
@@ -650,6 +699,7 @@ impl WorkflowEngine {
 
             match result.status {
                 ExecutionStatus::Waiting => {
+                    workflow_span.record("workflow.status", "waiting");
                     info!(
                         run_id = %run_id,
                         workflow_key = %workflow_key,
@@ -684,6 +734,11 @@ impl WorkflowEngine {
                     return Ok(summary);
                 }
                 ExecutionStatus::Failed => {
+                    workflow_span.record("workflow.status", "failed");
+                    workflow_span.record("otel.status_code", "error");
+                    if let Some(error) = result.error.as_ref() {
+                        workflow_span.record("otel.status_description", error.message.as_str());
+                    }
                     warn!(
                         run_id = %run_id,
                         workflow_key = %workflow_key,
@@ -708,6 +763,7 @@ impl WorkflowEngine {
             }
 
             if result.terminal || node.node_type == NodeType::End {
+                workflow_span.record("workflow.status", "completed");
                 info!(
                     run_id = %run_id,
                     workflow_key = %workflow_key,
@@ -772,6 +828,12 @@ impl WorkflowEngine {
             workflow_key = %workflow_key,
             max_steps,
             "workflow execution aborted after reaching the max step guard",
+        );
+        workflow_span.record("workflow.status", "failed");
+        workflow_span.record("otel.status_code", "error");
+        workflow_span.record(
+            "otel.status_description",
+            "execution aborted because the max step guard was reached",
         );
         Err(RunnerError::Transition(
             "execution aborted because the max step guard was reached".to_string(),
