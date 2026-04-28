@@ -473,7 +473,7 @@ impl AppState {
             warn!(station_id = %station_id, "AGV arrival resume skipped because RUNNER_BASE_URL is not configured");
             return Vec::new();
         };
-        let run_ids = self.search_agv_arrival_wait_run_ids(station_id).await;
+        let run_ids = self.search_wait_run_ids(station_id, "agv.arrived").await;
 
         let mut resumed_run_ids = Vec::new();
         for run_id in run_ids {
@@ -484,9 +484,30 @@ impl AppState {
         resumed_run_ids
     }
 
-    async fn search_agv_arrival_wait_run_ids(&self, station_id: &str) -> Vec<String> {
+    pub(crate) async fn resume_scan_barcode_waits(&self, station_id: &str, barcode: &str, sku: &str) -> Vec<String> {
+        let Some(base_url) = self.config.runner_base_url.as_ref() else {
+            warn!(station_id = %station_id, barcode = %barcode, "scan barcode resume skipped because RUNNER_BASE_URL is not configured");
+            return Vec::new();
+        };
+        let run_ids = self
+            .search_wait_run_ids(station_id, "station.operation.scanBarcode")
+            .await;
+
+        let mut resumed_run_ids = Vec::new();
+        for run_id in run_ids {
+            if self
+                .resume_scan_barcode_run(base_url, &run_id, station_id, barcode, sku)
+                .await
+            {
+                resumed_run_ids.push(run_id.to_string());
+            }
+        }
+        resumed_run_ids
+    }
+
+    async fn search_wait_run_ids(&self, station_id: &str, event: &str) -> Vec<String> {
         let Some(db_pool) = self.db_pool.as_ref() else {
-            warn!(station_id = %station_id, "AGV arrival run search skipped because DATABASE_URL is not configured");
+            warn!(station_id = %station_id, event = %event, "waiting run search skipped because DATABASE_URL is not configured");
             return Vec::new();
         };
 
@@ -503,14 +524,14 @@ impl AppState {
         )
         .bind("\"waiting\"")
         .bind("waiting")
-        .bind("agv.arrived")
+        .bind(event)
         .bind(station_id)
         .fetch_all(db_pool)
         .await
         {
             Ok(rows) => rows,
             Err(error) => {
-                warn!(station_id = %station_id, error = %error, "failed to search AGV arrival waiting runs from database");
+                warn!(station_id = %station_id, event = %event, error = %error, "failed to search waiting runs from database");
                 return Vec::new();
             }
         };
@@ -554,6 +575,57 @@ impl AppState {
             }
             Err(error) => {
                 warn!(run_id = %run_id, station_id = %station_id, error = %error, "failed to resume AGV arrival wait");
+                false
+            }
+        }
+    }
+
+    async fn resume_scan_barcode_run(
+        &self,
+        base_url: &str,
+        run_id: &str,
+        station_id: &str,
+        barcode: &str,
+        sku: &str,
+    ) -> bool {
+        let response = self
+            .client
+            .post(format!("{}/runs/{}/resume", base_url.trim_end_matches('/'), run_id))
+            .json(&json!({
+                "event": {
+                    "event": "station.operation.scanBarcode",
+                    "stationId": station_id,
+                    "barcode": barcode,
+                    "itemId": barcode,
+                    "sku": sku,
+                    "payload": {
+                        "stationId": station_id,
+                        "barcode": barcode,
+                        "itemId": barcode,
+                        "sku": sku
+                    }
+                }
+            }))
+            .send()
+            .await;
+
+        match response {
+            Ok(response) if response.status().is_success() => {
+                info!(run_id = %run_id, station_id = %station_id, barcode = %barcode, "resumed scan barcode wait");
+                true
+            }
+            Ok(response) => {
+                warn!(
+                    run_id = %run_id,
+                    station_id = %station_id,
+                    barcode = %barcode,
+                    status = %response.status(),
+                    "runner resume returned non-success status for scan barcode"
+                );
+                false
+            }
+            Err(error) => {
+                warn!(run_id = %run_id, station_id = %station_id, barcode = %barcode, error = %error, "failed to resume scan barcode wait");
                 false
             }
         }

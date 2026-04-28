@@ -347,6 +347,8 @@ async fn scan_barcode_accepts_client_lowercase_payload_and_returns_items() {
     assert_eq!(payload["Data"]["Items"][0]["BarCode"], json!("123"));
     assert_eq!(payload["Data"]["Items"][0]["BarcodeName"], json!("商品-123"));
     assert_eq!(payload["Data"]["Items"][0]["Sku"], json!("SKU-123"));
+    assert_eq!(payload["Data"]["Items"][0]["ItemId"], json!("123"));
+    assert_eq!(payload["Data"]["ResumedRunIds"], json!([]));
 }
 
 #[tokio::test]
@@ -386,6 +388,7 @@ async fn scan_barcode_falls_back_to_connected_worker_for_simulation_auth() {
     assert_eq!(payload["Code"], json!(0));
     assert_eq!(payload["Data"]["WorkerId"], json!("station-1"));
     assert_eq!(payload["Data"]["Items"][0]["BarCode"], json!("123"));
+    assert_eq!(payload["Data"]["ResumedRunIds"], json!([]));
 }
 
 #[tokio::test]

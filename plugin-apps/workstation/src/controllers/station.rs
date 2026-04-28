@@ -121,21 +121,26 @@ pub(crate) async fn scan_barcode(
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
     let task = state.current_task_for_worker(&worker_id).await;
+    let barcode = request.barcode;
+    let sku = task
+        .as_ref()
+        .map(|item| item.task_id.clone())
+        .unwrap_or_else(|| format!("SKU-{}", barcode));
+    let resumed_run_ids = state.resume_scan_barcode_waits(&worker_id, &barcode, &sku).await;
     base_result_ok(json!({
         "Items": [
             {
-                "Sku": task
-                    .as_ref()
-                    .map(|item| item.task_id.clone())
-                    .unwrap_or_else(|| format!("SKU-{}", request.barcode)),
-                "BarcodeName": format!("商品-{}", request.barcode),
-                "BarCode": request.barcode
+                "Sku": sku,
+                "ItemId": barcode,
+                "BarcodeName": format!("商品-{}", barcode),
+                "BarCode": barcode
             }
         ],
-        "Barcode": request.barcode,
+        "Barcode": barcode,
         "WorkerId": worker_id,
         "TaskId": task.as_ref().map(|item| item.task_id.clone()),
-        "ExecutionId": task.as_ref().map(|item| item.execution_id.clone())
+        "ExecutionId": task.as_ref().map(|item| item.execution_id.clone()),
+        "ResumedRunIds": resumed_run_ids
     }))
 }
 
