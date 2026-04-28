@@ -19,7 +19,6 @@ use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing::Level;
 use tracing::field::Field;
 use tracing::{Event, Subscriber};
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::field::Visit;
@@ -33,7 +32,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 static TRACING_INIT: Once = Once::new();
 
 pub struct TelemetryGuard {
-    _log_guard: Option<WorkerGuard>,
     logger_provider: Option<SdkLoggerProvider>,
     tracer_provider: Option<SdkTracerProvider>,
 }
@@ -49,7 +47,7 @@ impl Drop for TelemetryGuard {
     }
 }
 
-// 持有 guard 防止后台写入线程提前退出，调用方需保持其生命周期到进程结束
+// 持有 guard 以便进程退出时关闭 OpenTelemetry provider，调用方需保持其生命周期到进程结束
 pub fn init_tracing() -> Option<TelemetryGuard> {
     init_tracing_with_service_name("ses-flow-backend")
 }
@@ -69,100 +67,42 @@ pub fn init_tracing_with_service_name(default_service_name: &'static str) -> Opt
         let tracer_provider = init_otel_tracer_provider(default_service_name);
         let logger_provider = init_otel_logger_provider(default_service_name);
 
-        let file_writer = env::var("LOG_FILE_DIR")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .and_then(|log_dir| {
-                std::fs::create_dir_all(&log_dir).ok()?;
-                let prefix = env::var("LOG_FILE_PREFIX").unwrap_or_else(|_| "runner.log".to_string());
-                let file_appender = tracing_appender::rolling::daily(&log_dir, &prefix);
-                let (non_blocking, worker_guard) = tracing_appender::non_blocking(file_appender);
-                Some((non_blocking, worker_guard))
+        if use_json {
+            if let Some(provider) = tracer_provider.as_ref() {
+                registry
+                    .with(fmt::layer().json())
+                    .with(otel_layer(provider))
+                    .with(logger_provider.as_ref().map(log_layer))
+                    .try_init()
+                    .ok();
+            } else {
+                registry
+                    .with(fmt::layer().json())
+                    .with(logger_provider.as_ref().map(log_layer))
+                    .try_init()
+                    .ok();
+            }
+        } else {
+            if let Some(provider) = tracer_provider.as_ref() {
+                registry
+                    .with(fmt::layer().event_format(BracketedEventFormatter))
+                    .with(otel_layer(provider))
+                    .with(logger_provider.as_ref().map(log_layer))
+                    .try_init()
+                    .ok();
+            } else {
+                registry
+                    .with(fmt::layer().event_format(BracketedEventFormatter))
+                    .with(logger_provider.as_ref().map(log_layer))
+                    .try_init()
+                    .ok();
+            }
+        }
+        if tracer_provider.is_some() || logger_provider.is_some() {
+            guard = Some(TelemetryGuard {
+                logger_provider,
+                tracer_provider,
             });
-
-        match file_writer {
-            Some((non_blocking, worker_guard)) => {
-                if use_json {
-                    if let Some(provider) = tracer_provider.as_ref() {
-                        registry
-                            .with(fmt::layer().event_format(BracketedEventFormatter))
-                            .with(fmt::layer().json().with_ansi(false).with_writer(non_blocking))
-                            .with(otel_layer(provider))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    } else {
-                        registry
-                            .with(fmt::layer().event_format(BracketedEventFormatter))
-                            .with(fmt::layer().json().with_ansi(false).with_writer(non_blocking))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    }
-                } else {
-                    if let Some(provider) = tracer_provider.as_ref() {
-                        registry
-                            .with(fmt::layer().event_format(BracketedEventFormatter))
-                            .with(fmt::layer().with_ansi(false).with_writer(non_blocking))
-                            .with(otel_layer(provider))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    } else {
-                        registry
-                            .with(fmt::layer().event_format(BracketedEventFormatter))
-                            .with(fmt::layer().with_ansi(false).with_writer(non_blocking))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    }
-                }
-                guard = Some(TelemetryGuard {
-                    _log_guard: Some(worker_guard),
-                    logger_provider,
-                    tracer_provider,
-                });
-            }
-            None => {
-                if use_json {
-                    if let Some(provider) = tracer_provider.as_ref() {
-                        registry
-                            .with(fmt::layer().json())
-                            .with(otel_layer(provider))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    } else {
-                        registry
-                            .with(fmt::layer().json())
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    }
-                } else {
-                    if let Some(provider) = tracer_provider.as_ref() {
-                        registry
-                            .with(fmt::layer().event_format(BracketedEventFormatter))
-                            .with(otel_layer(provider))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    } else {
-                        registry
-                            .with(fmt::layer().event_format(BracketedEventFormatter))
-                            .with(logger_provider.as_ref().map(log_layer))
-                            .try_init()
-                            .ok();
-                    }
-                }
-                if tracer_provider.is_some() || logger_provider.is_some() {
-                    guard = Some(TelemetryGuard {
-                        _log_guard: None,
-                        logger_provider,
-                        tracer_provider,
-                    });
-                }
-            }
         }
     });
 
