@@ -24,6 +24,8 @@ pub struct WorkflowRunRecord {
     pub wave_no: Option<String>,
     #[serde(rename = "requestId", skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    #[serde(skip)]
+    pub unique_key: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
@@ -33,6 +35,7 @@ pub struct WorkflowRunRecord {
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowRunLookup {
     pub run_id: String,
+    pub unique_key: Option<String>,
     pub order_no: Option<String>,
     pub wave_no: Option<String>,
     pub request_id: Option<String>,
@@ -56,6 +59,11 @@ pub struct WorkflowRunSearchResult {
 
 pub trait WorkflowRunStore: Send + Sync {
     fn save_summary(&self, summary: &WorkflowRunSummary) -> Result<(), RunnerError>;
+    fn save_started_summary(
+        &self,
+        summary: &WorkflowRunSummary,
+        lookup: WorkflowRunLookup,
+    ) -> Result<Option<WorkflowRunSummary>, RunnerError>;
     fn save_snapshot(&self, snapshot: WorkflowRunSnapshot) -> Result<(), RunnerError>;
     fn load_snapshot(&self, run_id: &str) -> Result<Option<WorkflowRunSnapshot>, RunnerError>;
     fn load_summary(&self, run_id: &str) -> Result<Option<WorkflowRunSummary>, RunnerError>;
@@ -117,6 +125,44 @@ impl WorkflowRunStore for InMemoryRunStore {
         Ok(())
     }
 
+    fn save_started_summary(
+        &self,
+        summary: &WorkflowRunSummary,
+        lookup: WorkflowRunLookup,
+    ) -> Result<Option<WorkflowRunSummary>, RunnerError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| RunnerError::Store("failed to lock in-memory run store".to_string()))?;
+
+        if let Some(unique_key) = lookup.unique_key.as_deref() {
+            if let Some(existing) = state.summaries.values().find(|existing| {
+                existing.workflow_key == summary.workflow_key
+                    && existing.workflow_version == summary.workflow_version
+                    && matches!(existing.status, WorkflowRunStatus::Running | WorkflowRunStatus::Waiting)
+                    && state
+                        .lookups
+                        .get(&existing.run_id)
+                        .and_then(|item| item.unique_key.as_deref())
+                        == Some(unique_key)
+            }) {
+                return Ok(Some(existing.clone()));
+            }
+        }
+
+        let now = Utc::now();
+        state.timestamps.insert(
+            summary.run_id.clone(),
+            RunTimestamps {
+                created_at: now,
+                updated_at: now,
+            },
+        );
+        state.lookups.insert(lookup.run_id.clone(), lookup);
+        state.summaries.insert(summary.run_id.clone(), summary.clone());
+        Ok(None)
+    }
+
     fn save_snapshot(&self, snapshot: WorkflowRunSnapshot) -> Result<(), RunnerError> {
         let mut state = self
             .state
@@ -160,6 +206,7 @@ impl WorkflowRunStore for InMemoryRunStore {
                     workflow_version: summary.workflow_version,
                     status: summary.status.clone(),
                     current_node_id: summary.current_node_id.clone(),
+                    unique_key: lookup.and_then(|item| item.unique_key.clone()),
                     order_no: lookup.and_then(|item| item.order_no.clone()),
                     wave_no: lookup.and_then(|item| item.wave_no.clone()),
                     request_id: lookup.and_then(|item| item.request_id.clone()),
@@ -214,6 +261,7 @@ impl WorkflowRunStore for InMemoryRunStore {
                     workflow_version: summary.workflow_version,
                     status: summary.status.clone(),
                     current_node_id: summary.current_node_id.clone(),
+                    unique_key: lookup.unique_key,
                     order_no: lookup.order_no,
                     wave_no: lookup.wave_no,
                     request_id: lookup.request_id,

@@ -611,6 +611,100 @@ async fn rejects_second_start_when_workflow_concurrency_limit_is_reached() {
 }
 
 #[tokio::test]
+async fn reuses_active_workflow_run_for_same_unique_key() {
+    let app = WorkflowApp::new();
+    let registration = app
+        .register_workflow(
+            Some("ws-run".to_string()),
+            Some("Run Workspace".to_string()),
+            None,
+            wait_workflow("idempotent-unique-key-flow"),
+            None,
+        )
+        .expect("workflow should register");
+
+    let trigger = json!({
+        "headers": { "requestId": "req-idempotent-1" },
+        "body": { "uniqueKey": "order:SO-IDEMPOTENT-1" }
+    });
+    let first = app
+        .start_workflow(&registration.workflow_id, trigger.clone(), Default::default())
+        .await
+        .expect("first workflow should start");
+    let waiting = wait_for_waiting_summary(&app, &first.run_id).await;
+    assert_eq!(waiting.run_id, first.run_id);
+
+    let second = app
+        .start_workflow(&registration.workflow_id, trigger.clone(), Default::default())
+        .await
+        .expect("duplicate active workflow should return existing run");
+
+    assert_eq!(second.run_id, first.run_id);
+    assert!(matches!(second.status, WorkflowRunStatus::Waiting));
+
+    app.resume_workflow(
+        &first.run_id,
+        json!({
+            "event": "agv.arrived",
+            "stationId": "station-1"
+        }),
+    )
+    .await
+    .expect("resume should be accepted");
+    let completed = wait_for_terminal_summary(&app, &first.run_id).await;
+    assert!(matches!(completed.status, WorkflowRunStatus::Completed));
+
+    let third = app
+        .start_workflow(&registration.workflow_id, trigger, Default::default())
+        .await
+        .expect("completed unique key should be allowed to start again");
+
+    assert_ne!(third.run_id, first.run_id);
+}
+
+#[tokio::test]
+async fn reuses_active_workflow_run_before_concurrency_reject_for_same_unique_key() {
+    let app = WorkflowApp::with_concurrency_config(ConcurrencyConfig {
+        max_global: 5,
+        queue_timeout_secs: 1,
+        overflow_policy: OverflowPolicy::Reject,
+        per_workflow: crate::app::PerWorkflowConcurrencyConfig {
+            default_max: 1,
+            overrides: Default::default(),
+        },
+    });
+    let delayed_server = spawn_delayed_http_server(Duration::from_millis(250));
+    let registration = app
+        .register_workflow(
+            Some("ws-run".to_string()),
+            Some("Run Workspace".to_string()),
+            None,
+            delayed_fetch_workflow("idempotent-limited-flow", &delayed_server),
+            None,
+        )
+        .expect("workflow should register");
+
+    let trigger = json!({
+        "headers": { "requestId": "req-idempotent-limited-1" },
+        "body": { "uniqueKey": "order:SO-IDEMPOTENT-LIMITED-1" }
+    });
+    let first = app
+        .start_workflow(&registration.workflow_id, trigger.clone(), Default::default())
+        .await
+        .expect("first workflow should start");
+
+    let second = app
+        .start_workflow(&registration.workflow_id, trigger, Default::default())
+        .await
+        .expect("duplicate active workflow should return existing run before concurrency rejection");
+
+    assert_eq!(second.run_id, first.run_id);
+
+    let final_summary = wait_for_terminal_summary(&app, &first.run_id).await;
+    assert!(matches!(final_summary.status, WorkflowRunStatus::Completed));
+}
+
+#[tokio::test]
 async fn queues_second_start_until_first_run_releases_its_permit() {
     let app = WorkflowApp::with_concurrency_config(ConcurrencyConfig {
         max_global: 5,

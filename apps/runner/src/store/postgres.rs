@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
-use sqlx::{QueryBuilder, Row, postgres::PgPool};
+use sqlx::{
+    QueryBuilder, Row,
+    postgres::{PgPool, PgRow},
+};
 
 use crate::core::runtime::{WorkflowRunSnapshot, WorkflowRunStatus, WorkflowRunSummary};
 use crate::error::RunnerError;
@@ -91,7 +94,8 @@ impl PostgresRunStore {
             ALTER TABLE workflow_runs
                 ADD COLUMN IF NOT EXISTS order_no TEXT,
                 ADD COLUMN IF NOT EXISTS wave_no TEXT,
-                ADD COLUMN IF NOT EXISTS request_id TEXT
+                ADD COLUMN IF NOT EXISTS request_id TEXT,
+                ADD COLUMN IF NOT EXISTS unique_key TEXT
             "#,
         )
         .execute(&self.pool)
@@ -119,6 +123,15 @@ impl PostgresRunStore {
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_workflow_runs_request_id ON workflow_runs(request_id)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RunnerError::Store(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_workflow_runs_unique_key ON workflow_runs(unique_key)
             "#,
         )
         .execute(&self.pool)
@@ -288,6 +301,54 @@ where
     }
 }
 
+fn workflow_run_summary_from_row(row: PgRow) -> Result<WorkflowRunSummary, RunnerError> {
+    let run_id: String = row
+        .try_get("run_id")
+        .map_err(|e| RunnerError::Store(format!("Failed to get run_id: {}", e)))?;
+    let workflow_key: String = row
+        .try_get("workflow_key")
+        .map_err(|e| RunnerError::Store(format!("Failed to get workflow_key: {}", e)))?;
+    let workflow_version: i32 = row
+        .try_get("workflow_version")
+        .map_err(|e| RunnerError::Store(format!("Failed to get workflow_version: {}", e)))?;
+    let status_str: String = row
+        .try_get("status")
+        .map_err(|e| RunnerError::Store(format!("Failed to get status: {}", e)))?;
+    let current_node_id: Option<String> = row
+        .try_get("current_node_id")
+        .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?;
+    let state: serde_json::Value = row
+        .try_get("state")
+        .map_err(|e| RunnerError::Store(format!("Failed to get state: {}", e)))?;
+    let timeline: serde_json::Value = row
+        .try_get("timeline")
+        .map_err(|e| RunnerError::Store(format!("Failed to get timeline: {}", e)))?;
+    let last_signal: Option<serde_json::Value> = row
+        .try_get("last_signal")
+        .map_err(|e| RunnerError::Store(format!("Failed to get last_signal: {}", e)))?;
+
+    let status: WorkflowRunStatus = serde_json::from_str(&status_str)
+        .map_err(|e| RunnerError::Store(format!("Failed to deserialize status: {}", e)))?;
+    let state_typed: serde_json::Value =
+        serde_json::from_value(state).map_err(|e| RunnerError::Store(format!("Failed to deserialize state: {}", e)))?;
+    let timeline_vec: Vec<crate::core::runtime::NodeExecutionRecord> = serde_json::from_value(timeline)
+        .map_err(|e| RunnerError::Store(format!("Failed to deserialize timeline: {}", e)))?;
+    let last_signal_typed: Option<crate::core::runtime::NextSignal> =
+        deserialize_optional_json_field(last_signal, "last_signal")?;
+
+    Ok(WorkflowRunSummary {
+        run_id,
+        workflow_key,
+        workflow_version: workflow_version as u32,
+        status,
+        current_node_id,
+        state: state_typed,
+        timeline: timeline_vec,
+        last_signal: last_signal_typed,
+        resume_state: None,
+    })
+}
+
 #[async_trait::async_trait]
 impl WorkflowRunStore for PostgresRunStore {
     fn save_summary(&self, summary: &WorkflowRunSummary) -> Result<(), RunnerError> {
@@ -337,6 +398,126 @@ impl WorkflowRunStore for PostgresRunStore {
                 .map_err(|e| RunnerError::Store(format!("Failed to save summary: {}", e)))?;
 
                 Ok(())
+            })
+        })
+    }
+
+    fn save_started_summary(
+        &self,
+        summary: &WorkflowRunSummary,
+        lookup: WorkflowRunLookup,
+    ) -> Result<Option<WorkflowRunSummary>, RunnerError> {
+        let status_str = serde_json::to_string(&summary.status)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize status: {}", e)))?;
+        let running_status = serde_json::to_string(&WorkflowRunStatus::Running)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize running status: {}", e)))?;
+        let waiting_status = serde_json::to_string(&WorkflowRunStatus::Waiting)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize waiting status: {}", e)))?;
+
+        let state_value = serde_json::to_value(&summary.state)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize state: {}", e)))?;
+        let timeline_value = serde_json::to_value(&summary.timeline)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize timeline: {}", e)))?;
+        let last_signal_value = serde_json::to_value(&summary.last_signal)
+            .map_err(|e| RunnerError::Store(format!("Failed to serialize last_signal: {}", e)))?;
+
+        let pool = self.pool.clone();
+        let run_id = summary.run_id.clone();
+        let workflow_key = summary.workflow_key.clone();
+        let workflow_version = summary.workflow_version as i32;
+        let current_node_id = summary.current_node_id.clone();
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let mut tx = pool
+                    .begin()
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to start workflow run transaction: {}", e)))?;
+
+                if let Some(unique_key) = lookup.unique_key.as_deref() {
+                    let lock_key = format!("{workflow_key}:{workflow_version}:{unique_key}");
+                    sqlx::query(
+                        r#"
+                        SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))
+                        "#,
+                    )
+                    .bind("workflow_runs_active_order")
+                    .bind(&lock_key)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to lock workflow run idempotency key: {}", e)))?;
+
+                    let existing = sqlx::query(
+                        r#"
+                        SELECT run_id, workflow_key, workflow_version, status, current_node_id,
+                               state, timeline, last_signal
+                        FROM workflow_runs
+                        WHERE workflow_key = $1
+                          AND workflow_version = $2
+                          AND unique_key = $3
+                          AND status IN ($4, $5)
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                        "#,
+                    )
+                    .bind(&workflow_key)
+                    .bind(workflow_version)
+                    .bind(unique_key)
+                    .bind(&running_status)
+                    .bind(&waiting_status)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to find active workflow run: {}", e)))?;
+
+                    if let Some(row) = existing {
+                        let summary = workflow_run_summary_from_row(row)?;
+                        tx.commit().await.map_err(|e| {
+                            RunnerError::Store(format!("Failed to commit workflow run transaction: {}", e))
+                        })?;
+                        return Ok(Some(summary));
+                    }
+                }
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO workflow_runs (
+                        run_id, workflow_key, workflow_version, status, current_node_id,
+                        state, timeline, last_signal, order_no, wave_no, request_id, unique_key
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        current_node_id = EXCLUDED.current_node_id,
+                        state = EXCLUDED.state,
+                        timeline = EXCLUDED.timeline,
+                        last_signal = EXCLUDED.last_signal,
+                        order_no = EXCLUDED.order_no,
+                        wave_no = EXCLUDED.wave_no,
+                        request_id = EXCLUDED.request_id,
+                        unique_key = EXCLUDED.unique_key,
+                        updated_at = NOW()
+                    "#,
+                )
+                .bind(&run_id)
+                .bind(&workflow_key)
+                .bind(workflow_version)
+                .bind(&status_str)
+                .bind(&current_node_id)
+                .bind(state_value)
+                .bind(timeline_value)
+                .bind(last_signal_value)
+                .bind(&lookup.order_no)
+                .bind(&lookup.wave_no)
+                .bind(&lookup.request_id)
+                .bind(&lookup.unique_key)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| RunnerError::Store(format!("Failed to save started summary: {}", e)))?;
+
+                tx.commit()
+                    .await
+                    .map_err(|e| RunnerError::Store(format!("Failed to commit workflow run transaction: {}", e)))?;
+
+                Ok(None)
             })
         })
     }
@@ -579,7 +760,7 @@ impl WorkflowRunStore for PostgresRunStore {
                 let rows = sqlx::query(
                     r#"
                     SELECT run_id, workflow_key, workflow_version, status, current_node_id,
-                           order_no, wave_no, request_id, created_at, updated_at
+                           order_no, wave_no, request_id, unique_key, created_at, updated_at
                     FROM workflow_runs
                     WHERE workflow_key = $1 AND workflow_version = $2
                     ORDER BY updated_at DESC, created_at DESC
@@ -615,6 +796,9 @@ impl WorkflowRunStore for PostgresRunStore {
                             current_node_id: row
                                 .try_get("current_node_id")
                                 .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?,
+                            unique_key: row
+                                .try_get("unique_key")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get unique_key: {}", e)))?,
                             order_no: row
                                 .try_get("order_no")
                                 .map_err(|e| RunnerError::Store(format!("Failed to get order_no: {}", e)))?,
@@ -648,6 +832,7 @@ impl WorkflowRunStore for PostgresRunStore {
                     SET order_no = $2,
                         wave_no = $3,
                         request_id = $4,
+                        unique_key = $5,
                         updated_at = NOW()
                     WHERE run_id = $1
                     "#,
@@ -656,6 +841,7 @@ impl WorkflowRunStore for PostgresRunStore {
                 .bind(&lookup.order_no)
                 .bind(&lookup.wave_no)
                 .bind(&lookup.request_id)
+                .bind(&lookup.unique_key)
                 .execute(&pool)
                 .await
                 .map_err(|e| RunnerError::Store(format!("Failed to register run lookup: {}", e)))?;
@@ -673,7 +859,7 @@ impl WorkflowRunStore for PostgresRunStore {
             tokio::runtime::Handle::current().block_on(async move {
                 let mut count_builder = QueryBuilder::new("SELECT COUNT(*) AS total FROM workflow_runs WHERE 1=1");
                 let mut select_builder = QueryBuilder::new(
-                    "SELECT run_id, workflow_key, workflow_version, status, current_node_id, order_no, wave_no, request_id, created_at, updated_at FROM workflow_runs WHERE 1=1",
+                    "SELECT run_id, workflow_key, workflow_version, status, current_node_id, order_no, wave_no, request_id, unique_key, created_at, updated_at FROM workflow_runs WHERE 1=1",
                 );
 
                 if let Some(run_id) = query.run_id.as_deref() {
@@ -748,6 +934,9 @@ impl WorkflowRunStore for PostgresRunStore {
                             current_node_id: row
                                 .try_get("current_node_id")
                                 .map_err(|e| RunnerError::Store(format!("Failed to get current_node_id: {}", e)))?,
+                            unique_key: row
+                                .try_get("unique_key")
+                                .map_err(|e| RunnerError::Store(format!("Failed to get unique_key: {}", e)))?,
                             order_no: row
                                 .try_get("order_no")
                                 .map_err(|e| RunnerError::Store(format!("Failed to get order_no: {}", e)))?,

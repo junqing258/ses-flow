@@ -11,6 +11,8 @@ use crate::modules::{ApiError, ApiState, RUNNER_API_BASE_PATH, WorkflowEventStre
 pub struct ExecuteWorkflowRequest {
     #[serde(default)]
     pub trigger: Option<Value>,
+    #[serde(rename = "uniqueKey", default)]
+    pub unique_key: Option<String>,
     #[serde(default)]
     pub env: Option<RunEnvironment>,
 }
@@ -140,7 +142,7 @@ pub async fn execute_workflow(
     request: ExecuteWorkflowRequest,
 ) -> Result<(StatusCode, WorkflowExecutionAccepted), ApiError> {
     info!(workflow_id = %workflow_id, "starting workflow run");
-    let trigger = request.trigger.unwrap_or_else(default_trigger);
+    let trigger = with_unique_key(request.trigger.unwrap_or_else(default_trigger), request.unique_key);
     let env = request.env.unwrap_or_default();
     let summary = state.app.start_workflow(&workflow_id, trigger, env).await?;
     info!(workflow_id = %workflow_id, run_id = %summary.run_id, "workflow run accepted");
@@ -267,6 +269,26 @@ fn default_trigger() -> Value {
             "bizType": "auto_sort"
         }
     })
+}
+
+fn with_unique_key(mut trigger: Value, unique_key: Option<String>) -> Value {
+    let Some(unique_key) = unique_key
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return trigger;
+    };
+
+    match &mut trigger {
+        Value::Object(object) => {
+            object.entry("uniqueKey").or_insert(Value::String(unique_key));
+            trigger
+        }
+        _ => json!({
+            "uniqueKey": unique_key,
+            "body": trigger
+        }),
+    }
 }
 
 fn default_page() -> u32 {

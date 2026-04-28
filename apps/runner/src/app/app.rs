@@ -505,6 +505,7 @@ impl WorkflowApp {
             .ok_or_else(|| AppError::NotFound(format!("workflow not found: {workflow_id}")))?;
         let run_id = new_run_id();
         let start_node = stored_workflow.definition.start_node()?.id.clone();
+        let lookup = extract_run_lookup(&run_id, &trigger);
         info!(
             workflow_id = %stored_workflow.id,
             run_id = %run_id,
@@ -514,17 +515,24 @@ impl WorkflowApp {
             "workflow run awaiting concurrency slot",
         );
 
+        if let Some(existing) = self.find_active_run_for_lookup(
+            &stored_workflow.definition.meta.key,
+            stored_workflow.definition.meta.version,
+            &lookup,
+        )? {
+            info!(
+                workflow_id = %stored_workflow.id,
+                run_id = %existing.run_id,
+                "workflow run already active for idempotency key",
+            );
+            return Ok(existing);
+        }
+
         let permit = self
             .concurrency_gate
             .acquire(&stored_workflow.definition.meta.key)
             .await?;
         let runner = self.build_runner()?;
-        self.store.register_run_lookup(extract_run_lookup(&run_id, &trigger))?;
-        self.run_registry.bind(
-            &run_id,
-            stored_workflow.id.clone(),
-            stored_workflow.definition.meta.key.clone(),
-        );
 
         let summary = WorkflowRunSummary {
             run_id: run_id.clone(),
@@ -537,7 +545,21 @@ impl WorkflowApp {
             last_signal: None,
             resume_state: None,
         };
-        self.publish_summary(&summary);
+        if let Some(existing) = self.store.save_started_summary(&summary, lookup)? {
+            info!(
+                workflow_id = %stored_workflow.id,
+                run_id = %existing.run_id,
+                "workflow run already active for idempotency key",
+            );
+            return Ok(existing);
+        }
+
+        self.run_registry.bind(
+            &run_id,
+            stored_workflow.id.clone(),
+            stored_workflow.definition.meta.key.clone(),
+        );
+        self.publish_persisted_summary(&summary);
         let fallback = self.clone();
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
@@ -769,6 +791,15 @@ impl WorkflowApp {
         persist_summary_and_publish_events(self.store.as_ref(), &self.run_registry, &self.events, summary);
     }
 
+    fn publish_persisted_summary(&self, summary: &WorkflowRunSummary) {
+        let workflow_id = self.run_registry.resolve(&summary.run_id);
+        self.events.publish_run_changed(summary, workflow_id.as_deref());
+
+        if let Some(workflow_id) = workflow_id.as_deref() {
+            self.events.publish_workflow_runs_changed(workflow_id, summary);
+        }
+    }
+
     fn publish_summary_with_workflow_fallback(&self, summary: &WorkflowRunSummary) {
         let workflow_id = self.run_registry.resolve(&summary.run_id);
         self.publish_summary(summary);
@@ -853,6 +884,27 @@ impl WorkflowApp {
             .into_iter()
             .filter(|run| is_active_run_status(&run.status) && !self.run_registry.should_terminate(&run.run_id))
             .collect())
+    }
+
+    fn find_active_run_for_lookup(
+        &self,
+        workflow_key: &str,
+        workflow_version: u32,
+        lookup: &WorkflowRunLookup,
+    ) -> Result<Option<WorkflowRunSummary>, AppError> {
+        let Some(unique_key) = lookup.unique_key.as_deref() else {
+            return Ok(None);
+        };
+
+        let Some(record) = self
+            .list_active_runs(workflow_key, workflow_version)?
+            .into_iter()
+            .find(|run| run.unique_key.as_deref() == Some(unique_key))
+        else {
+            return Ok(None);
+        };
+
+        Ok(self.store.load_summary(&record.run_id)?)
     }
 }
 
@@ -966,6 +1018,10 @@ fn extract_run_lookup(run_id: &str, trigger: &Value) -> WorkflowRunLookup {
 
     WorkflowRunLookup {
         run_id: run_id.to_string(),
+        unique_key: extract_string_value(trigger.get("uniqueKey"))
+            .or_else(|| extract_string_value(headers.and_then(|value| value.get("uniqueKey"))))
+            .or_else(|| extract_string_value(body.and_then(|value| value.get("uniqueKey"))))
+            .or_else(|| extract_string_value(body.and_then(|value| value.get("unique_key")))),
         order_no: extract_string_value(body.and_then(|value| value.get("orderNo")))
             .or_else(|| extract_string_value(body.and_then(|value| value.get("order_no")))),
         wave_no: extract_string_value(body.and_then(|value| value.get("waveNo")))

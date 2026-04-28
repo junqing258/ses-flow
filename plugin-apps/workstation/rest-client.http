@@ -6,12 +6,17 @@
 @requestId = 1001
 @taskId = TASK-AGV-001
 
+@orderId = ORDER-002
+
+@uniqueKey = workstation:{{stationId}}:{{orderId}}
+
 ### 1. 运行工作流
 # @name startWorkflow
 POST {{backendBaseUrl}}/workflows/{{workflowId}}/run
 Content-Type: application/json
 
 {
+  "uniqueKey": "{{uniqueKey}}",
   "trigger": {
     "headers": {
       "requestId": "{{requestId}}"

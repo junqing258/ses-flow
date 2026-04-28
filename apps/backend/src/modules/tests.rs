@@ -1011,6 +1011,68 @@ async fn uploads_workflow_and_executes_run_to_completion() {
 }
 
 #[tokio::test]
+async fn run_endpoint_reuses_active_workflow_for_unique_key() {
+    let app = build_app();
+    let workflow = json!({
+        "meta": {
+            "key": "api-idempotent-flow",
+            "name": "API Idempotent Flow",
+            "version": 1
+        },
+        "trigger": {
+            "type": "manual"
+        },
+        "inputSchema": {
+            "type": "object"
+        },
+        "nodes": [
+            { "id": "start_1", "type": "start", "name": "Start" },
+            {
+                "id": "wait_1",
+                "type": "wait",
+                "name": "Wait",
+                "config": { "event": "done" }
+            },
+            { "id": "end_1", "type": "end", "name": "End" }
+        ],
+        "transitions": [
+            { "from": "start_1", "to": "wait_1" },
+            { "from": "wait_1", "to": "end_1" }
+        ],
+        "policies": {}
+    });
+    let workflow_id = upload_workflow(app.clone(), workflow).await;
+
+    let first_run_id = start_run_with_unique_key(
+        app.clone(),
+        &workflow_id,
+        "order:SO-API-IDEMPOTENT-1",
+        json!({
+            "body": {
+                "orderNo": "SO-API-IDEMPOTENT-1"
+            }
+        }),
+    )
+    .await;
+    let waiting = wait_for_status(app.clone(), &first_run_id, "waiting").await;
+    assert_eq!(waiting["status"], json!("waiting"));
+
+    let second_run_id = start_run_with_unique_key(
+        app,
+        &workflow_id,
+        "order:SO-API-IDEMPOTENT-1",
+        json!({
+            "body": {
+                "orderNo": "SO-API-IDEMPOTENT-1"
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(second_run_id, first_run_id);
+}
+
+#[tokio::test]
 async fn creates_and_updates_edit_session_draft() {
     let app = build_app();
     let workflow = json!({
@@ -2190,6 +2252,39 @@ async fn start_run(app: axum::Router, workflow_id: &str, trigger: Value) -> Stri
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
+                        "trigger": trigger
+                    }))
+                    .expect("request should serialize"),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(execute_response.status(), StatusCode::ACCEPTED);
+    let execute_body = execute_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should collect")
+        .to_bytes();
+    let execute_payload: Value = serde_json::from_slice(&execute_body).expect("response body should be valid json");
+    execute_payload["runId"]
+        .as_str()
+        .expect("run id should be present")
+        .to_string()
+}
+
+async fn start_run_with_unique_key(app: axum::Router, workflow_id: &str, unique_key: &str, trigger: Value) -> String {
+    let execute_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api_path(&format!("/workflows/{workflow_id}/run")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "uniqueKey": unique_key,
                         "trigger": trigger
                     }))
                     .expect("request should serialize"),
