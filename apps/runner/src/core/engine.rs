@@ -175,6 +175,13 @@ impl WorkflowEngine {
             merge_state(&mut state, resume_result.state_patch.clone());
         }
         if let Some(error) = resume_result.error {
+            warn!(
+                run_id = %snapshot.run_id,
+                node_id = %waiting_node.id,
+                error_code = %error.code,
+                error_message = %error.message,
+                "plugin resume returned error"
+            );
             let summary = failed_summary(
                 snapshot.run_id,
                 snapshot.workflow_key,
@@ -620,6 +627,13 @@ impl WorkflowEngine {
                 }
                 Err(error) => {
                     let error_message = error.to_string();
+                    warn!(
+                        run_id = %run_id,
+                        workflow_key = %workflow_key,
+                        node_id = %node.id,
+                        error = %error,
+                        "node executor returned error"
+                    );
                     node_span.record("workflow.node_status", "failed");
                     node_span.record("otel.status_code", "error");
                     node_span.record("otel.status_description", error_message.as_str());
