@@ -188,11 +188,12 @@ impl AppState {
         &self,
         station_id: &str,
         agv_id: &str,
-        request_id: Option<u64>,
+        request_id: Option<Value>,
     ) -> AgvArrivalSimulation {
         let event_id = self.event_seq.fetch_add(1, Ordering::SeqCst);
-        let request_id_value = request_id.unwrap_or(event_id);
-        let request_id_text = request_id_value.to_string();
+        let runner_request_id = request_id.as_ref().and_then(value_to_string);
+        let request_id_text = runner_request_id.clone().unwrap_or_else(|| event_id.to_string());
+        let request_id_value = request_id.clone().unwrap_or_else(|| json!(event_id));
         let payload = json!({
             "MessageType": "AGV_ARRIVED",
             "messageType": "AGV_ARRIVED",
@@ -206,7 +207,7 @@ impl AppState {
             let sender = state.worker_sender(station_id);
             let event = PendingEvent {
                 event_id,
-                request_id: request_id_text,
+                request_id: request_id_text.clone(),
                 station_id: station_id.to_string(),
                 execution_id: None,
                 message_type: "AGV_ARRIVED".to_string(),
@@ -222,8 +223,10 @@ impl AppState {
             (sender, event)
         };
         let _ = sender.send(event.clone());
-        info!(station_id = %station_id, agv_id = %agv_id, request_id = %request_id_value, "simulated AGV arrival");
-        let resumed_run_ids = self.resume_agv_arrival_waits(station_id, agv_id).await;
+        info!(station_id = %station_id, agv_id = %agv_id, request_id = %request_id_text, "simulated AGV arrival");
+        let resumed_run_ids = self
+            .resume_agv_arrival_waits(station_id, agv_id, runner_request_id.as_deref())
+            .await;
         AgvArrivalSimulation { event, resumed_run_ids }
     }
 
@@ -468,35 +471,44 @@ impl AppState {
         Ok(())
     }
 
-    async fn resume_agv_arrival_waits(&self, station_id: &str, agv_id: &str) -> Vec<String> {
+    async fn resume_agv_arrival_waits(&self, station_id: &str, agv_id: &str, request_id: Option<&str>) -> Vec<String> {
         let Some(base_url) = self.config.runner_base_url.as_ref() else {
             warn!(station_id = %station_id, "AGV arrival resume skipped because RUNNER_BASE_URL is not configured");
             return Vec::new();
         };
-        let run_ids = self.search_wait_run_ids(station_id, "agv.arrived").await;
+        let run_ids = self.search_wait_run_ids(station_id, "agv.arrived", request_id).await;
 
         let mut resumed_run_ids = Vec::new();
         for run_id in run_ids {
-            if self.resume_agv_arrival_run(base_url, &run_id, station_id, agv_id).await {
+            if self
+                .resume_agv_arrival_run(base_url, &run_id, station_id, agv_id, request_id)
+                .await
+            {
                 resumed_run_ids.push(run_id.to_string());
             }
         }
         resumed_run_ids
     }
 
-    pub(crate) async fn resume_scan_barcode_waits(&self, station_id: &str, barcode: &str, sku: &str) -> Vec<String> {
+    pub(crate) async fn resume_scan_barcode_waits(
+        &self,
+        station_id: &str,
+        barcode: &str,
+        sku: &str,
+        request_id: Option<&str>,
+    ) -> Vec<String> {
         let Some(base_url) = self.config.runner_base_url.as_ref() else {
             warn!(station_id = %station_id, barcode = %barcode, "scan barcode resume skipped because RUNNER_BASE_URL is not configured");
             return Vec::new();
         };
         let run_ids = self
-            .search_wait_run_ids(station_id, "station.operation.scanBarcode")
+            .search_wait_run_ids(station_id, "station.operation.scanBarcode", request_id)
             .await;
 
         let mut resumed_run_ids = Vec::new();
         for run_id in run_ids {
             if self
-                .resume_scan_barcode_run(base_url, &run_id, station_id, barcode, sku)
+                .resume_scan_barcode_run(base_url, &run_id, station_id, barcode, sku, request_id)
                 .await
             {
                 resumed_run_ids.push(run_id.to_string());
@@ -531,7 +543,7 @@ impl AppState {
         resumed_run_ids
     }
 
-    async fn search_wait_run_ids(&self, station_id: &str, event: &str) -> Vec<String> {
+    async fn search_wait_run_ids(&self, station_id: &str, event: &str, request_id: Option<&str>) -> Vec<String> {
         let Some(db_pool) = self.db_pool.as_ref() else {
             warn!(station_id = %station_id, event = %event, "waiting run search skipped because DATABASE_URL is not configured");
             return Vec::new();
@@ -544,6 +556,11 @@ impl AppState {
             WHERE status IN ($1, $2)
               AND last_signal->>'type' = $3
               AND last_signal->'payload'->>'stationId' = $4
+              AND (
+                $5::text IS NULL
+                OR last_signal->'payload'->>'requestId' = $5
+                OR last_signal->'payload'->>'correlationKey' = $5
+              )
             ORDER BY updated_at DESC
             LIMIT 100
             "#,
@@ -552,6 +569,7 @@ impl AppState {
         .bind("waiting")
         .bind(event)
         .bind(station_id)
+        .bind(request_id)
         .fetch_all(db_pool)
         .await
         {
@@ -611,21 +629,19 @@ impl AppState {
             .collect()
     }
 
-    async fn resume_agv_arrival_run(&self, base_url: &str, run_id: &str, station_id: &str, agv_id: &str) -> bool {
+    async fn resume_agv_arrival_run(
+        &self,
+        base_url: &str,
+        run_id: &str,
+        station_id: &str,
+        agv_id: &str,
+        request_id: Option<&str>,
+    ) -> bool {
+        let event = agv_arrival_resume_event(station_id, agv_id, request_id);
         let response = self
             .client
             .post(format!("{}/runs/{}/resume", base_url.trim_end_matches('/'), run_id))
-            .json(&json!({
-                "event": {
-                    "event": "agv.arrived",
-                    "stationId": station_id,
-                    "agvId": agv_id,
-                    "payload": {
-                        "stationId": station_id,
-                        "agvId": agv_id
-                    }
-                }
-            }))
+            .json(&json!({ "event": event }))
             .send()
             .await;
 
@@ -657,25 +673,13 @@ impl AppState {
         station_id: &str,
         barcode: &str,
         sku: &str,
+        request_id: Option<&str>,
     ) -> bool {
+        let event = scan_barcode_resume_event(station_id, barcode, sku, request_id);
         let response = self
             .client
             .post(format!("{}/runs/{}/resume", base_url.trim_end_matches('/'), run_id))
-            .json(&json!({
-                "event": {
-                    "event": "station.operation.scanBarcode",
-                    "stationId": station_id,
-                    "barcode": barcode,
-                    "itemId": barcode,
-                    "sku": sku,
-                    "payload": {
-                        "stationId": station_id,
-                        "barcode": barcode,
-                        "itemId": barcode,
-                        "sku": sku
-                    }
-                }
-            }))
+            .json(&json!({ "event": event }))
             .send()
             .await;
 
@@ -768,6 +772,50 @@ pub(crate) struct AgvArrivalSimulation {
     pub(crate) resumed_run_ids: Vec<String>,
 }
 
+fn agv_arrival_resume_event(station_id: &str, agv_id: &str, request_id: Option<&str>) -> Value {
+    let mut event = json!({
+        "event": "agv.arrived",
+        "stationId": station_id,
+        "agvId": agv_id,
+        "payload": {
+            "stationId": station_id,
+            "agvId": agv_id
+        }
+    });
+    attach_request_id(&mut event, request_id);
+    event
+}
+
+fn scan_barcode_resume_event(station_id: &str, barcode: &str, sku: &str, request_id: Option<&str>) -> Value {
+    let mut event = json!({
+        "event": "station.operation.scanBarcode",
+        "stationId": station_id,
+        "barcode": barcode,
+        "itemId": barcode,
+        "sku": sku,
+        "payload": {
+            "stationId": station_id,
+            "barcode": barcode,
+            "itemId": barcode,
+            "sku": sku
+        }
+    });
+    attach_request_id(&mut event, request_id);
+    event
+}
+
+fn attach_request_id(event: &mut Value, request_id: Option<&str>) {
+    let Some(request_id) = request_id else {
+        return;
+    };
+    if let Some(event_object) = event.as_object_mut() {
+        event_object.insert("requestId".to_string(), json!(request_id));
+    }
+    if let Some(payload_object) = event.get_mut("payload").and_then(Value::as_object_mut) {
+        payload_object.insert("requestId".to_string(), json!(request_id));
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct BridgeState {
     pub(crate) tasks: HashMap<String, ExecutionTask>,
@@ -820,6 +868,15 @@ fn value_string(value: &Value, candidates: &[&str]) -> Option<String> {
                 .map(str::to_string)
         })
     })
+}
+
+fn value_to_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => Some(value.clone()),
+        Value::Number(value) => Some(value.to_string()),
+        Value::Bool(value) => Some(value.to_string()),
+        _ => None,
+    }
 }
 
 fn workstation_execution_station_id(state: &Value) -> Option<String> {

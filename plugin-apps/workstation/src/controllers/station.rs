@@ -122,11 +122,16 @@ pub(crate) async fn scan_barcode(
     };
     let task = state.current_task_for_worker(&station_id).await;
     let barcode = request.barcode;
+    let request_id = request
+        .request_id
+        .or_else(|| task.as_ref().map(|item| item.request_id.clone()));
     let sku = task
         .as_ref()
         .map(|item| item.task_id.clone())
         .unwrap_or_else(|| format!("SKU-{}", barcode));
-    let resumed_run_ids = state.resume_scan_barcode_waits(&station_id, &barcode, &sku).await;
+    let resumed_run_ids = state
+        .resume_scan_barcode_waits(&station_id, &barcode, &sku, request_id.as_deref())
+        .await;
     base_result_ok(json!({
         "Items": [
             {

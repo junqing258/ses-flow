@@ -6,9 +6,9 @@
 @requestId = 1001
 @taskId = TASK-AGV-001
 
-@orderId = ORDER-002
+@barcode = 002
 
-@uniqueKey = workstation:{{stationId}}:{{orderId}}
+@uniqueKey = workstation:{{stationId}}:{{barcode}}
 
 ### 1. 运行工作流
 # @name startWorkflow
@@ -60,7 +60,17 @@ Content-Type: application/json
   "password": "rest-client"
 }
 
-### 3. 发车
+### 3. 扫码
+POST {{workstationBaseUrl}}/station/operation/scanBarcode
+Content-Type: application/json
+Authorization: {{login.response.body.$.data.Authorization}}
+
+{
+  "barcode": "{{barcode}}",
+  "requestId": "{{requestId}}"
+}
+
+### 4. 发车
 POST {{workstationBaseUrl}}/station/operation/robotDeparture
 Content-Type: application/json
 Authorization: {{login.response.body.$.data.Authorization}}

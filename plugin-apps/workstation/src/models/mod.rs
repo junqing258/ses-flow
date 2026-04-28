@@ -215,6 +215,8 @@ pub(crate) struct VerifyNotifyRequest {
 pub(crate) struct BarcodeRequest {
     #[serde(alias = "barcode")]
     pub(crate) barcode: String,
+    #[serde(default, alias = "requestId", deserialize_with = "optional_string_from_json_value")]
+    pub(crate) request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -290,7 +292,7 @@ pub(crate) struct SimulateAgvArrivedRequest {
     #[serde(default = "default_simulated_agv_id", alias = "agvId")]
     pub(crate) agv_id: String,
     #[serde(default, alias = "requestId")]
-    pub(crate) request_id: Option<u64>,
+    pub(crate) request_id: Option<Value>,
 }
 
 fn default_simulated_agv_id() -> String {
@@ -307,6 +309,20 @@ where
         Value::Number(value) => Ok(value.to_string()),
         Value::Bool(value) => Ok(value.to_string()),
         _ => Err(serde::de::Error::custom("expected string, number, or bool")),
+    }
+}
+
+fn optional_string_from_json_value<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    match value {
+        Some(Value::String(value)) => Ok(Some(value)),
+        Some(Value::Number(value)) => Ok(Some(value.to_string())),
+        Some(Value::Bool(value)) => Ok(Some(value.to_string())),
+        Some(Value::Null) | None => Ok(None),
+        _ => Err(serde::de::Error::custom("expected string, number, bool, or null")),
     }
 }
 

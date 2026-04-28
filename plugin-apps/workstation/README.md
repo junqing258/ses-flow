@@ -42,7 +42,7 @@ curl -X POST http://127.0.0.1:9102/station/operation/simulate/agvArrived \
   -d '{"stationId":"juFomZRB","agvId":"AGV-001","requestId":1001}'
 ```
 
-该接口会向对应 `stationId` 的 SSE 连接推送兼容旧客户端的 `AGV_ARRIVED` 事件；如果配置了 `DATABASE_URL` 和 `RUNNER_BASE_URL`，还会直接查询 `workflow_runs` 中 `lastSignal.type=agv.arrived` 且 `lastSignal.payload.stationId` 相同的等待中 runId，并调用 `/runs/{runId}/resume` 推进“等待小车到达”。`scanBarcode` 成功时同样会按 `lastSignal.type=station.operation.scanBarcode` 和 `stationId` 查询等待 run，并携带 `barcode/itemId/sku` 恢复流程。
+该接口会向对应 `stationId` 的 SSE 连接推送兼容旧客户端的 `AGV_ARRIVED` 事件；如果配置了 `DATABASE_URL` 和 `RUNNER_BASE_URL`，还会直接查询 `workflow_runs` 中 `lastSignal.type=agv.arrived`、`lastSignal.payload.stationId` 且 `requestId` 相同的等待中 runId，并调用 `/runs/{runId}/resume` 推进“等待小车到达”。`scanBarcode` 成功时同样会按 `lastSignal.type=station.operation.scanBarcode`、`stationId` 和 `requestId` 查询等待 run，并携带 `requestId/barcode/itemId/sku` 恢复流程。
 
 ## 当前边界
 
