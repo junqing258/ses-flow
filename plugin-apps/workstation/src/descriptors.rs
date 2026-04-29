@@ -3,6 +3,8 @@ use serde_json::json;
 use crate::config::DEFAULT_RUNNER_RESUME_SIGNAL;
 use crate::models::PluginDescriptor;
 
+const SCAN_BARCODE_EVENT: &str = "station.operation.scanBarcode";
+
 pub(crate) fn plugin_descriptors() -> Vec<PluginDescriptor> {
     vec![
         build_scan_task_descriptor(),
@@ -15,7 +17,7 @@ pub(crate) fn plugin_descriptors() -> Vec<PluginDescriptor> {
 fn build_scan_task_descriptor() -> PluginDescriptor {
     PluginDescriptor {
         id: "scan_task".to_string(),
-        kind: "effect".to_string(),
+        kind: "wait".to_string(),
         runner_type: "plugin:scan_task".to_string(),
         version: "1.0.0".to_string(),
         category: "人工工作台".to_string(),
@@ -36,6 +38,7 @@ fn build_scan_task_descriptor() -> PluginDescriptor {
                 "stationId": {
                     "type": "string",
                     "title": "工作站 ID",
+                    "default": "{{trigger.stationId}}",
                     "description": "RCS 地图站点 ID；Bridge 以此作为 targetWorkerId 派发扫码任务"
                 },
                 "timeoutMs": {
@@ -46,18 +49,21 @@ fn build_scan_task_descriptor() -> PluginDescriptor {
                 },
                 "runnerBaseUrl": {
                     "type": "string",
-                    "title": "Runner API Base URL"
+                    "title": "Runner API Base URL",
+                    "default": "{{env.runnerBaseUrl}}"
                 },
                 "waitSignalType": {
                     "type": "string",
                     "title": "恢复信号类型",
-                    "default": DEFAULT_RUNNER_RESUME_SIGNAL
+                    "default": SCAN_BARCODE_EVENT
                 }
             }
         }),
         defaults: json!({
+            "stationId": "{{trigger.stationId}}",
             "timeoutMs": 0,
-            "waitSignalType": DEFAULT_RUNNER_RESUME_SIGNAL
+            "runnerBaseUrl": "{{env.runnerBaseUrl}}",
+            "waitSignalType": SCAN_BARCODE_EVENT
         }),
         input_schema: json!({
             "type": "object",

@@ -51,8 +51,27 @@ async fn descriptors_route_returns_manual_nodes() {
         .find(|item| item["id"] == json!("robot_departure"))
         .expect("robot_departure descriptor should exist");
     assert_eq!(scan_task["runnerType"], json!("plugin:scan_task"));
+    assert_eq!(scan_task["kind"], json!("wait"));
     assert_eq!(scan_task["supportsResume"], json!(true));
     assert_eq!(scan_task["configSchema"]["required"], json!(["stationId"]));
+    assert_eq!(
+        scan_task["configSchema"]["properties"]["stationId"]["default"],
+        json!("{{trigger.stationId}}")
+    );
+    assert_eq!(
+        scan_task["configSchema"]["properties"]["runnerBaseUrl"]["default"],
+        json!("{{env.runnerBaseUrl}}")
+    );
+    assert_eq!(scan_task["defaults"]["stationId"], json!("{{trigger.stationId}}"));
+    assert_eq!(scan_task["defaults"]["runnerBaseUrl"], json!("{{env.runnerBaseUrl}}"));
+    assert_eq!(
+        scan_task["configSchema"]["properties"]["waitSignalType"]["default"],
+        json!("station.operation.scanBarcode")
+    );
+    assert_eq!(
+        scan_task["defaults"]["waitSignalType"],
+        json!("station.operation.scanBarcode")
+    );
     assert_eq!(scan_task["inputSchema"]["required"], json!(["agvId"]));
     assert_eq!(pack_task["runnerType"], json!("plugin:pack_task"));
     assert_eq!(pack_task["supportsResume"], json!(false));

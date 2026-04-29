@@ -7,7 +7,7 @@
 
 @barcode = 002
 
-@uniqueKey = workstation:{{stationId}}:{{barcode}}\
+@uniqueKey = workstation:{{stationId}}:{{barcode}}
 
 
 ### 工作站登录，供发车接口复用 Authorization
