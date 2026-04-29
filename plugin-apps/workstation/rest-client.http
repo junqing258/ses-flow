@@ -51,6 +51,8 @@ Authorization: {{login.response.body.$.Data.Authorization}}
 
 ### 查询运行状态
 GET {{backendBaseUrl}}/runs/{{startWorkflow.response.body.$.runId}}
+Authorization: {{login.response.body.$.Data.Authorization}}
+
 
 ### 2. 小车到达
 POST {{workstationBaseUrl}}/station/operation/simulate/agvArrived
