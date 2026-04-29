@@ -47,7 +47,7 @@ fn stores_waiting_snapshot_and_resumes_by_run_id() {
             &waiting.run_id,
             json!({
                 "event": "rcs.callback",
-                "correlationKey": "req-store-1",
+                "correlationKey": "SO-STORE-1",
                 "orderNo": "SO-STORE-1",
                 "status": "done"
             }),

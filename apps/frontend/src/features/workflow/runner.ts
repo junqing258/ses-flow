@@ -337,6 +337,27 @@ const parseMappingValue = (rawValue: string): RunnerMappingValue => {
   return JSON.stringify(scalarValue);
 };
 
+const isMappingRecord = (
+  value: RunnerMappingValue | undefined,
+): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const buildWaitInputMapping = (
+  panel: WorkflowNodePanel | undefined,
+): RunnerMappingValue => {
+  const payload = parseMappingValue(getFieldValue(panel, "mapping", "payload"));
+  const mapping: Record<string, unknown> = isMappingRecord(payload)
+    ? { ...payload }
+    : {};
+  const correlationKey = getFieldValue(panel, "base", "correlationKey");
+
+  if (correlationKey) {
+    mapping.correlationKey = parseMappingValue(correlationKey);
+  }
+
+  return mapping;
+};
+
 const parseObjectValue = (
   rawValue: string,
 ): Record<string, unknown> | undefined => {
@@ -660,6 +681,7 @@ const buildNodeDefinition = (
     definition.config = {
       event: getFieldValue(panel, "base", "waitEvent") || "event.unknown",
     };
+    definition.inputMapping = buildWaitInputMapping(panel);
   }
 
   if (type === "webhook_trigger") {

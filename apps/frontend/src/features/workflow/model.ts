@@ -1640,7 +1640,7 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
     },
   },
   wait_callback: {
-    tabs: ["base", "retry", "error"],
+    tabs: ["base", "mapping", "retry", "error"],
     fieldsByTab: {
       base: [
         {
@@ -1648,6 +1648,12 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           label: "等待事件",
           type: "input",
           value: "device.sorting.callback",
+        },
+        {
+          key: "correlationKey",
+          label: "关联键",
+          type: "input",
+          value: "{{trigger.body.orderNo}}",
         },
         {
           key: "nodeName",
@@ -1666,6 +1672,14 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           label: "节点 ID",
           type: "readonly",
           value: "wait_callback",
+        },
+      ],
+      mapping: [
+        {
+          key: "payload",
+          label: "等待载荷",
+          type: "textarea",
+          value: "{\n  orderNo: trigger.body.orderNo\n}",
         },
       ],
       retry: [

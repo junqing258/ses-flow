@@ -225,6 +225,14 @@ describe("buildRunnerWorkflowDefinition", () => {
       expression: "{{input.bizType}}",
     });
 
+    const waitNode = definition.nodes.find(
+      (node) => node.id === "wait_callback",
+    );
+    expect(waitNode?.inputMapping).toEqual({
+      correlationKey: "{{trigger.body.orderNo}}",
+      orderNo: "{{trigger.body.orderNo}}",
+    });
+
     expect(definition.transitions).toEqual([
       { from: "start", to: "webhook_trigger" },
       { from: "webhook_trigger", to: "fetch_order" },

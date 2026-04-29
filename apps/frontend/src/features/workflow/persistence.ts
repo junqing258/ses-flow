@@ -341,6 +341,87 @@ const ensureSubWorkflowSelectionField = (
   ) as Record<string, WorkflowNodePanel>;
 };
 
+const ensureWaitMappingField = (
+  nodes: WorkflowFlowNode[],
+  panelByNodeId: Record<string, WorkflowNodePanel>,
+): Record<string, WorkflowNodePanel> => {
+  const defaults = createWorkflowPanels();
+  const defaultMappingField = defaults.wait_callback.fieldsByTab.mapping?.find(
+    (field) => field.key === "payload",
+  );
+  const defaultCorrelationField = defaults.wait_callback.fieldsByTab.base?.find(
+    (field) => field.key === "correlationKey",
+  );
+
+  if (!defaultMappingField || !defaultCorrelationField) {
+    return panelByNodeId;
+  }
+
+  return Object.fromEntries(
+    Object.entries(panelByNodeId).map(([nodeId, panel]) => {
+      const node = nodes.find((item) => item.id === nodeId);
+
+      if (node?.data.kind !== "wait") {
+        return [nodeId, panel] as const;
+      }
+
+      const tabs = panel.tabs.includes("mapping")
+        ? panel.tabs
+        : [...panel.tabs, "mapping" as const];
+      const baseFields = panel.fieldsByTab.base ?? [];
+      const mappingFields = panel.fieldsByTab.mapping ?? [];
+      const nextBaseFields = baseFields.some(
+        (field) => field.key === "correlationKey",
+      )
+        ? baseFields
+        : [
+            ...baseFields,
+            {
+              key: defaultCorrelationField.key,
+              label: defaultCorrelationField.label,
+              type: defaultCorrelationField.type,
+              value: defaultCorrelationField.value,
+            },
+          ];
+
+      if (mappingFields.some((field) => field.key === "payload")) {
+        return [
+          nodeId,
+          {
+            ...panel,
+            fieldsByTab: {
+              ...panel.fieldsByTab,
+              base: nextBaseFields,
+            },
+            tabs,
+          },
+        ] as const;
+      }
+
+      return [
+        nodeId,
+        {
+          ...panel,
+          fieldsByTab: {
+            ...panel.fieldsByTab,
+            mapping: [
+              ...mappingFields,
+              {
+                key: defaultMappingField.key,
+                label: defaultMappingField.label,
+                type: defaultMappingField.type,
+                value: defaultMappingField.value,
+              },
+            ],
+            base: nextBaseFields,
+          },
+          tabs,
+        },
+      ] as const;
+    }),
+  ) as Record<string, WorkflowNodePanel>;
+};
+
 const findPaletteItem = (paletteItemId: string): WorkflowPaletteItem => {
   const paletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
     (category) => category.items,
@@ -467,9 +548,12 @@ export const createWorkflowEditorStateFromDocument = (
         }
       : node,
   ) as WorkflowFlowNode[];
-  const panelByNodeId = ensureSubWorkflowSelectionField(
+  const panelByNodeId = ensureWaitMappingField(
     nodes,
-    ensureWebhookResponseModeField(nodes, clonePanels(document.graph.panels)),
+    ensureSubWorkflowSelectionField(
+      nodes,
+      ensureWebhookResponseModeField(nodes, clonePanels(document.graph.panels)),
+    ),
   );
 
   return {

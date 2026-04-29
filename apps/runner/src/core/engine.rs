@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use serde_json::{Value, json};
-use tracing::{debug, error, field, info, info_span, warn};
+use tracing::{debug, error, field, info, info_span};
 
 use super::definition::{
     NodeType, ResponseMode, TransitionDefinition, TriggerType, WorkflowDefinition, deserialize_workflow_definition,
@@ -333,7 +333,7 @@ impl WorkflowEngine {
                     snapshot,
                     resume_input,
                     "correlationKey",
-                    &["correlationKey", "requestId"],
+                    &["correlationKey"],
                 )?;
 
                 Ok(())

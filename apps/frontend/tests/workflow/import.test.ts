@@ -186,6 +186,73 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
     ).toBe("set-state");
   });
 
+  it("restores wait event and correlation payload mapping", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "wait-flow",
+        name: "Wait Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: {
+        type: "manual",
+      },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "wait_order",
+          type: "wait",
+          name: "Wait Order",
+          config: {
+            event: "order.completed",
+          },
+          inputMapping: {
+            correlationKey: "{{trigger.body.orderNo}}",
+            orderNo: "{{trigger.body.orderNo}}",
+          },
+        },
+        {
+          id: "end_1",
+          type: "end",
+          name: "End",
+        },
+      ],
+      transitions: [
+        { from: "start_1", to: "wait_order" },
+        { from: "wait_order", to: "end_1" },
+      ],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition);
+    const waitPanel = state.panelByNodeId.wait_order;
+
+    expect(
+      waitPanel.fieldsByTab.base?.find((field) => field.key === "waitEvent")
+        ?.value,
+    ).toBe("order.completed");
+    expect(
+      waitPanel.fieldsByTab.base?.find((field) => field.key === "correlationKey")
+        ?.value,
+    ).toBe("{{trigger.body.orderNo}}");
+    expect(
+      waitPanel.fieldsByTab.mapping?.find((field) => field.key === "payload")
+        ?.value,
+    ).toBe('{\n  "orderNo": "{{trigger.body.orderNo}}"\n}');
+    expect(
+      state.nodes.find((node) => node.id === "wait_order")?.data.kind,
+    ).toBe("wait");
+  });
+
   it("restores db query config into editor fields", () => {
     const definition: RunnerWorkflowDefinition = {
       meta: {

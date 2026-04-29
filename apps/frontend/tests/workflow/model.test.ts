@@ -185,6 +185,27 @@ describe("createWorkflowNodeDraft", () => {
     ).toBe("{{input}}");
   });
 
+  it("creates wait nodes with editable correlation payload mapping", () => {
+    const waitPaletteItem = WORKFLOW_PALETTE_CATEGORIES.flatMap(
+      (category) => category.items,
+    ).find((item) => item.id === "palette-wait");
+
+    expect(waitPaletteItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      waitPaletteItem!,
+      { x: 260, y: 240 },
+      [],
+    );
+    const correlationKeyField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "correlationKey",
+    );
+
+    expect(node.data.kind).toBe("wait");
+    expect(correlationKeyField).toBeDefined();
+    expect(correlationKeyField?.value).toBe("{{trigger.body.orderNo}}");
+  });
+
   it("resolves sub-workflow references to workflow ids", () => {
     expect(
       resolveWorkflowReferenceId("child-flow", [

@@ -216,6 +216,26 @@ const readSetStateValue = (
   return inputMapping;
 };
 
+const isMappingRecord = (
+  value: RunnerWorkflowDefinition["nodes"][number]["inputMapping"],
+): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const readWaitCorrelationKey = (
+  inputMapping: RunnerWorkflowDefinition["nodes"][number]["inputMapping"],
+) => (isMappingRecord(inputMapping) ? inputMapping.correlationKey : undefined);
+
+const readWaitPayload = (
+  inputMapping: RunnerWorkflowDefinition["nodes"][number]["inputMapping"],
+) => {
+  if (!isMappingRecord(inputMapping)) {
+    return inputMapping;
+  }
+
+  const { correlationKey: _correlationKey, ...payload } = inputMapping;
+  return Object.keys(payload).length > 0 ? payload : undefined;
+};
+
 const readAnnotatedSwitchBranches = (
   node: RunnerWorkflowDefinition["nodes"][number] | undefined,
 ) => {
@@ -432,6 +452,16 @@ const createImportedNode = (
       nextPanel,
       "waitEvent",
       String(node.config?.event ?? ""),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "correlationKey",
+      serializeMappingValue(readWaitCorrelationKey(node.inputMapping)),
+    );
+    setPanelFieldValue(
+      nextPanel,
+      "payload",
+      serializeMappingValue(readWaitPayload(node.inputMapping)),
     );
   }
 

@@ -1,6 +1,6 @@
 {
   "event": "rcs.callback",
-  "correlationKey": "req-demo-1",
+  "correlationKey": "SO-DEMO-1",
   "status": "done",
   "orderNo": "SO-DEMO-1",
   "dispatchId": "dispatch-demo-1"

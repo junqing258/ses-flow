@@ -589,7 +589,7 @@ fn resumes_waiting_callback_to_completion() {
                 .expect("waiting run should expose resume state"),
             json!({
                 "event": "rcs.callback",
-                "correlationKey": "req-3",
+                "correlationKey": "SO-1003",
                 "status": "done",
                 "orderNo": "SO-1003"
             }),
@@ -611,7 +611,7 @@ fn resumes_waiting_callback_to_completion() {
     assert_eq!(
         resumed.timeline.last().expect("timeline should not be empty").output,
         json!({
-            "correlationKey": "req-3",
+            "correlationKey": "SO-1003",
             "event": "rcs.callback",
             "status": "done",
             "orderNo": "SO-1003"
@@ -973,7 +973,7 @@ fn resumes_manual_review_wait_branch_when_event_and_correlation_key_match() {
                 .expect("waiting run should expose resume state"),
             json!({
                 "event": "manual_review.completed",
-                "correlationKey": "req-5",
+                "correlationKey": "SO-1005",
                 "status": "approved"
             }),
         )
@@ -1016,7 +1016,7 @@ fn rejects_resume_when_wait_event_mismatches() {
                 .expect("waiting run should expose resume state"),
             json!({
                 "event": "wrong.callback",
-                "correlationKey": "req-6"
+                "correlationKey": "SO-1006"
             }),
         )
         .expect("resume should produce a failed summary");
@@ -1052,6 +1052,41 @@ fn rejects_resume_when_correlation_key_mismatches() {
             json!({
                 "event": "rcs.callback",
                 "correlationKey": "req-other"
+            }),
+        )
+        .expect("resume should produce a failed summary");
+
+    assert!(matches!(summary.status, WorkflowRunStatus::Failed));
+    assert_eq!(
+        summary.timeline.last().and_then(|record| record.error_code.as_deref()),
+        Some("RESUME_MISMATCH")
+    );
+}
+
+#[test]
+fn rejects_resume_when_only_request_id_matches_wait_correlation_key() {
+    let definition = load_sorting_flow_definition(&spawn_echo_http_server());
+    let engine = WorkflowEngine::new();
+    let waiting_summary = engine
+        .run(
+            &definition,
+            json!({
+                "headers": { "requestId": "req-8" },
+                "body": { "orderNo": "SO-1008", "bizType": "auto_sort" }
+            }),
+            RunEnvironment::default(),
+        )
+        .expect("workflow run should succeed");
+
+    let summary = engine
+        .resume(
+            &definition,
+            waiting_summary
+                .resume_state
+                .expect("waiting run should expose resume state"),
+            json!({
+                "event": "rcs.callback",
+                "requestId": "SO-1008"
             }),
         )
         .expect("resume should produce a failed summary");

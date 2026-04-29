@@ -64,7 +64,7 @@
         "event": "manual_review.completed"
       },
       "inputMapping": {
-        "correlationKey": "{{trigger.headers.requestId}}",
+        "correlationKey": "{{trigger.body.orderNo}}",
         "orderNo": "{{trigger.body.orderNo}}",
         "reason": "bizType requires manual review"
       }
@@ -90,7 +90,7 @@
         "event": "rcs.callback"
       },
       "inputMapping": {
-        "correlationKey": "{{trigger.headers.requestId}}",
+        "correlationKey": "{{trigger.body.orderNo}}",
         "orderNo": "{{trigger.body.orderNo}}"
       }
     },

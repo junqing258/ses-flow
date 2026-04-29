@@ -306,4 +306,70 @@ describe("workflow persistence", () => {
     );
   });
 
+  it("migrates legacy wait panels with correlation payload mapping", () => {
+    const state = createNewWorkflowEditorState();
+    const waitNode = {
+      id: "wait_callback",
+      type: "workflow-card" as const,
+      position: { x: 520, y: 176 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      data: {
+        accent: "#F59E0B",
+        icon: "clock" as const,
+        kind: "wait" as const,
+        nodeKey: "wait_callback",
+        subtitle: "等待设备回调",
+        title: "Wait",
+      },
+    };
+
+    const document = createPersistedWorkflowDocument(
+      [state.nodes[0]!, waitNode, state.nodes[1]!],
+      state.edges,
+      {
+        ...state.panelByNodeId,
+        wait_callback: {
+          tabs: ["base", "retry", "error"],
+          fieldsByTab: {
+            base: [
+              {
+                key: "waitEvent",
+                label: "等待事件",
+                type: "input",
+                value: "device.sorting.callback",
+              },
+              {
+                key: "nodeId",
+                label: "节点 ID",
+                type: "readonly",
+                value: "wait_callback",
+              },
+            ],
+            retry: [],
+            error: [],
+          },
+        },
+      },
+      {
+        activeTab: state.activeTab,
+        selectedNodeId: "wait_callback",
+        status: "draft",
+        version: "v3",
+        workflowId: "sorting-main-flow",
+        workflowName: "sorting-main-flow",
+      },
+    );
+
+    const restored = createWorkflowEditorStateFromDocument(document);
+    const waitPanel = restored.panelByNodeId.wait_callback;
+    const correlationKeyField = waitPanel.fieldsByTab.base?.find(
+      (field) => field.key === "correlationKey",
+    );
+
+    expect(waitPanel.tabs).toContain("mapping");
+    expect(correlationKeyField).toBeDefined();
+    expect(correlationKeyField?.value).toBe("{{trigger.body.orderNo}}");
+  });
+
 });

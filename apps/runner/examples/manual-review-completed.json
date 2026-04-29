@@ -1,6 +1,6 @@
 {
   "event": "manual_review.completed",
-  "correlationKey": "req-run-demo",
+  "correlationKey": "SO-DEMO-1",
   "status": "approved",
   "operatorId": "reviewer-1"
 }
