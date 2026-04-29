@@ -608,6 +608,91 @@ async fn robot_departure_succeeds_without_active_runner_task_for_simulation() {
 }
 
 #[tokio::test]
+async fn robot_departure_plugin_consumes_early_legacy_departure_call() {
+    let (app, state) = build_test_app(AppConfig::default());
+    let connect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/connect")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "stationIds": ["station-1"] }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("connect request should succeed");
+    assert_eq!(connect_response.status(), axum::http::StatusCode::OK);
+
+    let depart_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/robotDeparture")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "taskId": "TASK-SKU-123",
+                        "agvId": "AGV-001",
+                        "completed": 1,
+                        "requestId": "early-departure-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("robotDeparture request should succeed");
+    assert_eq!(depart_response.status(), axum::http::StatusCode::OK);
+
+    let execute_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/execute")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "pluginId": "robot_departure",
+                        "runnerType": "plugin:robot_departure",
+                        "nodeId": "robot_departure",
+                        "config": {},
+                        "context": {
+                            "runId": "run-1",
+                            "requestId": "req-1",
+                            "workflowKey": "workflow.demo",
+                            "workflowVersion": 1,
+                            "input": {
+                                "stationId": "station-1",
+                                "taskId": "TASK-SKU-123",
+                                "agvId": "AGV-001"
+                            },
+                            "state": {},
+                            "env": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("robot_departure execute request should succeed");
+
+    assert_eq!(execute_response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(execute_response.into_body(), usize::MAX)
+        .await
+        .expect("robot_departure execute body should be readable");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("robot_departure execute response should be valid json");
+    assert_eq!(payload["status"], json!("success"));
+    assert_eq!(payload["output"]["taskId"], json!("TASK-SKU-123"));
+    assert_eq!(payload["output"]["result"], json!(0));
+    assert!(payload.get("waitSignal").is_none());
+    assert!(state.inner.read().await.tasks.is_empty());
+}
+
+#[tokio::test]
 async fn driver_empty_robot_alias_accepts_legacy_java_payload() {
     let (app, _) = build_test_app(AppConfig::default());
     let connect_response = app

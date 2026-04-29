@@ -8,7 +8,7 @@ use crate::descriptors::plugin_descriptors;
 use crate::models::{
     CancelRequest, ExecuteRequest, HealthResponse, PluginDescriptor, PluginResponseEnvelope, ResumeRequest,
 };
-use crate::services::AppState;
+use crate::services::{AppState, PendingRobotDeparture};
 use crate::views::{plugin_error, plugin_waiting_response};
 
 pub(crate) async fn get_descriptors() -> Json<Vec<PluginDescriptor>> {
@@ -34,6 +34,12 @@ pub(crate) async fn execute(State(state): State<AppState>, Json(request): Json<E
             Ok(response) => Json(response).into_response(),
             Err(message) => plugin_error(StatusCode::BAD_REQUEST, &message),
         };
+    }
+
+    if request.runner_type == "plugin:robot_departure" {
+        if let Some(response) = robot_departure_plugin_response(&state, &request).await {
+            return Json(response).into_response();
+        }
     }
 
     match state.create_or_get_task(request).await {
@@ -102,6 +108,38 @@ fn get_task_info_plugin_response(request: ExecuteRequest) -> Result<PluginRespon
         logs: Vec::new(),
         error: None,
     })
+}
+
+async fn robot_departure_plugin_response(state: &AppState, request: &ExecuteRequest) -> Option<PluginResponseEnvelope> {
+    let input = &request.context.input;
+    let station_id = value_string(input, &["stationId", "workerId", "targetWorkerId"])?;
+    let task_id = value_string(input, &["taskId"])?;
+    let departure = state.take_pending_robot_departure(&station_id, &task_id).await?;
+    Some(robot_departure_success_response(departure))
+}
+
+fn robot_departure_success_response(departure: PendingRobotDeparture) -> PluginResponseEnvelope {
+    let output = json!({
+        "taskId": departure.task_id,
+        "agvId": departure.agv_id,
+        "completed": departure.completed,
+        "requestId": departure.request_id,
+        "stationId": departure.station_id,
+        "result": 0
+    });
+
+    PluginResponseEnvelope {
+        status: "success".to_string(),
+        output: output.clone(),
+        state_patch: json!({
+            "workstation": {
+                "lastRobotDeparture": output
+            }
+        }),
+        wait_signal: None,
+        logs: Vec::new(),
+        error: None,
+    }
 }
 
 fn value_string(value: &Value, candidates: &[&str]) -> Option<String> {

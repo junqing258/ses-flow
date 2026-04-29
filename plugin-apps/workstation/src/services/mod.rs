@@ -573,6 +573,38 @@ impl AppState {
         resumed_run_ids
     }
 
+    pub(crate) async fn record_pending_robot_departure(
+        &self,
+        station_id: &str,
+        task_id: &str,
+        agv_id: &str,
+        completed: i64,
+        request_id: &str,
+    ) {
+        let mut state = self.inner.write().await;
+        state.pending_robot_departures.insert(
+            robot_departure_key(station_id, task_id),
+            PendingRobotDeparture {
+                station_id: station_id.to_string(),
+                task_id: task_id.to_string(),
+                agv_id: agv_id.to_string(),
+                completed,
+                request_id: request_id.to_string(),
+            },
+        );
+    }
+
+    pub(crate) async fn take_pending_robot_departure(
+        &self,
+        station_id: &str,
+        task_id: &str,
+    ) -> Option<PendingRobotDeparture> {
+        let mut state = self.inner.write().await;
+        state
+            .pending_robot_departures
+            .remove(&robot_departure_key(station_id, task_id))
+    }
+
     async fn search_wait_run_ids(&self, station_id: &str, event: &str, request_id: Option<&str>) -> Vec<String> {
         let Some(db_pool) = self.db_pool.as_ref() else {
             warn!(station_id = %station_id, event = %event, "waiting run search skipped because DATABASE_URL is not configured");
@@ -846,6 +878,15 @@ pub(crate) struct AgvArrivalSimulation {
     pub(crate) resumed_run_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PendingRobotDeparture {
+    pub(crate) station_id: String,
+    pub(crate) task_id: String,
+    pub(crate) agv_id: String,
+    pub(crate) completed: i64,
+    pub(crate) request_id: String,
+}
+
 fn agv_arrival_resume_event(station_id: &str, agv_id: &str, request_id: Option<&str>) -> Value {
     let mut event = json!({
         "event": "agv.arrived",
@@ -901,6 +942,7 @@ pub(crate) struct BridgeState {
     pub(crate) tokens: HashMap<String, String>,
     pub(crate) worker_streams: HashMap<String, broadcast::Sender<PendingEvent>>,
     pub(crate) pending_events: HashMap<String, Vec<PendingEvent>>,
+    pub(crate) pending_robot_departures: HashMap<String, PendingRobotDeparture>,
 }
 
 impl BridgeState {
@@ -951,6 +993,10 @@ fn task_matches_task_id(task: &ExecutionTask, task_id: &str) -> bool {
             .and_then(|config| value_string(config, &["taskId"]))
             .as_deref()
             == Some(task_id)
+}
+
+fn robot_departure_key(station_id: &str, task_id: &str) -> String {
+    format!("{station_id}:{task_id}")
 }
 
 fn task_lookup_key(run_id: &str, node_id: &str, request_id: &str) -> String {

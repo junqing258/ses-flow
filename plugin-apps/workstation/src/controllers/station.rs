@@ -245,7 +245,7 @@ pub(crate) async fn robot_departure(
             agv_id = %request.agv_id,
             "simulated robot departure without active runner task"
         );
-        state
+        let resumed_run_ids = state
             .resume_robot_departure_waits(
                 &station_id,
                 &request.task_id,
@@ -253,7 +253,19 @@ pub(crate) async fn robot_departure(
                 request.completed,
                 &request.request_id,
             )
-            .await
+            .await;
+        if resumed_run_ids.is_empty() {
+            state
+                .record_pending_robot_departure(
+                    &station_id,
+                    &request.task_id,
+                    &request.agv_id,
+                    request.completed,
+                    &request.request_id,
+                )
+                .await;
+        }
+        resumed_run_ids
     };
     base_result_ok(json!({
         "AgvId": request.agv_id,
