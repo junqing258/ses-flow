@@ -8,12 +8,26 @@
 
 @barcode = 002
 
-@uniqueKey = workstation:{{stationId}}:{{barcode}}
+@uniqueKey = workstation:{{stationId}}:{{barcode}}\
+
+
+### 工作站登录，供发车接口复用 Authorization
+# @name login
+POST {{workstationBaseUrl}}/station/operation/login
+Content-Type: application/json
+
+{
+  "stationId": "{{stationId}}",
+  "platformId": "{{stationId}}",
+  "username": "admin",
+  "password": "123456"
+}
 
 ### 1. 运行工作流
 # @name startWorkflow
 POST {{backendBaseUrl}}/workflows/{{workflowId}}/run
 Content-Type: application/json
+Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
   "uniqueKey": "{{uniqueKey}}",
@@ -41,6 +55,7 @@ GET {{backendBaseUrl}}/runs/{{startWorkflow.response.body.$.runId}}
 ### 2. 小车到达
 POST {{workstationBaseUrl}}/station/operation/simulate/agvArrived
 Content-Type: application/json
+Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
   "stationId": "{{stationId}}",
@@ -48,17 +63,6 @@ Content-Type: application/json
   "requestId": {{requestId}}
 }
 
-### 工作站登录，供发车接口复用 Authorization
-# @name login
-POST {{workstationBaseUrl}}/station/operation/login
-Content-Type: application/json
-
-{
-  "stationId": "{{stationId}}",
-  "platformId": "{{stationId}}",
-  "username": "admin",
-  "password": "123456"
-}
 
 ### 3. 扫码
 POST {{workstationBaseUrl}}/station/operation/scanBarcode
