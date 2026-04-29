@@ -198,16 +198,37 @@ pub(crate) async fn robot_departure(
         Ok(station_id) => station_id,
         Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
     };
+    let task = match request.task_id.as_deref() {
+        Some(task_id) => state.robot_departure_task_for_worker(&station_id, task_id).await,
+        None => state.current_robot_departure_task_for_worker(&station_id).await,
+    };
+    let task_id = request
+        .task_id
+        .or_else(|| task.as_ref().map(|task| task.task_id.clone()));
+    let task_id = match task_id {
+        Some(task_id) => Some(task_id),
+        None => {
+            state
+                .robot_departure_wait_task_id_for_worker(&station_id, &request.request_id)
+                .await
+        }
+    };
+    let Some(task_id) = task_id else {
+        return base_result_error(
+            StatusCode::BAD_REQUEST,
+            "missing taskId and no active robot departure task for station",
+        );
+    };
     let agv_event_payload = json!({
         "AgvId": request.agv_id,
         "StationId": station_id,
-        "TaskId": request.task_id,
+        "TaskId": &task_id,
         "RequestId": request.request_id
     });
     let state_patch = json!({
         "workstation": {
             "lastRobotDeparture": {
-                "taskId": request.task_id,
+                "taskId": &task_id,
                 "agvId": request.agv_id,
                 "completed": request.completed,
                 "requestId": request.request_id
@@ -215,15 +236,12 @@ pub(crate) async fn robot_departure(
         }
     });
     let output = json!({
-        "taskId": request.task_id,
+        "taskId": &task_id,
         "agvId": request.agv_id,
         "completed": request.completed,
         "requestId": request.request_id
     });
-    let resumed_run_ids = if let Some(task) = state
-        .robot_departure_task_for_worker(&station_id, &request.task_id)
-        .await
-    {
+    let resumed_run_ids = if let Some(task) = task {
         match state
             .complete_task_by_execution_id_with_success(
                 &task.execution_id,
@@ -244,14 +262,14 @@ pub(crate) async fn robot_departure(
             .await;
         info!(
             station_id = %station_id,
-            task_id = %request.task_id,
+            task_id = %task_id,
             agv_id = %request.agv_id,
             "simulated robot departure without active runner task"
         );
         let resumed_run_ids = state
             .resume_robot_departure_waits(
                 &station_id,
-                &request.task_id,
+                &task_id,
                 &request.agv_id,
                 request.completed,
                 &request.request_id,
@@ -261,7 +279,7 @@ pub(crate) async fn robot_departure(
             state
                 .record_pending_robot_departure(
                     &station_id,
-                    &request.task_id,
+                    &task_id,
                     &request.agv_id,
                     request.completed,
                     &request.request_id,
@@ -272,7 +290,7 @@ pub(crate) async fn robot_departure(
     };
     base_result_ok(json!({
         "AgvId": request.agv_id,
-        "TaskId": request.task_id,
+        "TaskId": &task_id,
         "ResumedRunIds": resumed_run_ids
     }))
 }

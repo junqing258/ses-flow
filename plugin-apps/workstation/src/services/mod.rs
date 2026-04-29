@@ -356,6 +356,68 @@ impl AppState {
             .cloned()
     }
 
+    pub(crate) async fn current_robot_departure_task_for_worker(&self, station_id: &str) -> Option<ExecutionTask> {
+        let state = self.inner.read().await;
+        state
+            .tasks
+            .values()
+            .filter(|task| {
+                task.target_station_id == station_id
+                    && !task.state.is_terminal()
+                    && task.plugin_type == "plugin:robot_departure"
+            })
+            .max_by_key(|task| task.updated_at)
+            .cloned()
+    }
+
+    pub(crate) async fn robot_departure_wait_task_id_for_worker(
+        &self,
+        station_id: &str,
+        request_id: &str,
+    ) -> Option<String> {
+        let Some(db_pool) = self.db_pool.as_ref() else {
+            warn!(station_id = %station_id, request_id = %request_id, "robot departure task lookup skipped because DATABASE_URL is not configured");
+            return None;
+        };
+
+        let row = match sqlx::query(
+            r#"
+            SELECT execution.payload->>'taskId' AS task_id
+            FROM workflow_runs
+            CROSS JOIN jsonb_each(state->'workstation'->'executions') AS execution(id, payload)
+            WHERE status IN ($1, $2)
+              AND current_node_id = $3
+              AND last_signal->>'type' = $4
+              AND execution.payload->>'workerId' = $5
+              AND execution.payload->>'taskId' IS NOT NULL
+              AND (
+                workflow_runs.request_id = $6
+                OR last_signal->'payload'->>'requestId' = $6
+                OR state->>'requestId' = $6
+              )
+            ORDER BY updated_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind("\"waiting\"")
+        .bind("waiting")
+        .bind("robot_departure")
+        .bind(DEFAULT_RUNNER_RESUME_SIGNAL)
+        .bind(station_id)
+        .bind(request_id)
+        .fetch_optional(db_pool)
+        .await
+        {
+            Ok(row) => row,
+            Err(error) => {
+                warn!(station_id = %station_id, request_id = %request_id, error = %error, "failed to look up robot departure task id from workflow context");
+                return None;
+            }
+        };
+
+        row.and_then(|row| row.try_get::<String, _>("task_id").ok())
+    }
+
     pub(crate) async fn complete_task_with_success(
         &self,
         station_id: &str,

@@ -250,8 +250,8 @@ pub(crate) struct TaskInfoResponseData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct RobotDepartureRequest {
-    #[serde(alias = "taskId")]
-    pub(crate) task_id: String,
+    #[serde(default, alias = "taskId", deserialize_with = "optional_string_from_json_value")]
+    pub(crate) task_id: Option<String>,
     #[serde(alias = "agvId")]
     pub(crate) agv_id: String,
     #[serde(alias = "completed")]

@@ -32,7 +32,7 @@
           v-for="run in workflowRuns"
           :key="run.runId"
           type="button"
-          class="w-full rounded-lg border border-slate-200/80 bg-white px-4 py-4 text-left shadow-[0_14px_30px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50/40"
+          class="w-full rounded-lg border border-slate-200/80 bg-white px-4 py-4 text-left shadow-[0_14px_30px_rgba(15,23,42,0.05)] transition-all hover:border-cyan-200 hover:bg-cyan-50/40"
           @click="handleRunSelect(run.runId)"
         >
           <div class="flex items-start justify-between gap-4">

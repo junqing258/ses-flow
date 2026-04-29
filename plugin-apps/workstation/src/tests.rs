@@ -946,6 +946,114 @@ async fn robot_departure_completes_active_task() {
 }
 
 #[tokio::test]
+async fn robot_departure_uses_active_task_id_when_request_omits_task_id() {
+    let (app, state) = build_test_app(AppConfig::default());
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "StationId": "station-1",
+                        "PlatformId": "platform-1",
+                        "Username": "demo",
+                        "Password": "demo"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("login request should succeed");
+    let login_body = to_bytes(login_response.into_body(), usize::MAX)
+        .await
+        .expect("login body should be readable");
+    let login_payload: serde_json::Value =
+        serde_json::from_slice(&login_body).expect("login payload should be valid json");
+    let authorization = login_payload["Data"]["Authorization"]
+        .as_str()
+        .expect("authorization token should exist");
+
+    let execute_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/execute")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "pluginId": "robot_departure",
+                        "runnerType": "plugin:robot_departure",
+                        "nodeId": "robot_departure",
+                        "config": {
+                            "stationId": "station-1"
+                        },
+                        "context": {
+                            "runId": "run-1",
+                            "requestId": "req-1",
+                            "workflowKey": "workflow.demo",
+                            "workflowVersion": 1,
+                            "input": {
+                                "taskId": "TASK-1"
+                            },
+                            "state": {},
+                            "env": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("execute request should succeed");
+    let execute_body = to_bytes(execute_response.into_body(), usize::MAX)
+        .await
+        .expect("execute body should be readable");
+    let execute_payload: serde_json::Value =
+        serde_json::from_slice(&execute_body).expect("execute payload should be valid json");
+    let execution_id = execute_payload["output"]["executionId"]
+        .as_str()
+        .expect("execution id should exist")
+        .to_string();
+
+    let depart_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/robotDeparture")
+                .header("content-type", "application/json")
+                .header("authorization", authorization)
+                .body(Body::from(
+                    json!({
+                        "AgvId": "AGV-1",
+                        "Completed": 1,
+                        "RequestId": "agv-req-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("robotDeparture request should succeed");
+    assert_eq!(depart_response.status(), axum::http::StatusCode::OK);
+    let depart_body = to_bytes(depart_response.into_body(), usize::MAX)
+        .await
+        .expect("robotDeparture body should be readable");
+    let depart_payload: serde_json::Value =
+        serde_json::from_slice(&depart_body).expect("robotDeparture payload should be valid json");
+    assert_eq!(depart_payload["Data"]["TaskId"], json!("TASK-1"));
+
+    let state = state.inner.read().await;
+    let task = state.tasks.get(&execution_id).expect("task should exist after execute");
+    assert!(matches!(task.state, TaskState::Succeeded));
+}
+
+#[tokio::test]
 async fn robot_departure_does_not_complete_non_departure_active_task() {
     let (app, state) = build_test_app(AppConfig::default());
 
