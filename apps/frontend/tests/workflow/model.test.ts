@@ -97,10 +97,12 @@ describe("createWorkflowNodeDraft", () => {
       panel.fieldsByTab.base?.find((field) => field.key === "connectionKey")
         ?.value,
     ).toBe("default");
-    expect(panel.fieldsByTab.base?.find((field) => field.key === "sql")?.value)
-      .toContain(":order_no");
-    expect(panel.fieldsByTab.mapping?.find((field) => field.key === "params"))
-      .toBeDefined();
+    expect(
+      panel.fieldsByTab.base?.find((field) => field.key === "sql")?.value,
+    ).toContain(":order_no");
+    expect(
+      panel.fieldsByTab.mapping?.find((field) => field.key === "params"),
+    ).toBeDefined();
     expect(getWorkflowFieldSelectOptions(panel, modeField!)).toEqual([
       { label: "read", value: "read" },
       { label: "write", value: "write" },
@@ -194,6 +196,50 @@ describe("createWorkflowNodeDraft", () => {
 
     const { node, panel } = createWorkflowNodeDraft(
       waitPaletteItem!,
+      { x: 260, y: 240 },
+      [],
+    );
+    const correlationKeyField = panel.fieldsByTab.base?.find(
+      (field) => field.key === "correlationKey",
+    );
+
+    expect(node.data.kind).toBe("wait");
+    expect(correlationKeyField).toBeDefined();
+    expect(correlationKeyField?.value).toBe("{{trigger.body.orderNo}}");
+  });
+
+  it("creates wait plugin nodes with editable correlation key in base config", () => {
+    const categories = createWorkflowPaletteCategories([
+      {
+        id: "scan_task",
+        kind: "wait",
+        runnerType: "plugin:scan_task",
+        version: "1.0.0",
+        category: "人工工作台",
+        displayName: "等待扫码",
+        color: "#F97316",
+        icon: "scan-barcode",
+        status: "stable",
+        transport: "http",
+        configSchema: {
+          type: "object",
+          properties: {
+            stationId: { type: "string", title: "工作站 ID" },
+          },
+        },
+        defaults: {
+          stationId: "{{trigger.stationId}}",
+        },
+      },
+    ]);
+    const scanTaskItem = categories
+      .flatMap((category) => category.items)
+      .find((item) => item.runnerType === "plugin:scan_task");
+
+    expect(scanTaskItem).toBeDefined();
+
+    const { node, panel } = createWorkflowNodeDraft(
+      scanTaskItem!,
       { x: 260, y: 240 },
       [],
     );

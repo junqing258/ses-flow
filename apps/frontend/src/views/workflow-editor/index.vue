@@ -398,7 +398,7 @@
         </button>
       </div>
       <ElTabs
-        class="flex min-h-0 flex-1 flex-col"
+        class="workflow-properties-tabs flex min-h-0 flex-1 flex-col"
         :model-value="activeTab"
         @update:model-value="handleTabChange"
       >
@@ -2784,5 +2784,20 @@ setSelectedNode(selectedNodeId.value);
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+.workflow-properties-tabs :deep(.el-tabs__header) {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+.workflow-properties-tabs :deep(.el-tabs__content) {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.workflow-properties-tabs :deep(.el-tab-pane) {
+  display: flex;
+  min-height: 0;
+  width: 100%;
 }
 </style>

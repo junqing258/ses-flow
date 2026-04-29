@@ -241,8 +241,9 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
         ?.value,
     ).toBe("order.completed");
     expect(
-      waitPanel.fieldsByTab.base?.find((field) => field.key === "correlationKey")
-        ?.value,
+      waitPanel.fieldsByTab.base?.find(
+        (field) => field.key === "correlationKey",
+      )?.value,
     ).toBe("{{trigger.body.orderNo}}");
     expect(
       waitPanel.fieldsByTab.mapping?.find((field) => field.key === "payload")
@@ -482,12 +483,102 @@ describe("createWorkflowEditorStateFromRunnerDefinition", () => {
         ?.value,
     ).toBe("plugin:hello_world");
     expect(
-      pluginPanel.fieldsByTab.base?.find((field) => field.key === "config:target")
-        ?.value,
+      pluginPanel.fieldsByTab.base?.find(
+        (field) => field.key === "config:target",
+      )?.value,
     ).toBe("SES");
     expect(
       pluginPanel.fieldsByTab.mapping?.find((field) => field.key === "payload")
         ?.value,
     ).toBe('{\n  "name": "{{input.name}}"\n}');
+  });
+
+  it("restores wait plugin correlation key into base config", () => {
+    const definition: RunnerWorkflowDefinition = {
+      meta: {
+        key: "scan-flow",
+        name: "Scan Flow",
+        version: 1,
+        status: "published",
+      },
+      trigger: { type: "manual" },
+      inputSchema: {
+        type: "object",
+      },
+      nodes: [
+        {
+          id: "start_1",
+          type: "start",
+          name: "Start",
+        },
+        {
+          id: "scan_task_1",
+          type: "plugin:scan_task",
+          name: "等待扫码",
+          config: {
+            stationId: "{{trigger.stationId}}",
+            waitSignalType: "station.operation.scanBarcode",
+          },
+          inputMapping: {
+            agvId: "{{input.agvId}}",
+            correlationKey: "{{trigger.body.orderNo}}",
+          },
+        },
+      ],
+      transitions: [{ from: "start_1", to: "scan_task_1" }],
+      policies: {
+        allowManualRetry: true,
+      },
+    };
+
+    const state = createWorkflowEditorStateFromRunnerDefinition(definition, [
+      {
+        id: "plugin-app-workstation",
+        label: "Workstation",
+        icon: "activity",
+        defaultOpen: false,
+        items: [
+          {
+            id: "palette-scan-task",
+            kind: "wait",
+            label: "等待扫码",
+            icon: "scan-barcode",
+            accent: "#F97316",
+            runnerType: "plugin:scan_task",
+            nodeDescriptor: {
+              id: "scan_task",
+              kind: "wait",
+              runnerType: "plugin:scan_task",
+              version: "1.0.0",
+              category: "人工工作台",
+              displayName: "等待扫码",
+              status: "stable",
+              transport: "http",
+              configSchema: {
+                type: "object",
+                properties: {
+                  stationId: { type: "string", title: "工作站 ID" },
+                  waitSignalType: { type: "string", title: "恢复信号类型" },
+                },
+              },
+            },
+          },
+        ],
+      },
+    ]);
+    const scanNode = state.nodes.find((node) => node.id === "scan_task_1");
+    const scanPanel = state.panelByNodeId.scan_task_1;
+
+    expect(scanNode?.data.kind).toBe("wait");
+    expect(scanNode?.data.runnerType).toBe("plugin:scan_task");
+    expect(
+      scanPanel.fieldsByTab.base?.find(
+        (field) => field.key === "correlationKey",
+      )?.value,
+    ).toBe("{{trigger.body.orderNo}}");
+    expect(
+      scanPanel.fieldsByTab.mapping?.find((field) => field.key === "payload")
+        ?.value,
+    ).toBe('{\n  "agvId": "{{input.agvId}}"\n}');
   });
 });

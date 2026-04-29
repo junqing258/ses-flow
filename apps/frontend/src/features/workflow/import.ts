@@ -310,9 +310,13 @@ const createImportedNode = (
     targetPosition: Position.Left,
     data: {
       ...draftNode.data,
-      kind: getNodeKind(node.type),
+      kind: node.type.startsWith("plugin:")
+        ? draftNode.data.kind
+        : getNodeKind(node.type),
       nodeKey: node.id,
-      runnerType: node.type.startsWith("plugin:") ? node.type : draftNode.data.runnerType,
+      runnerType: node.type.startsWith("plugin:")
+        ? node.type
+        : draftNode.data.runnerType,
       subtitle: isTerminal ? undefined : node.name,
       title: nodeTitle,
     },
@@ -480,15 +484,32 @@ const createImportedNode = (
 
   if (node.type.startsWith("plugin:")) {
     Object.entries(node.config ?? {}).forEach(([key, value]) => {
-      setPanelFieldValue(nextPanel, `config:${key}`, serializeMappingValue(value));
+      setPanelFieldValue(
+        nextPanel,
+        `config:${key}`,
+        serializeMappingValue(value),
+      );
       setPanelFieldValue(nextPanel, key, serializeMappingValue(value));
     });
     setPanelFieldValue(nextPanel, "runnerType", node.type);
-    setPanelFieldValue(
-      nextPanel,
-      "payload",
-      serializeMappingValue(node.inputMapping),
-    );
+    if (nextNode.data.kind === "wait") {
+      setPanelFieldValue(
+        nextPanel,
+        "correlationKey",
+        serializeMappingValue(readWaitCorrelationKey(node.inputMapping)),
+      );
+      setPanelFieldValue(
+        nextPanel,
+        "payload",
+        serializeMappingValue(readWaitPayload(node.inputMapping)),
+      );
+    } else {
+      setPanelFieldValue(
+        nextPanel,
+        "payload",
+        serializeMappingValue(node.inputMapping),
+      );
+    }
   }
 
   if (node.retryPolicy?.max_attempts !== undefined) {

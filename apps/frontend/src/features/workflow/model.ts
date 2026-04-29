@@ -320,9 +320,8 @@ const resolveWorkflowIconComponent = (
     return WORKFLOW_ICON_MAP[alias];
   }
 
-  const lucideComponent = LUCIDE_ICON_LIBRARY[
-    normalizeWorkflowIconName(normalizedValue)
-  ];
+  const lucideComponent =
+    LUCIDE_ICON_LIBRARY[normalizeWorkflowIconName(normalizedValue)];
   return lucideComponent ?? WORKFLOW_ICON_MAP.activity;
 };
 
@@ -335,10 +334,7 @@ export const resolveWorkflowIcon = (
 ): ResolvedWorkflowIcon => {
   const normalizedValue = value?.trim();
 
-  if (
-    normalizedValue &&
-    WORKFLOW_ICON_HTTP_URL_PATTERN.test(normalizedValue)
-  ) {
+  if (normalizedValue && WORKFLOW_ICON_HTTP_URL_PATTERN.test(normalizedValue)) {
     return {
       kind: "image",
       src: normalizedValue,
@@ -424,66 +420,80 @@ const createPluginNodePanel = (
   descriptor: WorkflowNodeDescriptor,
   nodeId: string,
   subtitle: string,
-): WorkflowNodePanel => ({
-  tabs: ["base", "mapping", "retry"],
-  fieldsByTab: {
-    base: [
-      ...createDescriptorConfigFields(descriptor),
-      {
-        key: "nodeName",
-        label: "节点名称",
-        type: "input",
-        value: subtitle,
-      },
-      {
-        key: "timeout",
-        label: "超时时间 (ms)",
-        type: "input",
-        value: descriptor.timeoutMs ? String(descriptor.timeoutMs) : "5000",
-      },
-      {
-        key: "runnerType",
-        label: "Runner 类型",
-        type: "readonly",
-        value: descriptor.runnerType,
-      },
-      {
-        key: "nodeId",
-        label: "节点 ID",
-        type: "readonly",
-        value: nodeId,
-      },
-      {
-        key: "note",
-        label: "备注",
-        type: "textarea",
-        value: descriptor.description ?? "",
-      },
-    ],
-    mapping: [
-      {
-        key: "payload",
-        label: "插件输入",
-        type: "textarea",
-        value: "{{input}}",
-      },
-    ],
-    retry: [
-      {
-        key: "retryPolicy",
-        label: "失败重试",
-        type: "select",
-        value: "exponential_backoff",
-      },
-      {
-        key: "maxAttempts",
-        label: "最大重试次数",
-        type: "input",
-        value: "3",
-      },
-    ],
-  },
-});
+): WorkflowNodePanel => {
+  const isWaitPlugin = descriptor.kind === "wait";
+
+  return {
+    tabs: ["base", "mapping", "retry"],
+    fieldsByTab: {
+      base: [
+        ...createDescriptorConfigFields(descriptor),
+        ...(isWaitPlugin
+          ? [
+              {
+                key: "correlationKey",
+                label: "关联键",
+                type: "input",
+                value: "{{trigger.body.orderNo}}",
+              } satisfies WorkflowField,
+            ]
+          : []),
+        {
+          key: "nodeName",
+          label: "节点名称",
+          type: "input",
+          value: subtitle,
+        },
+        {
+          key: "timeout",
+          label: "超时时间 (ms)",
+          type: "input",
+          value: descriptor.timeoutMs ? String(descriptor.timeoutMs) : "5000",
+        },
+        {
+          key: "runnerType",
+          label: "Runner 类型",
+          type: "readonly",
+          value: descriptor.runnerType,
+        },
+        {
+          key: "nodeId",
+          label: "节点 ID",
+          type: "readonly",
+          value: nodeId,
+        },
+        {
+          key: "note",
+          label: "备注",
+          type: "textarea",
+          value: descriptor.description ?? "",
+        },
+      ],
+      mapping: [
+        {
+          key: "payload",
+          label: "插件输入",
+          type: "textarea",
+          value: "{{input}}",
+        },
+      ],
+      retry: [
+        {
+          key: "retryPolicy",
+          label: "失败重试",
+          type: "select",
+          value: "exponential_backoff",
+        },
+        {
+          key: "maxAttempts",
+          label: "最大重试次数",
+          type: "input",
+          value: "3",
+        },
+      ],
+    },
+  };
+};
 
 export const createSwitchBranchHandleId = (index: number) => {
   if (index < 26) {
@@ -1494,8 +1504,7 @@ const INITIAL_WORKFLOW_PANELS: Record<string, WorkflowNodePanel> = {
           key: "sql",
           label: "SQL",
           type: "textarea",
-          value:
-            "select *\nfrom orders\nwhere order_no = :order_no\nlimit 20",
+          value: "select *\nfrom orders\nwhere order_no = :order_no\nlimit 20",
         },
         {
           key: "nodeName",

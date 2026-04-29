@@ -423,6 +423,7 @@ const getSwitchBranchPriority = (
 };
 
 const COMMON_PLUGIN_FIELD_KEYS = new Set([
+  "correlationKey",
   "nodeName",
   "timeout",
   "runnerType",
@@ -692,9 +693,10 @@ const buildNodeDefinition = (
 
   if (type.startsWith("plugin:")) {
     definition.config = extractPluginConfig(panel);
-    definition.inputMapping = parseMappingValue(
-      getFieldValue(panel, "mapping", "payload"),
-    );
+    definition.inputMapping =
+      node.data.kind === "wait"
+        ? buildWaitInputMapping(panel)
+        : parseMappingValue(getFieldValue(panel, "mapping", "payload"));
   }
 
   return definition;

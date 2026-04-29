@@ -730,6 +730,99 @@ describe("buildRunnerWorkflowDefinition", () => {
       },
     });
   });
+
+  it("exports wait plugin nodes with correlation key in input mapping", () => {
+    const startNode = createExampleWorkflowNodes()[0];
+    const { node: pluginNode, panel: pluginPanel } = createWorkflowNodeDraft(
+      {
+        id: "palette-scan-task",
+        kind: "wait",
+        label: "等待扫码",
+        icon: "scan-barcode",
+        accent: "#F97316",
+        runnerType: "plugin:scan_task",
+        nodeDescriptor: {
+          id: "scan_task",
+          kind: "wait",
+          runnerType: "plugin:scan_task",
+          version: "1.0.0",
+          category: "人工工作台",
+          displayName: "等待扫码",
+          status: "stable",
+          transport: "http",
+          timeoutMs: 0,
+          configSchema: {
+            type: "object",
+            properties: {
+              stationId: { type: "string", title: "工作站 ID" },
+              waitSignalType: { type: "string", title: "恢复信号类型" },
+            },
+          },
+          defaults: {
+            stationId: "{{trigger.stationId}}",
+            waitSignalType: "station.operation.scanBarcode",
+          },
+        },
+      },
+      { x: 480, y: 88 },
+      [startNode],
+    );
+
+    pluginNode.id = "scan_task_1";
+    pluginNode.data.nodeKey = "scan_task_1";
+
+    (pluginPanel.fieldsByTab.base ?? []).forEach((field) => {
+      if (field.key === "nodeId") {
+        field.value = "scan_task_1";
+      }
+      if (field.key === "nodeName") {
+        field.value = "等待扫码";
+      }
+      if (field.key === "correlationKey") {
+        field.value = "{{trigger.body.orderNo}}";
+      }
+    });
+
+    const payloadField = (pluginPanel.fieldsByTab.mapping ?? []).find(
+      (field) => field.key === "payload",
+    );
+
+    if (!payloadField) {
+      throw new Error("plugin payload field should exist");
+    }
+
+    payloadField.value = "{\n  agvId: input.agvId\n}";
+
+    const definition = buildRunnerWorkflowDefinition(
+      [startNode, pluginNode],
+      [{ id: "edge:start->scan", source: "start", target: "scan_task_1" }],
+      {
+        start: createWorkflowPanels().start,
+        scan_task_1: pluginPanel,
+      },
+      {
+        workflowId: "scan-flow",
+        workflowName: "Scan Flow",
+        workflowVersion: "1",
+      },
+    );
+    const scanDefinition = definition.nodes.find(
+      (node) => node.id === "scan_task_1",
+    );
+
+    expect(scanDefinition).toMatchObject({
+      id: "scan_task_1",
+      type: "plugin:scan_task",
+      config: {
+        stationId: "{{trigger.stationId}}",
+        waitSignalType: "station.operation.scanBarcode",
+      },
+      inputMapping: {
+        agvId: "{{input.agvId}}",
+        correlationKey: "{{trigger.body.orderNo}}",
+      },
+    });
+  });
 });
 
 describe("shouldPollWorkflowRunSummary", () => {
