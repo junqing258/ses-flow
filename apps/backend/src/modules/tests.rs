@@ -207,7 +207,7 @@ async fn runner_api_requires_auth_when_enabled_but_keeps_health_public() {
 }
 
 #[tokio::test]
-async fn admin_can_create_station_user_and_station_login_checks_grant() {
+async fn admin_created_station_user_gets_default_wildcard_station_grant() {
     let app = build_app_with_bootstrap_auth().await;
     let admin_token = login_and_token(&app, "admin", "password123").await;
 
@@ -243,49 +243,6 @@ async fn admin_can_create_station_user_and_station_login_checks_grant() {
     let created: Value = serde_json::from_slice(&body).expect("create user response should be valid json");
     let user_id = created["id"].as_str().expect("created user id should exist");
 
-    let denied = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/station-login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    json!({
-                        "stationId": "station-1",
-                        "platformId": "platform-1",
-                        "username": "worker-1",
-                        "password": "123456"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .expect("station login request should succeed");
-    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
-
-    let grant_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/api/auth/admin/users/{user_id}/station-grants"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
-                .body(Body::from(
-                    json!({
-                        "stationId": "station-1",
-                        "platformId": "platform-1"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .expect("grant station request should succeed");
-    assert_eq!(grant_response.status(), StatusCode::OK);
-
     let station_token = app
         .clone()
         .oneshot(
@@ -315,6 +272,7 @@ async fn admin_can_create_station_user_and_station_login_checks_grant() {
         .to_bytes();
     let payload: Value = serde_json::from_slice(&body).expect("station login response should be valid json");
     let access_token = payload["accessToken"].as_str().expect("station token should exist");
+    assert_eq!(payload["user"]["id"], json!(user_id));
 
     let authorize = app
         .oneshot(

@@ -21,6 +21,7 @@ use crate::modules::{ApiError, ApiState};
 
 const SESSION_TTL_HOURS: i64 = 12;
 const STATION_LOGIN_GRANT_TYPE: &str = "workstation";
+const ALL_STATIONS_WILDCARD: &str = "*";
 
 const PERMISSIONS: &[(&str, &str)] = &[
     ("auth.manage_users", "管理用户"),
@@ -984,6 +985,9 @@ impl AuthService {
             })
             .await?;
         self.store.assign_roles(&user.id, &["SUPER_ADMIN".to_string()]).await?;
+        self.store
+            .grant_station(&user.id, ALL_STATIONS_WILDCARD, None, STATION_LOGIN_GRANT_TYPE)
+            .await?;
         self.user_response(user)
             .await
             .map_err(|error| format!("failed to load bootstrap user: {error:?}"))
@@ -1140,6 +1144,10 @@ impl AuthService {
                 .await
                 .map_err(ApiError::ServiceUnavailable)?;
         }
+        self.store
+            .grant_station(&user.id, ALL_STATIONS_WILDCARD, None, STATION_LOGIN_GRANT_TYPE)
+            .await
+            .map_err(ApiError::ServiceUnavailable)?;
         self.user_response(user).await
     }
 
