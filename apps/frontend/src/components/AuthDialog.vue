@@ -114,15 +114,14 @@
                 />
               </div>
               <div class="space-y-2">
-                <label class="text-sm font-medium text-slate-200" for="auth-email">
-                  {{ t("auth.fields.email") }}
+                <label class="text-sm font-medium text-slate-200" for="auth-username">
+                  {{ t("auth.fields.username") }}
                 </label>
                 <ElInput
-                  id="auth-email"
-                  v-model="form.email"
-                  type="email"
-                  autocomplete="email"
-                  :placeholder="t('auth.placeholders.email')"
+                  id="auth-username"
+                  v-model="form.username"
+                  autocomplete="username"
+                  :placeholder="t('auth.placeholders.username')"
                   class="h-11 border-white/10 bg-white/6 text-white placeholder:text-slate-400"
                 />
               </div>
@@ -182,7 +181,7 @@ const {
 } = useAuth();
 const form = reactive({
   displayName: "",
-  email: "",
+  username: "",
   password: "",
 });
 const submitError = ref("");
@@ -218,7 +217,7 @@ const lastLoginLabel = computed(() => {
 });
 const resetForm = () => {
   form.displayName = "";
-  form.email = "";
+  form.username = "";
   form.password = "";
   submitError.value = "";
 };
@@ -231,7 +230,7 @@ const handleSubmit = async () => {
   try {
     if (dialogMode.value === "login") {
       await login({
-        email: form.email,
+        login: form.username,
         password: form.password,
       });
       toast.success(t("auth.feedback.loginSuccess"));
@@ -240,7 +239,7 @@ const handleSubmit = async () => {
     }
     await register({
       displayName: form.displayName,
-      email: form.email,
+      login: form.username,
       password: form.password,
     });
     toast.success(t("auth.feedback.registerSuccess"));

@@ -35,11 +35,14 @@ export interface AuthPayload {
 }
 
 export interface LoginPayload {
-  email: string;
+  login: string;
   password: string;
 }
 
-export interface RegisterPayload extends LoginPayload {
+export interface RegisterPayload {
+  login: string;
+  password: string;
+  email?: string;
   displayName?: string;
 }
 

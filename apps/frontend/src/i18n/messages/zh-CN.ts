@@ -18,13 +18,15 @@ const zhCN = {
     },
     fields: {
       displayName: "姓名",
+      username: "账号",
       email: "邮箱",
       password: "密码",
     },
     placeholders: {
       displayName: "输入姓名或昵称",
+      username: "输入账号",
       email: "name@example.com",
-      password: "至少 8 位密码",
+      password: "至少 6 位密码",
     },
     dialog: {
       eyebrow: "Access Control",
@@ -38,6 +40,18 @@ const zhCN = {
       featureOneDescription: "支持后续接入租户切换、角色工作台和细粒度页面鉴权。",
       featureTwoTitle: "安全会话",
       featureTwoDescription: "前端持久化 Bearer token，并在应用启动时自动恢复登录态。",
+    },
+    loginPage: {
+      product: "SES Flow",
+      title: "仓储流程中心",
+      badge: "统一登录",
+      panelOneLabel: "流程",
+      panelOneText: "编辑、发布和运行仓储业务流程",
+      panelTwoLabel: "工作台",
+      panelTwoText: "按角色进入工作站和集包操作",
+      panelThreeLabel: "权限",
+      panelThreeText: "管理员统一维护账号与访问范围",
+      footer: "登录后将按账号角色加载可访问的页面和操作。",
     },
     account: {
       displayName: "用户名称",

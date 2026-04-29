@@ -1119,9 +1119,9 @@ impl AuthService {
         self.require_permission(headers, "auth.manage_users").await?;
         let username = normalize_optional(&request.username)
             .ok_or_else(|| ApiError::BadRequest("username is required".to_string()))?;
-        if request.password.trim().len() < 8 {
+        if request.password.trim().len() < 6 {
             return Err(ApiError::BadRequest(
-                "password must be at least 8 characters".to_string(),
+                "password must be at least 6 characters".to_string(),
             ));
         }
         let user = self

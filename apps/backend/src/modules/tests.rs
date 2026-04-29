@@ -223,7 +223,7 @@ async fn admin_can_create_station_user_and_station_login_checks_grant() {
                     json!({
                         "username": "worker-1",
                         "email": "worker@example.com",
-                        "password": "password123",
+                        "password": "123456",
                         "displayName": "Worker One",
                         "roles": ["WORKSTATION_OPERATOR"]
                     })
@@ -255,7 +255,7 @@ async fn admin_can_create_station_user_and_station_login_checks_grant() {
                         "stationId": "station-1",
                         "platformId": "platform-1",
                         "username": "worker-1",
-                        "password": "password123"
+                        "password": "123456"
                     })
                     .to_string(),
                 ))
@@ -298,7 +298,7 @@ async fn admin_can_create_station_user_and_station_login_checks_grant() {
                         "stationId": "station-1",
                         "platformId": "platform-1",
                         "username": "worker-1",
-                        "password": "password123"
+                        "password": "123456"
                     })
                     .to_string(),
                 ))

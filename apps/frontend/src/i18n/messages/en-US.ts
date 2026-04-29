@@ -18,13 +18,15 @@ const enUS = {
     },
     fields: {
       displayName: "Display name",
+      username: "Account",
       email: "Email",
       password: "Password",
     },
     placeholders: {
       displayName: "Enter a display name",
+      username: "Enter your account",
       email: "name@example.com",
-      password: "At least 8 characters",
+      password: "At least 6 characters",
     },
     dialog: {
       eyebrow: "Access Control",
@@ -38,6 +40,18 @@ const enUS = {
       featureOneDescription: "Ready for tenant switching, role dashboards, and finer-grained page authorization.",
       featureTwoTitle: "Secure session",
       featureTwoDescription: "The frontend persists the Bearer token and restores the session when the app starts.",
+    },
+    loginPage: {
+      product: "SES Flow",
+      title: "Warehouse Flow Center",
+      badge: "Unified login",
+      panelOneLabel: "Flow",
+      panelOneText: "Edit, publish, and run warehouse workflows",
+      panelTwoLabel: "Station",
+      panelTwoText: "Enter workstation and packing operations by role",
+      panelThreeLabel: "Access",
+      panelThreeText: "Administrators manage accounts and access scope",
+      footer: "After sign-in, available pages and actions are loaded from your account roles.",
     },
     account: {
       displayName: "Display name",
