@@ -17,6 +17,7 @@ runner 当前支持这些节点类型：
 - `sub_workflow`
 - `webhook_trigger`
 - `if_else`
+- `plugin:*`
 
 其中当前前端画布和 AI 预览已经较好对齐的常见节点是：
 
@@ -32,6 +33,7 @@ runner 当前支持这些节点类型：
 - `sub_workflow`
 - `webhook_trigger`
 - `if_else`
+- `plugin:*`
 
 `set_state` 目前是 runner 支持但前端编辑器未完整对齐的类型。若任务目标是可视化 AI 预览，除非用户明确要求，否则不要优先引入它。
 
@@ -124,6 +126,24 @@ runner 当前支持这些节点类型：
   - `config.event`
   - 可选 `timeoutMs`
 - 常见场景：等待设备回调、人工确认、外部任务完成通知。
+- 注意：HTTP 插件如果需要等待语义，不应把 workflow 节点 `type` 写成内置 `wait`；应使用 `plugin:*` 类型，并在插件响应中返回 `status: "waiting"` 与 `waitSignal`。
+
+## `plugin:*`
+
+- 用途：调用已注册 HTTP 插件节点。
+- 关键字段：
+  - `type` 必须是 descriptor 的 `runnerType`，例如 `plugin:barcode_scan_wait`
+  - `config`
+  - `inputMapping`
+  - 可选 `timeoutMs`
+- 前端对齐：
+  - `editorDocument.graph.nodes[].data.runnerType` 必须保留 `plugin:*`，否则导出时可能退化成内置节点类型。
+  - 插件配置面板通常由 descriptor 的 `configSchema.properties` 生成。
+- 等待型插件：
+  - descriptor 建议 `kind: "wait"`、`supportsResume: true`。
+  - `/execute` 返回 `status: "waiting"` 时必须包含 `waitSignal`。
+  - 恢复回调的 `event/type` 必须匹配 `waitSignal.type`。
+- 详细约束见 [plugin-descriptor.md](plugin-descriptor.md)。
 
 ## `task`
 

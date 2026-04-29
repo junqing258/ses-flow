@@ -30,6 +30,7 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - 提供或使用 `runner_base_url`
 - 向 Web 编辑器推送工作流预览更新
 - 通过 runner 编辑会话修改节点、连线、面板、映射或工作流元数据
+- 创建、解释或校验 HTTP 插件节点 descriptor
 - 解释或实现 SES Flow 的 AI 编辑契约
 
 ## 工作流程
@@ -76,6 +77,7 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - [references/edit-session-api.md](references/edit-session-api.md)
 - [references/workflow-json-format.md](references/workflow-json-format.md)
 - [references/node-reference.md](references/node-reference.md)
+- [references/plugin-descriptor.md](references/plugin-descriptor.md)
 
 推荐分工：
 
@@ -85,6 +87,8 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
   看 `workflow`、`editorDocument`、`transitions`、映射表达式和 runner 校验规则。
 - `node-reference.md`
   看节点类型、用途、关键字段、前端对齐情况和分支约定。
+- `plugin-descriptor.md`
+  看 HTTP 插件 descriptor 字段、注册约束、前端面板生成规则、等待型插件的 `waitSignal` 协议。
 
 最常用的记忆点：
 
@@ -93,6 +97,8 @@ description: 当通过 AI 模式编辑 SES Flow 工作流、处理 runner 编辑
 - `editor.pageMode` 在 AI 预览里保持为 `"ai"`。
 - 尽量保留工作流 id、版本和节点 id。
 - 如果修改了节点 id，要同步修复 `transitions`、`graph.nodes`、`graph.edges`、`graph.panels`。
+- 插件节点的 runner 类型必须写成 `plugin:*`；descriptor 的 `runnerType` 必须以 `plugin:` 开头。
+- 等待型 HTTP 插件不继承内置 `wait`，而是返回 `status: "waiting"` 与 `waitSignal` 来进入等待态。
 
 ## 默认建议
 
