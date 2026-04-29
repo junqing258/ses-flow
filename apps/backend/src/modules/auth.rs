@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::modules::{ApiError, ApiState};
 
-const SESSION_TTL_HOURS: i64 = 12;
+const SESSION_TTL_HOURS: i64 = 24;
 const STATION_LOGIN_GRANT_TYPE: &str = "workstation";
 const ALL_STATIONS_WILDCARD: &str = "*";
 

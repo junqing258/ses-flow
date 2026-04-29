@@ -1,7 +1,6 @@
 import type { Edge } from "@vue-flow/core";
 
-import { request as sendRequest } from "@/lib/request";
-import { RUNNER_BASE_URL } from "./api";
+import { RUNNER_BASE_URL, requestWithAuth as sendRequest } from "./api";
 
 import {
   getSwitchBranches,
@@ -416,7 +415,13 @@ const extractPluginConfig = (
   const baseFields = panel?.fieldsByTab.base ?? [];
   const configEntries = baseFields
     .filter((field) => field.key.startsWith("config:"))
-    .map((field) => [field.key.replace(/^config:/, ""), parseScalarValue(field.value)] as const);
+    .map(
+      (field) =>
+        [
+          field.key.replace(/^config:/, ""),
+          parseScalarValue(field.value),
+        ] as const,
+    );
 
   if (configEntries.length > 0) {
     return Object.fromEntries(configEntries);
@@ -960,8 +965,5 @@ export const manualPatchWorkflowRun = async (
     throw new RunnerRequestError("Runner 服务不可达，请确认本地 runner 已启动");
   }
 
-  return parseRunnerResponse<WorkflowRunSummary>(
-    response,
-    "提交人工补录失败",
-  );
+  return parseRunnerResponse<WorkflowRunSummary>(response, "提交人工补录失败");
 };

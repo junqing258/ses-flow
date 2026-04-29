@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Position } from "@vue-flow/core";
 
+import { RUNNER_BASE_URL } from "@/features/workflow/api";
 import {
   createWorkflowNodeDraft,
   createWorkflowEdges,
@@ -13,8 +14,10 @@ import {
 } from "@/features/workflow/model";
 import {
   buildRunnerWorkflowDefinition,
+  fetchWorkflowRunSummary,
   shouldPollWorkflowRunSummary,
 } from "@/features/workflow/runner";
+import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth-storage";
 
 const createExampleWorkflowNodes = (): WorkflowFlowNode[] => [
   {
@@ -452,17 +455,18 @@ describe("buildRunnerWorkflowDefinition", () => {
     const baseNodes = createExampleWorkflowNodes().filter(
       (node) => node.id !== "assign_task",
     );
-    const { node: setStateNode, panel: setStatePanel } = createWorkflowNodeDraft(
-      {
-        id: "palette-set-state",
-        kind: "set-state",
-        label: "Set State",
-        icon: "database",
-        accent: "#14B8A6",
-      },
-      { x: 1184, y: 88 },
-      baseNodes,
-    );
+    const { node: setStateNode, panel: setStatePanel } =
+      createWorkflowNodeDraft(
+        {
+          id: "palette-set-state",
+          kind: "set-state",
+          label: "Set State",
+          icon: "database",
+          accent: "#14B8A6",
+        },
+        { x: 1184, y: 88 },
+        baseNodes,
+      );
 
     setStateNode.id = "mark_decision";
     setStateNode.data.nodeKey = "mark_decision";
@@ -787,7 +791,9 @@ describe("shouldPollWorkflowRunSummary", () => {
       },
     );
 
-    expect(definition.nodes.find((item) => item.id === "db_query_1")).toMatchObject({
+    expect(
+      definition.nodes.find((item) => item.id === "db_query_1"),
+    ).toMatchObject({
       type: "db_query",
       config: {
         connectionKey: "orders",
@@ -798,5 +804,64 @@ describe("shouldPollWorkflowRunSummary", () => {
         order_no: "{{trigger.body.orderNo}}",
       },
     });
+  });
+});
+
+describe("runner api requests", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("sends the persisted bearer token when loading a run summary", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          runId: "run-1777448885733-1",
+          status: "running",
+          workflowKey: "sorting-main-flow",
+          workflowVersion: 1,
+          currentNodeId: "wait_scan",
+          state: {},
+          timeline: [],
+          createdAt: "2026-04-29T00:00:00.000Z",
+          updatedAt: "2026-04-29T00:00:01.000Z",
+        }),
+        {
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const storage = new Map<string, string>([
+      [AUTH_TOKEN_STORAGE_KEY, "front-token-1"],
+    ]);
+
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        removeItem: (key: string) => {
+          storage.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          storage.set(key, value);
+        },
+      },
+    });
+
+    await fetchWorkflowRunSummary("run-1777448885733-1");
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${RUNNER_BASE_URL}/runs/run-1777448885733-1`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+    expect((init?.headers as Headers).get("Authorization")).toBe(
+      "Bearer front-token-1",
+    );
   });
 });

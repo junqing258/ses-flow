@@ -1,5 +1,4 @@
-import { request as sendRequest } from "@/lib/request";
-import { getRunnerBaseUrl } from "./api";
+import { getRunnerBaseUrl, requestWithAuth as sendRequest } from "./api";
 import type { PersistedWorkflowDocument } from "./persistence";
 import type { RunnerWorkflowDefinition } from "./runner";
 

@@ -1,5 +1,8 @@
 import { request as sendRequest } from "@/lib/request";
-import { readPersistedAccessToken, resolveAuthStorage } from "@/lib/auth-storage";
+import {
+  readPersistedAccessToken,
+  resolveAuthStorage,
+} from "@/lib/auth-storage";
 
 import type { RunnerWorkflowDefinition } from "./runner";
 import type { PersistedWorkflowDocument } from "./persistence";
@@ -55,7 +58,10 @@ const NODE_DESCRIPTOR_API_BASE_URL = RUNNER_BASE_URL + "/node-descriptors";
 const SYSTEM_API_BASE_URL = RUNNER_BASE_URL + "/system";
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";
 
-const requestWithAuth = (input: RequestInfo | URL, init: RequestInit = {}) => {
+export const requestWithAuth = (
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+) => {
   const token = readPersistedAccessToken(resolveAuthStorage());
   const headers = new Headers(init.headers ?? {});
   if (token) {
