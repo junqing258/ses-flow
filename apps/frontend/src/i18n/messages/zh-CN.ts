@@ -30,7 +30,7 @@ const zhCN = {
     },
     dialog: {
       eyebrow: "Access Control",
-      loginTitle: "登录到仓储流程中心",
+      loginTitle: "登录到分拣流程中心",
       loginDescription: "使用你的账号进入工作台，查看角色对应的页面和当前租户上下文。",
       registerTitle: "创建新的访问账号",
       registerDescription: "先完成基础注册，后续可继续扩展租户、仓和角色配置。",
@@ -43,7 +43,7 @@ const zhCN = {
     },
     loginPage: {
       product: "SES Flow",
-      title: "仓储流程中心",
+      title: "分拣流程中心",
       badge: "统一登录",
       panelOneLabel: "流程",
       panelOneText: "编辑、发布和运行仓储业务流程",

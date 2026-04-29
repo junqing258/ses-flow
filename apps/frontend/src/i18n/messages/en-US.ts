@@ -30,7 +30,7 @@ const enUS = {
     },
     dialog: {
       eyebrow: "Access Control",
-      loginTitle: "Sign in to the workflow hub",
+      loginTitle: "Sign in to the sorting flow center",
       loginDescription: "Use your account to enter the workspace and load role-aware pages and tenant context.",
       registerTitle: "Create a new access account",
       registerDescription: "Complete a basic registration now and extend it later with tenant, warehouse, and role assignment.",
@@ -43,7 +43,7 @@ const enUS = {
     },
     loginPage: {
       product: "SES Flow",
-      title: "Warehouse Flow Center",
+      title: "Sorting Flow Center",
       badge: "Unified login",
       panelOneLabel: "Flow",
       panelOneText: "Edit, publish, and run warehouse workflows",
