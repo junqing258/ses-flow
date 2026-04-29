@@ -1,8 +1,19 @@
 export interface AuthUser {
   id: string;
+  username?: string;
   email: string;
   displayName: string | null;
-  role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "OPERATOR" | "VIEWER";
+  role:
+    | "SUPER_ADMIN"
+    | "ADMIN"
+    | "MANAGER"
+    | "OPERATOR"
+    | "WORKFLOW_OPERATOR"
+    | "WORKSTATION_OPERATOR"
+    | "PACKER"
+    | "VIEWER";
+  roles?: string[];
+  permissions?: string[];
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;

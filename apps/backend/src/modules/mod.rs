@@ -8,6 +8,7 @@ use futures_util::StreamExt;
 use runner::app::WorkflowStreamNotification;
 
 pub mod ai_gateway;
+pub mod auth;
 pub mod edit_session;
 pub mod node_registry;
 pub mod routes;

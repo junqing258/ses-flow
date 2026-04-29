@@ -15,6 +15,7 @@ use tower::ServiceExt;
 use runner::app::WorkflowApp;
 use runner::store::{InMemoryRunStore, WorkflowRunStore};
 
+use crate::modules::auth::{AuthService, InMemoryAuthStore};
 use crate::modules::node_registry::register_http_plugin_base_urls;
 use crate::modules::system::system_store::InMemorySystemSettingsStore;
 use crate::modules::{ApiState, RUNNER_API_BASE_PATH, build_router};
@@ -29,6 +30,8 @@ fn build_app_with_ai_gateway_target(target: &str) -> axum::Router {
         ai_gateway_base_url: target.to_string(),
         ai_gateway_client: reqwest::Client::new(),
         system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+        auth: AuthService::new(Arc::new(InMemoryAuthStore::default())),
+        auth_required: false,
     })
 }
 
@@ -38,11 +41,70 @@ fn build_app_with_server(app: Arc<WorkflowApp>) -> axum::Router {
         ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
         ai_gateway_client: reqwest::Client::new(),
         system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+        auth: AuthService::new(Arc::new(InMemoryAuthStore::default())),
+        auth_required: false,
     })
 }
 
 fn api_path(path: &str) -> String {
     format!("{RUNNER_API_BASE_PATH}{path}")
+}
+
+async fn build_app_with_bootstrap_auth() -> axum::Router {
+    let auth = AuthService::new(Arc::new(InMemoryAuthStore::default()));
+    auth.bootstrap_super_admin("admin", Some("admin@example.com"), "password123")
+        .await
+        .expect("bootstrap super admin should be created");
+    build_router(ApiState {
+        app: Arc::new(WorkflowApp::new()),
+        ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
+        ai_gateway_client: reqwest::Client::new(),
+        system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+        auth,
+        auth_required: false,
+    })
+}
+
+async fn build_app_with_required_auth() -> axum::Router {
+    let auth = AuthService::new(Arc::new(InMemoryAuthStore::default()));
+    auth.bootstrap_super_admin("admin", Some("admin@example.com"), "password123")
+        .await
+        .expect("bootstrap super admin should be created");
+    build_router(ApiState {
+        app: Arc::new(WorkflowApp::new()),
+        ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
+        ai_gateway_client: reqwest::Client::new(),
+        system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+        auth,
+        auth_required: true,
+    })
+}
+
+async fn login_and_token(app: &axum::Router, login: &str, password: &str) -> String {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({ "email": login, "password": password }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("login request should succeed");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("login body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("login response should be valid json");
+    payload["accessToken"]
+        .as_str()
+        .expect("login should return access token")
+        .to_string()
 }
 
 fn spawn_delayed_http_server(delay: Duration) -> String {
@@ -78,6 +140,197 @@ struct CapturedHttpRequest {
     request_line: String,
     raw_headers: String,
     body: Vec<u8>,
+}
+
+#[tokio::test]
+async fn auth_login_and_me_returns_roles_and_permissions() {
+    let app = build_app_with_bootstrap_auth().await;
+    let token = login_and_token(&app, "admin@example.com", "password123").await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/auth/me")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("me request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("me body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("me response should be valid json");
+    assert_eq!(payload["user"]["username"], json!("admin"));
+    assert_eq!(payload["user"]["role"], json!("SUPER_ADMIN"));
+    assert!(
+        payload["user"]["permissions"]
+            .as_array()
+            .expect("permissions should be an array")
+            .contains(&json!("auth.manage_users"))
+    );
+}
+
+#[tokio::test]
+async fn runner_api_requires_auth_when_enabled_but_keeps_health_public() {
+    let app = build_app_with_required_auth().await;
+    let unauthorized = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/workflows"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("workflow request should complete");
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let health = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api_path("/health"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("health request should complete");
+    assert_eq!(health.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn admin_can_create_station_user_and_station_login_checks_grant() {
+    let app = build_app_with_bootstrap_auth().await;
+    let admin_token = login_and_token(&app, "admin", "password123").await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/admin/users")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+                .body(Body::from(
+                    json!({
+                        "username": "worker-1",
+                        "email": "worker@example.com",
+                        "password": "password123",
+                        "displayName": "Worker One",
+                        "roles": ["WORKSTATION_OPERATOR"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("create user request should succeed");
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let body = create_response
+        .into_body()
+        .collect()
+        .await
+        .expect("create user body should be readable")
+        .to_bytes();
+    let created: Value = serde_json::from_slice(&body).expect("create user response should be valid json");
+    let user_id = created["id"].as_str().expect("created user id should exist");
+
+    let denied = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/station-login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "platformId": "platform-1",
+                        "username": "worker-1",
+                        "password": "password123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("station login request should succeed");
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+
+    let grant_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/auth/admin/users/{user_id}/station-grants"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "platformId": "platform-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("grant station request should succeed");
+    assert_eq!(grant_response.status(), StatusCode::OK);
+
+    let station_token = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/station-login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "stationId": "station-1",
+                        "platformId": "platform-1",
+                        "username": "worker-1",
+                        "password": "password123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("station login request should succeed");
+    assert_eq!(station_token.status(), StatusCode::OK);
+    let body = station_token
+        .into_body()
+        .collect()
+        .await
+        .expect("station login body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("station login response should be valid json");
+    let access_token = payload["accessToken"].as_str().expect("station token should exist");
+
+    let authorize = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/station-authorize")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {access_token}"))
+                .body(Body::from(
+                    json!({ "requiredPermission": "workstation.operate" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("station authorize request should succeed");
+    assert_eq!(authorize.status(), StatusCode::OK);
 }
 
 fn spawn_single_response_http_server(response: String) -> (String, mpsc::Receiver<CapturedHttpRequest>) {
@@ -469,6 +722,8 @@ async fn auto_registers_http_plugins_from_base_urls() {
         ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
         ai_gateway_client: reqwest::Client::new(),
         system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+        auth: AuthService::new(Arc::new(InMemoryAuthStore::default())),
+        auth_required: false,
     };
 
     let descriptors = register_http_plugin_base_urls(&state, std::slice::from_ref(&plugin_base_url))
@@ -524,6 +779,8 @@ async fn falls_back_to_legacy_single_descriptor_endpoint() {
         ai_gateway_base_url: "http://127.0.0.1:6307".to_string(),
         ai_gateway_client: reqwest::Client::new(),
         system_settings: Arc::new(InMemorySystemSettingsStore::new()),
+        auth: AuthService::new(Arc::new(InMemoryAuthStore::default())),
+        auth_required: false,
     };
 
     let descriptors = register_http_plugin_base_urls(&state, std::slice::from_ref(&plugin_base_url))

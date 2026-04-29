@@ -26,6 +26,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     info!(
         address = %address,
         runner_base_url = ?config.runner_base_url,
+        ses_auth_base_url = ?config.ses_auth_base_url,
         database_configured = config.database_url.is_some(),
         "workstation plugin listening"
     );

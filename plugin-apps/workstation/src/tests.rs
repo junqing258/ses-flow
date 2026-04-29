@@ -803,6 +803,7 @@ async fn simulate_agv_arrived_queues_legacy_sse_event() {
 async fn simulate_agv_arrived_skips_runner_resume_without_database_url() {
     let (app, _) = build_test_app(AppConfig {
         runner_base_url: Some("http://127.0.0.1:1/runner-api".to_string()),
+        ses_auth_base_url: None,
         database_url: None,
         heartbeat_interval_secs: 5,
     });

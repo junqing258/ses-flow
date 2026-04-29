@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::{Duration, Utc};
 use reqwest::Client;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -15,8 +16,8 @@ use crate::config::{
     AppConfig, DEFAULT_CONNECT_STATION_ID, DEFAULT_RUNNER_RESUME_SIGNAL, HEALTH_PLUGIN_ID, normalize_runner_base_url,
 };
 use crate::models::{
-    CancelRequest, ConnectRequest, ExecuteRequest, ExecutionTask, HealthResponse, PendingEvent, ResumeRequest,
-    TaskErrorPayload, TaskSnapshot, TaskState, VerifyNotifyRequest, bearer_token,
+    CancelRequest, ConnectRequest, ExecuteRequest, ExecutionTask, HealthResponse, LoginRequest, PendingEvent,
+    ResumeRequest, TaskErrorPayload, TaskSnapshot, TaskState, VerifyNotifyRequest, bearer_token,
 };
 use crate::views::{failure_resume_event, success_resume_event};
 
@@ -225,11 +226,63 @@ impl AppState {
         AgvArrivalSimulation { event, resumed_run_ids }
     }
 
-    pub(crate) async fn login(&self, station_id: &str) -> String {
+    pub(crate) async fn login(&self, request: &LoginRequest) -> Result<String, String> {
+        if self.config.ses_auth_base_url.is_some() {
+            return self.ses_station_login(request).await;
+        }
+
         let token = Uuid::new_v4().to_string();
         let mut state = self.inner.write().await;
-        state.tokens.insert(token.clone(), station_id.to_string());
-        token
+        state.tokens.insert(token.clone(), request.station_id.clone());
+        Ok(token)
+    }
+
+    async fn ses_station_login(&self, request: &LoginRequest) -> Result<String, String> {
+        let auth_base_url = self
+            .config
+            .ses_auth_base_url
+            .as_ref()
+            .ok_or_else(|| "SES auth base URL is not configured".to_string())?;
+        let username = request
+            .username
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "username is required".to_string())?;
+        let password = request
+            .password
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "password is required".to_string())?;
+        let payload = json!({
+            "stationId": request.station_id,
+            "platformId": request.platform_id,
+            "login": username,
+            "password": password
+        });
+        let response = self
+            .client
+            .post(format!("{auth_base_url}/station-login"))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|error| format!("failed to call SES station login: {error}"))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| format!("failed to read SES station login response: {error}"))?;
+        if !status.is_success() {
+            return Err(ses_error_message(&body).unwrap_or_else(|| format!("SES station login failed: {status}")));
+        }
+        let payload: SesAuthPayload = serde_json::from_str(&body)
+            .map_err(|error| format!("failed to parse SES station login response: {error}"))?;
+        {
+            let mut state = self.inner.write().await;
+            state
+                .tokens
+                .insert(payload.access_token.clone(), request.station_id.clone());
+        }
+        Ok(payload.access_token)
     }
 
     pub(crate) async fn connect_context(
@@ -413,6 +466,11 @@ impl AppState {
     }
 
     pub(crate) async fn authenticated_station_id(&self, headers: &axum::http::HeaderMap) -> Result<String, String> {
+        if self.config.ses_auth_base_url.is_some() {
+            let token = bearer_token(headers).ok_or_else(|| "missing bearer token".to_string())?;
+            return self.ses_authenticated_station_id(&token).await;
+        }
+
         let state = self.inner.read().await;
         if let Some(token) = bearer_token(headers) {
             if let Some(station_id) = state.tokens.get(&token).cloned() {
@@ -436,6 +494,39 @@ impl AppState {
         } else {
             Err("missing bearer token".to_string())
         }
+    }
+
+    async fn ses_authenticated_station_id(&self, token: &str) -> Result<String, String> {
+        let auth_base_url = self
+            .config
+            .ses_auth_base_url
+            .as_ref()
+            .ok_or_else(|| "SES auth base URL is not configured".to_string())?;
+        let response = self
+            .client
+            .post(format!("{auth_base_url}/station-authorize"))
+            .bearer_auth(token)
+            .json(&json!({ "requiredPermission": "workstation.operate" }))
+            .send()
+            .await
+            .map_err(|error| format!("failed to call SES station authorization: {error}"))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| format!("failed to read SES station authorization response: {error}"))?;
+        if !status.is_success() {
+            return Err(
+                ses_error_message(&body).unwrap_or_else(|| format!("SES station authorization failed: {status}"))
+            );
+        }
+        let payload: SesStationAuthorizeResponse = serde_json::from_str(&body)
+            .map_err(|error| format!("failed to parse SES station authorization response: {error}"))?;
+        {
+            let mut state = self.inner.write().await;
+            state.tokens.insert(token.to_string(), payload.station_id.clone());
+        }
+        Ok(payload.station_id)
     }
 
     pub(crate) async fn health(&self) -> HealthResponse {
@@ -933,6 +1024,25 @@ fn attach_request_id(event: &mut Value, request_id: Option<&str>) {
     if let Some(payload_object) = event.get_mut("payload").and_then(Value::as_object_mut) {
         payload_object.insert("requestId".to_string(), json!(request_id));
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SesAuthPayload {
+    access_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SesStationAuthorizeResponse {
+    station_id: String,
+}
+
+fn ses_error_message(body: &str) -> Option<String> {
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|payload| payload.get("error").and_then(Value::as_str).map(str::to_string))
+        .filter(|message| !message.trim().is_empty())
 }
 
 #[derive(Default)]

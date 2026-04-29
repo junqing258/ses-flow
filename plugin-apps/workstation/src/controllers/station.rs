@@ -14,7 +14,10 @@ use crate::services::{AppState, station_id_from_connect};
 use crate::views::{base_result_error, base_result_ok, sse_response};
 
 pub(crate) async fn login(State(state): State<AppState>, Json(request): Json<LoginRequest>) -> Response {
-    let token = state.login(&request.station_id).await;
+    let token = match state.login(&request).await {
+        Ok(token) => token,
+        Err(message) => return base_result_error(StatusCode::UNAUTHORIZED, &message),
+    };
     Json(BaseResult {
         code: 0,
         message: "Success".to_string(),

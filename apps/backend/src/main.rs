@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use backend::modules::auth::{AuthService, PostgresAuthStore};
 use backend::modules::node_registry::register_http_plugin_base_urls;
 use backend::modules::system::system_store::PostgresSystemSettingsStore;
 use backend::modules::{ApiState, ai_gateway, build_router};
@@ -46,6 +47,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(std::io::Error::other)?,
     );
+    let auth = AuthService::new(Arc::new(
+        PostgresAuthStore::new(run_store.get_pool())
+            .await
+            .map_err(std::io::Error::other)?,
+    ));
+    auth.bootstrap_from_env().await.map_err(std::io::Error::other)?;
 
     let state = ApiState {
         app: Arc::new(WorkflowApp::with_store_catalog_sessions_and_concurrency(
@@ -57,6 +64,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         ai_gateway_base_url: ai_gateway::resolve_ai_gateway_base_url(),
         ai_gateway_client: reqwest::Client::new(),
         system_settings,
+        auth,
+        auth_required: true,
     };
     let auto_register_plugin_base_urls = state
         .system_settings

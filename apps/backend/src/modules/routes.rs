@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use axum::body::Body;
 use axum::extract::MatchedPath;
+use axum::extract::State;
 use axum::http::{Method, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
@@ -17,6 +18,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{Instrument, debug, field, info, info_span, warn};
 
+use crate::modules::auth::AuthService;
 use crate::modules::system::system_store::SystemSettingsStore;
 use crate::modules::{ai_gateway, edit_session, node_registry, run, system, workflow};
 
@@ -29,12 +31,16 @@ pub struct ApiState {
     pub ai_gateway_base_url: String,
     pub ai_gateway_client: reqwest::Client,
     pub system_settings: Arc<dyn SystemSettingsStore>,
+    pub auth: AuthService,
+    pub auth_required: bool,
 }
 
 pub fn build_router(state: ApiState) -> Router {
+    let auth_router = crate::modules::auth::router().with_state(state.clone());
     Router::new()
         .route("/", get(redirect_to_views))
         .nest_service(RUNNER_VIEWS_BASE_PATH, build_views_service())
+        .nest("/api/auth", auth_router)
         .nest("/api/ai", build_ai_gateway_router(state.clone()))
         .nest(RUNNER_API_BASE_PATH, build_api_router(state))
 }
@@ -81,6 +87,7 @@ fn build_api_router(state: ApiState) -> Router {
         .route("/runs/{run_id}/manual-patch", post(run::manual_patch_run))
         .route("/runs/{run_id}/resume", post(run::resume_workflow))
         .route("/runs/{run_id}/terminate", post(run::terminate_workflow))
+        .layer(middleware::from_fn_with_state(state.clone(), require_runner_api_auth))
         .layer(middleware::from_fn(log_http_requests))
         .layer(build_cors_layer())
         .with_state(state)
@@ -195,9 +202,85 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
     .await
 }
 
+async fn require_runner_api_auth(
+    State(state): axum::extract::State<ApiState>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    if !state.auth_required || is_public_runner_api_request(&request) {
+        return next.run(request).await;
+    }
+
+    let permission = required_permission_for_runner_api(&request);
+    let auth_result = if let Some(permission) = permission {
+        state
+            .auth
+            .require_permission(request.headers(), permission)
+            .await
+            .map(|_| ())
+    } else {
+        state.auth.authenticate(request.headers()).await.map(|_| ())
+    };
+
+    match auth_result {
+        Ok(()) => next.run(request).await,
+        Err(error) => error.into_response(),
+    }
+}
+
+fn is_public_runner_api_request(request: &Request<Body>) -> bool {
+    let path = runner_api_path(request);
+    path == "/health" || (path.starts_with("/runs/") && path.ends_with("/resume"))
+}
+
+fn required_permission_for_runner_api(request: &Request<Body>) -> Option<&'static str> {
+    let path = runner_api_path(request);
+    let method = request.method();
+    if path.starts_with("/system/") || path.starts_with("/plugin-registrations") || path == "/catalog/refresh" {
+        return Some("plugin.manage");
+    }
+    if path.starts_with("/edit-sessions") {
+        return match *method {
+            Method::GET => Some("workflow.read"),
+            Method::POST | Method::PUT | Method::PATCH => Some("workflow.write"),
+            _ => Some("workflow.write"),
+        };
+    }
+    if path.starts_with("/workflows") {
+        if path.ends_with("/run") {
+            return Some("workflow.run");
+        }
+        return match *method {
+            Method::GET => Some("workflow.read"),
+            Method::POST | Method::PUT | Method::PATCH => Some("workflow.write"),
+            _ => Some("workflow.read"),
+        };
+    }
+    if path.starts_with("/runs/") && (path.ends_with("/terminate") || path.ends_with("/manual-patch")) {
+        return Some("workflow.operate");
+    }
+    if path.starts_with("/runs") {
+        return Some("workflow.read");
+    }
+    if path.starts_with("/node-descriptors") {
+        return Some("workflow.read");
+    }
+    None
+}
+
+fn runner_api_path(request: &Request<Body>) -> &str {
+    request
+        .uri()
+        .path()
+        .strip_prefix(RUNNER_API_BASE_PATH)
+        .unwrap_or_else(|| request.uri().path())
+}
+
 #[derive(Debug)]
 pub enum ApiError {
     BadRequest(String),
+    Unauthorized(String),
+    Forbidden(String),
     NotFound(String),
     Throttled(String),
     ServiceUnavailable(String),
@@ -226,6 +309,8 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
+            Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
+            Self::Forbidden(message) => (StatusCode::FORBIDDEN, message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
             Self::Throttled(message) => (StatusCode::TOO_MANY_REQUESTS, message),
             Self::ServiceUnavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),

@@ -8,19 +8,24 @@ license = "UNLICENSED"
 [dependencies]
 async-stream = "0.3"
 async-trait = "0.1"
+argon2 = "0.5"
 axum = { version = "0.8", features = ["ws"] }
+chrono = { version = "0.4", features = ["clock", "serde"] }
 dotenv = "0.15"
 futures-core = "0.3"
 futures-util = "0.3"
+hex = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 runner = { path = "../runner" }
 ses-flow-telemetry = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json"] }
+sha2 = "0.10"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json", "chrono"] }
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 tracing = { workspace = true }
+uuid = { version = "1.18", features = ["v4", "serde"] }
 
 [dev-dependencies]
 http-body-util = "0.1"
