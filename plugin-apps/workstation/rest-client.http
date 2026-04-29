@@ -95,7 +95,6 @@ Content-Type: application/json
 Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
-  "taskId": "{{getTaskInfo.response.body.$.Data.TaskId}}",
   "agvId": "{{agvId}}",
   "completed": 1,
   "requestId": "{{requestId}}"
