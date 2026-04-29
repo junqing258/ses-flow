@@ -7,6 +7,7 @@ interface JsonEventSourceOptions<T> {
   onError?: () => void;
   onEvent: (payload: T, eventName: string) => void;
   onOpen?: () => void;
+  token?: string | null;
 }
 
 export const createJsonEventSource = <T>(
@@ -17,7 +18,13 @@ export const createJsonEventSource = <T>(
     return null;
   }
 
-  const source = new EventSource(url);
+  let finalUrl = url;
+  if (options.token) {
+    const sep = url.includes("?") ? "&" : "?";
+    finalUrl = `${url}${sep}token=${encodeURIComponent(options.token)}`;
+  }
+
+  const source = new EventSource(finalUrl);
   const removeListeners: Array<() => void> = [];
 
   if (options.onOpen) {

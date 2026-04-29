@@ -49,6 +49,10 @@ export default defineConfig(() => {
     server: {
       host: "0.0.0.0",
       proxy: {
+        "/api/auth": {
+          target: backendProxyTarget,
+          changeOrigin: true,
+        },
         "/api/ai": {
           target: backendProxyTarget,
           changeOrigin: true,

@@ -1,4 +1,5 @@
 import { createJsonEventSource, type EventSourceSubscription } from "@/lib/sse";
+import { readPersistedAccessToken, resolveAuthStorage } from "@/lib/auth-storage";
 import { RUNNER_BASE_URL } from "./api";
 import type { WorkflowRunStatus } from "./runner";
 
@@ -27,6 +28,8 @@ const STREAM_EVENT_NAMES = [
   "workflow.runs.changed",
 ];
 
+const getToken = () => readPersistedAccessToken(resolveAuthStorage());
+
 export const subscribeWorkflowRunEvents = (
   runId: string,
   options: WorkflowStreamSubscriptionOptions,
@@ -38,6 +41,7 @@ export const subscribeWorkflowRunEvents = (
       onError: options.onError,
       onEvent: options.onEvent,
       onOpen: options.onOpen,
+      token: getToken(),
     },
   );
 
@@ -52,6 +56,7 @@ export const subscribeWorkflowEditSessionEvents = (
       onError: options.onError,
       onEvent: options.onEvent,
       onOpen: options.onOpen,
+      token: getToken(),
     },
   );
 
@@ -66,6 +71,7 @@ export const subscribeWorkflowEvents = (
       onError: options.onError,
       onEvent: options.onEvent,
       onOpen: options.onOpen,
+      token: getToken(),
     },
   );
 
@@ -79,5 +85,6 @@ export const subscribeWorkflowsEvents = (
       onError: options.onError,
       onEvent: options.onEvent,
       onOpen: options.onOpen,
+      token: getToken(),
     },
   );

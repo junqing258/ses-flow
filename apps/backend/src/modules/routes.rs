@@ -204,11 +204,20 @@ async fn log_http_requests(request: Request<Body>, next: Next) -> Response {
 
 async fn require_runner_api_auth(
     State(state): axum::extract::State<ApiState>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
     if !state.auth_required || is_public_runner_api_request(&request) {
         return next.run(request).await;
+    }
+
+    // EventSource cannot set headers, so allow token via ?token= query param.
+    if !request.headers().contains_key(axum::http::header::AUTHORIZATION) {
+        if let Some(token) = query_param_token(request.uri().query()) {
+            if let Ok(value) = axum::http::HeaderValue::from_str(&format!("Bearer {token}")) {
+                request.headers_mut().insert(axum::http::header::AUTHORIZATION, value);
+            }
+        }
     }
 
     let permission = required_permission_for_runner_api(&request);
@@ -226,6 +235,19 @@ async fn require_runner_api_auth(
         Ok(()) => next.run(request).await,
         Err(error) => error.into_response(),
     }
+}
+
+fn query_param_token(query: Option<&str>) -> Option<String> {
+    let query = query?;
+    for pair in query.split('&') {
+        if let Some(value) = pair.strip_prefix("token=") {
+            let decoded = value.replace("%2B", "+").replace("%2F", "/").replace("%3D", "=");
+            if !decoded.is_empty() {
+                return Some(decoded);
+            }
+        }
+    }
+    None
 }
 
 fn is_public_runner_api_request(request: &Request<Body>) -> bool {

@@ -12,8 +12,8 @@
     <!-- Background Layer -->
     <div class="absolute inset-0 z-0 flex">
       <!-- Deep cyan glow on the left/bottom -->
-      <div class="absolute bottom-[-20%] left-[-10%] w-[70%] h-[70%] rounded-full bg-cyan-600/30 blur-[150px] pointer-events-none"></div>
-      <div class="absolute top-[20%] left-[-20%] w-[50%] h-[50%] rounded-full bg-cyan-900/30 blur-[120px] pointer-events-none"></div>
+      <div class="absolute bottom-[-10%] left-[-5%] w-[45%] h-[45%] rounded-full bg-cyan-600/20 blur-[120px] pointer-events-none"></div>
+      <div class="absolute top-[15%] left-[-10%] w-[35%] h-[35%] rounded-full bg-cyan-900/20 blur-[100px] pointer-events-none"></div>
       
       <!-- Right side grid with cyan nodes -->
       <div class="absolute inset-y-0 right-0 w-[60%] opacity-60 mask-gradient-left pointer-events-none">
@@ -81,9 +81,9 @@
         <!-- Right Side: Login Form -->
         <div class="relative">
           <!-- Ambient glow behind the card -->
-          <div class="absolute -inset-1 rounded-[2rem] bg-cyan-500/20 blur-xl"></div>
+          <div class="absolute -inset-1 rounded-[2rem] bg-cyan-500/5 blur-lg"></div>
           
-          <div class="relative bg-black/60 backdrop-blur-2xl p-10 lg:p-14 rounded-3xl border border-white/10 shadow-2xl">
+          <div class="relative bg-black/60 backdrop-blur-2xl p-10 lg:p-14 rounded-3xl border border-white/10 shadow-xl">
             <div class="mb-10 text-center">
               <h2 class="text-3xl font-bold text-white tracking-tight">{{ t("auth.dialog.loginTitle") }}</h2>
               <!-- <p class="mt-3 text-sm text-slate-400">{{ t("auth.dialog.loginDescription") }}</p> -->
@@ -132,7 +132,7 @@
                 native-type="submit" 
                 type="primary" 
                 size="large" 
-                class="w-full !h-12 !mt-8 !rounded-xl !text-sm !font-bold !uppercase !tracking-wider !bg-cyan-500 !border-cyan-500 hover:!bg-cyan-400 hover:!border-cyan-400 !shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all hover:!shadow-[0_0_30px_rgba(6,182,212,0.6)]" 
+                class="w-full !h-12 !mt-8 !rounded-xl !text-sm !font-bold !uppercase !tracking-wider !bg-cyan-500 !border-cyan-500 hover:!bg-cyan-400 hover:!border-cyan-400 !text-black !shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all hover:!shadow-[0_0_15px_rgba(6,182,212,0.4)]" 
                 :loading="isSubmitting"
               >
                 {{ isSubmitting ? t("auth.actions.processing") : t("auth.actions.login") }}
@@ -196,11 +196,28 @@ const handleSubmit = async () => {
 }
 
 :deep(.custom-input .el-input__inner) {
+  background: transparent !important;
+  box-shadow: none !important;
   color: #ffffff !important;
+  caret-color: #22d3ee;
 }
 
 :deep(.custom-input .el-input__inner::placeholder) {
   color: rgba(255, 255, 255, 0.3) !important;
+}
+
+:deep(.custom-input .el-input__inner:-webkit-autofill),
+:deep(.custom-input .el-input__inner:-webkit-autofill:hover),
+:deep(.custom-input .el-input__inner:-webkit-autofill:focus) {
+  border: 0 !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #22d3ee !important;
+  /* box-shadow: 0 0 0 1000px rgb(3 18 18) inset !important; */
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+:deep(.custom-input .el-input__password) {
+  color: rgba(203, 213, 225, 0.8);
 }
 
 .mask-gradient-left {

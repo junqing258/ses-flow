@@ -1,4 +1,5 @@
 import { request as sendRequest } from "@/lib/request";
+import { readPersistedAccessToken, resolveAuthStorage } from "@/lib/auth-storage";
 
 import type { RunnerWorkflowDefinition } from "./runner";
 import type { PersistedWorkflowDocument } from "./persistence";
@@ -54,6 +55,15 @@ const NODE_DESCRIPTOR_API_BASE_URL = RUNNER_BASE_URL + "/node-descriptors";
 const SYSTEM_API_BASE_URL = RUNNER_BASE_URL + "/system";
 const WORKFLOW_API_BASE_URL = RUNNER_BASE_URL + "/workflows";
 
+const requestWithAuth = (input: RequestInfo | URL, init: RequestInit = {}) => {
+  const token = readPersistedAccessToken(resolveAuthStorage());
+  const headers = new Headers(init.headers ?? {});
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return sendRequest(input, { ...init, headers });
+};
+
 const parseResponse = async <T>(
   response: Response,
   fallbackMessage: string,
@@ -76,14 +86,14 @@ const parseResponse = async <T>(
 };
 
 export const fetchWorkflowList = async (): Promise<WorkflowSummary[]> => {
-  const response = await sendRequest(WORKFLOW_API_BASE_URL);
+  const response = await requestWithAuth(WORKFLOW_API_BASE_URL);
   return parseResponse<WorkflowSummary[]>(response, "获取工作流列表失败");
 };
 
 export const fetchWorkflowDetail = async (
   workflowId: string,
 ): Promise<WorkflowDetail> => {
-  const response = await sendRequest(
+  const response = await requestWithAuth(
     `${WORKFLOW_API_BASE_URL}/${encodeURIComponent(workflowId)}`,
   );
   return parseResponse<WorkflowDetail>(response, "获取工作流详情失败");
@@ -92,7 +102,7 @@ export const fetchWorkflowDetail = async (
 export const fetchWorkflowRuns = async (
   workflowId: string,
 ): Promise<WorkflowRunListItem[]> => {
-  const response = await sendRequest(
+  const response = await requestWithAuth(
     `${WORKFLOW_API_BASE_URL}/${encodeURIComponent(workflowId)}/runs`,
   );
   return parseResponse<WorkflowRunListItem[]>(
@@ -102,14 +112,14 @@ export const fetchWorkflowRuns = async (
 };
 
 export const refreshWorkflowCatalog = async (): Promise<void> => {
-  const response = await sendRequest(`${CATALOG_API_BASE_URL}/refresh`);
+  const response = await requestWithAuth(`${CATALOG_API_BASE_URL}/refresh`);
   await parseResponse<{ status: string }>(response, "刷新工作流目录失败");
 };
 
 export const fetchNodeDescriptors = async (): Promise<
   WorkflowNodeDescriptor[]
 > => {
-  const response = await sendRequest(NODE_DESCRIPTOR_API_BASE_URL);
+  const response = await requestWithAuth(NODE_DESCRIPTOR_API_BASE_URL);
   return parseResponse<WorkflowNodeDescriptor[]>(
     response,
     "获取动态节点列表失败",
@@ -126,7 +136,7 @@ export interface UpdatePluginAutoRegistrationResponse extends PluginAutoRegistra
 
 export const fetchPluginAutoRegistrationConfig =
   async (): Promise<PluginAutoRegistrationConfig> => {
-    const response = await sendRequest(
+    const response = await requestWithAuth(
       `${SYSTEM_API_BASE_URL}/plugin-auto-registration`,
     );
     return parseResponse<PluginAutoRegistrationConfig>(
@@ -138,7 +148,7 @@ export const fetchPluginAutoRegistrationConfig =
 export const updatePluginAutoRegistrationConfig = async (
   payload: PluginAutoRegistrationConfig,
 ): Promise<UpdatePluginAutoRegistrationResponse> => {
-  const response = await sendRequest(
+  const response = await requestWithAuth(
     `${SYSTEM_API_BASE_URL}/plugin-auto-registration`,
     {
       method: "PUT",
