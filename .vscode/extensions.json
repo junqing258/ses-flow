@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "antfu.unocss",
+    "antfu.goto-alias",
+    "csstools.postcss",
+    "dbaeumer.vscode-eslint",
+    "humao.rest-client"
+  ]
+}

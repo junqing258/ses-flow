@@ -56,14 +56,14 @@ Content-Type: application/json
 {
   "stationId": "{{stationId}}",
   "platformId": "{{stationId}}",
-  "username": "rest-client",
-  "password": "rest-client"
+  "username": "admin",
+  "password": "123456"
 }
 
 ### 3. 扫码
 POST {{workstationBaseUrl}}/station/operation/scanBarcode
 Content-Type: application/json
-Authorization: {{login.response.body.$.data.Authorization}}
+Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
   "barcode": "{{barcode}}",
@@ -73,7 +73,7 @@ Authorization: {{login.response.body.$.data.Authorization}}
 ### 4. 发车
 POST {{workstationBaseUrl}}/station/operation/robotDeparture
 Content-Type: application/json
-Authorization: {{login.response.body.$.data.Authorization}}
+Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
   "taskId": "{{taskId}}",
