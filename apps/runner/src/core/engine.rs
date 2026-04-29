@@ -139,7 +139,7 @@ impl WorkflowEngine {
         }
         let started_at = Utc::now();
         if let Err(error) = self.validate_resume_input(waiting_node, &snapshot, &resume_input) {
-            warn!(
+            error!(
                 run_id = %snapshot.run_id,
                 node_id = %waiting_node.id,
                 error = %error,
@@ -175,7 +175,7 @@ impl WorkflowEngine {
             merge_state(&mut state, resume_result.state_patch.clone());
         }
         if let Some(error) = resume_result.error {
-            warn!(
+            error!(
                 run_id = %snapshot.run_id,
                 node_id = %waiting_node.id,
                 error_code = %error.code,
@@ -627,7 +627,7 @@ impl WorkflowEngine {
                 }
                 Err(error) => {
                     let error_message = error.to_string();
-                    warn!(
+                    error!(
                         run_id = %run_id,
                         workflow_key = %workflow_key,
                         node_id = %node.id,
@@ -759,7 +759,7 @@ impl WorkflowEngine {
                     if let Some(error) = result.error.as_ref() {
                         workflow_span.record("otel.status_description", error.message.as_str());
                     }
-                    warn!(
+                    error!(
                         run_id = %run_id,
                         workflow_key = %workflow_key,
                         node_id = %node.id,

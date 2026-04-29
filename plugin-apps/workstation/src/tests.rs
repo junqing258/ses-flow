@@ -444,6 +444,58 @@ async fn get_task_info_returns_mock_task_without_active_runner_task() {
 }
 
 #[tokio::test]
+async fn get_task_info_plugin_execute_returns_success_without_waiting_task() {
+    let (app, state) = build_test_app(AppConfig::default());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/execute")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "pluginId": "get_task_info",
+                        "runnerType": "plugin:get_task_info",
+                        "nodeId": "get_task_info_2",
+                        "config": {},
+                        "context": {
+                            "runId": "run-1",
+                            "requestId": "req-1",
+                            "workflowKey": "workflow.demo",
+                            "workflowVersion": 1,
+                            "input": {
+                                "stationId": "station-1",
+                                "sku": "SKU-123",
+                                "itemId": "123",
+                                "agvId": "AGV-1"
+                            },
+                            "state": {},
+                            "env": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("get_task_info execute request should succeed");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("get_task_info execute body should be readable");
+    let payload: serde_json::Value =
+        serde_json::from_slice(&body).expect("get_task_info execute response should be valid json");
+    assert_eq!(payload["status"], json!("success"));
+    assert_eq!(payload["output"]["taskId"], json!("TASK-SKU-123"));
+    assert_eq!(payload["output"]["targetId"], json!("C-SKU"));
+    assert_eq!(payload["output"]["agvId"], json!("AGV-1"));
+    assert!(payload.get("waitSignal").is_none());
+    assert!(state.inner.read().await.tasks.is_empty());
+}
+
+#[tokio::test]
 async fn station_status_routes_accept_client_empty_payloads() {
     let (app, _) = build_test_app(AppConfig::default());
     let login_response = app
@@ -739,12 +791,11 @@ async fn robot_departure_completes_active_task() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "pluginId": "scan_task",
-                        "runnerType": "plugin:scan_task",
-                        "nodeId": "scan_task_1",
+                        "pluginId": "robot_departure",
+                        "runnerType": "plugin:robot_departure",
+                        "nodeId": "robot_departure",
                         "config": {
-                            "stationId": "station-1",
-                            "taskId": "TASK-1"
+                            "stationId": "station-1"
                         },
                         "context": {
                             "runId": "run-1",
@@ -752,7 +803,7 @@ async fn robot_departure_completes_active_task() {
                             "workflowKey": "workflow.demo",
                             "workflowVersion": 1,
                             "input": {
-                                "orderNo": "SO-1"
+                                "taskId": "TASK-1"
                             },
                             "state": {},
                             "env": {
@@ -806,6 +857,108 @@ async fn robot_departure_completes_active_task() {
         task.payload["sesBaseUrl"],
         json!("http://ses.example/station/operation")
     );
+}
+
+#[tokio::test]
+async fn robot_departure_does_not_complete_non_departure_active_task() {
+    let (app, state) = build_test_app(AppConfig::default());
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "StationId": "station-1",
+                        "PlatformId": "platform-1",
+                        "Username": "demo",
+                        "Password": "demo"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("login request should succeed");
+    let login_body = to_bytes(login_response.into_body(), usize::MAX)
+        .await
+        .expect("login body should be readable");
+    let login_payload: serde_json::Value =
+        serde_json::from_slice(&login_body).expect("login payload should be valid json");
+    let authorization = login_payload["Data"]["Authorization"]
+        .as_str()
+        .expect("authorization token should exist");
+
+    let execute_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/execute")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "pluginId": "scan_task",
+                        "runnerType": "plugin:scan_task",
+                        "nodeId": "scan_task_1",
+                        "config": {
+                            "stationId": "station-1",
+                            "taskId": "TASK-1"
+                        },
+                        "context": {
+                            "runId": "run-1",
+                            "requestId": "req-1",
+                            "workflowKey": "workflow.demo",
+                            "workflowVersion": 1,
+                            "input": {},
+                            "state": {},
+                            "env": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("execute request should succeed");
+    let execute_body = to_bytes(execute_response.into_body(), usize::MAX)
+        .await
+        .expect("execute body should be readable");
+    let execute_payload: serde_json::Value =
+        serde_json::from_slice(&execute_body).expect("execute payload should be valid json");
+    let execution_id = execute_payload["output"]["executionId"]
+        .as_str()
+        .expect("execution id should exist")
+        .to_string();
+
+    let depart_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/station/operation/robotDeparture")
+                .header("content-type", "application/json")
+                .header("authorization", authorization)
+                .body(Body::from(
+                    json!({
+                        "TaskId": "TASK-1",
+                        "AgvId": "AGV-1",
+                        "Completed": 1,
+                        "RequestId": "agv-req-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("robotDeparture request should succeed");
+    assert_eq!(depart_response.status(), axum::http::StatusCode::OK);
+
+    let state = state.inner.read().await;
+    let task = state.tasks.get(&execution_id).expect("task should exist after execute");
+    assert!(matches!(task.state, TaskState::Pending));
 }
 
 #[tokio::test]

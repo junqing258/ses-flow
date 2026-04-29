@@ -217,9 +217,13 @@ pub(crate) async fn robot_departure(
         "completed": request.completed,
         "requestId": request.request_id
     });
-    let resumed_run_ids = if state.current_task_for_worker(&station_id).await.is_some() {
+    let resumed_run_ids = if let Some(task) = state
+        .robot_departure_task_for_worker(&station_id, &request.task_id)
+        .await
+    {
         match state
-            .complete_task_with_success(
+            .complete_task_by_execution_id_with_success(
+                &task.execution_id,
                 &station_id,
                 request.request_id,
                 output.clone(),

@@ -102,12 +102,7 @@ impl AppState {
                 "env": request.context.env,
                 "sesBaseUrl": ses_base_url,
             }),
-            task_id: request
-                .config
-                .get("taskId")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .unwrap_or_else(|| execution_id.clone()),
+            task_id: resolve_task_id(&request).unwrap_or_else(|| execution_id.clone()),
             wait_signal_type: signal_type,
             state: TaskState::Pending,
             runner_base_url,
@@ -289,6 +284,25 @@ impl AppState {
             .cloned()
     }
 
+    pub(crate) async fn robot_departure_task_for_worker(
+        &self,
+        station_id: &str,
+        task_id: &str,
+    ) -> Option<ExecutionTask> {
+        let state = self.inner.read().await;
+        state
+            .tasks
+            .values()
+            .filter(|task| {
+                task.target_station_id == station_id
+                    && !task.state.is_terminal()
+                    && task.plugin_type == "plugin:robot_departure"
+                    && task_matches_task_id(task, task_id)
+            })
+            .max_by_key(|task| task.updated_at)
+            .cloned()
+    }
+
     pub(crate) async fn complete_task_with_success(
         &self,
         station_id: &str,
@@ -308,6 +322,24 @@ impl AppState {
                 .await;
         }
         info!(station_id = %station_id, request_id = %request_id, "worker completed WCS task");
+        Ok(())
+    }
+
+    pub(crate) async fn complete_task_by_execution_id_with_success(
+        &self,
+        execution_id: &str,
+        station_id: &str,
+        request_id: String,
+        output: Value,
+        state_patch: Value,
+        agv_depart_payload: Option<Value>,
+    ) -> Result<(), String> {
+        self.transition_task_success(execution_id, output, state_patch).await?;
+        if let Some(payload) = agv_depart_payload {
+            self.queue_pending_event(station_id, Some(execution_id.to_string()), "AGV_DEPART", payload)
+                .await;
+        }
+        info!(station_id = %station_id, request_id = %request_id, execution_id = %execution_id, "worker completed selected WCS task");
         Ok(())
     }
 
@@ -501,9 +533,7 @@ impl AppState {
             warn!(station_id = %station_id, barcode = %barcode, "scan barcode resume skipped because RUNNER_BASE_URL is not configured");
             return Vec::new();
         };
-        let run_ids = self
-            .search_wait_run_ids(station_id, "station.operation.scanBarcode", request_id)
-            .await;
+        let run_ids = self.search_scan_barcode_wait_run_ids(station_id, barcode).await;
 
         let mut resumed_run_ids = Vec::new();
         for run_id in run_ids {
@@ -576,6 +606,50 @@ impl AppState {
             Ok(rows) => rows,
             Err(error) => {
                 warn!(station_id = %station_id, event = %event, error = %error, "failed to search waiting runs from database");
+                return Vec::new();
+            }
+        };
+
+        rows.into_iter()
+            .filter_map(|row| row.try_get::<String, _>("run_id").ok())
+            .collect()
+    }
+
+    async fn search_scan_barcode_wait_run_ids(&self, station_id: &str, barcode: &str) -> Vec<String> {
+        let Some(db_pool) = self.db_pool.as_ref() else {
+            warn!(station_id = %station_id, barcode = %barcode, "scan barcode run search skipped because DATABASE_URL is not configured");
+            return Vec::new();
+        };
+
+        let event = "station.operation.scanBarcode";
+        let unique_key = scan_barcode_unique_key(station_id, barcode);
+        let rows = match sqlx::query(
+            r#"
+            SELECT run_id
+            FROM workflow_runs
+            WHERE status IN ($1, $2)
+              AND last_signal->>'type' = $3
+              AND unique_key = $4
+            ORDER BY updated_at DESC
+            LIMIT 100
+            "#,
+        )
+        .bind("\"waiting\"")
+        .bind("waiting")
+        .bind(event)
+        .bind(&unique_key)
+        .fetch_all(db_pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                warn!(
+                    station_id = %station_id,
+                    barcode = %barcode,
+                    unique_key = %unique_key,
+                    error = %error,
+                    "failed to search scan barcode waiting runs from database"
+                );
                 return Vec::new();
             }
         };
@@ -804,6 +878,10 @@ fn scan_barcode_resume_event(station_id: &str, barcode: &str, sku: &str, request
     event
 }
 
+fn scan_barcode_unique_key(station_id: &str, barcode: &str) -> String {
+    format!("workstation:{station_id}:{barcode}")
+}
+
 fn attach_request_id(event: &mut Value, request_id: Option<&str>) {
     let Some(request_id) = request_id else {
         return;
@@ -852,6 +930,27 @@ fn resolve_station_id(request: &ExecuteRequest) -> Option<String> {
 
 fn resolve_ses_base_url(request: &ExecuteRequest) -> Option<String> {
     value_string(&request.context.env, &["sesBaseUrl"])
+}
+
+fn resolve_task_id(request: &ExecuteRequest) -> Option<String> {
+    value_string(&request.config, &["taskId"]).or_else(|| value_string(&request.context.input, &["taskId"]))
+}
+
+fn task_matches_task_id(task: &ExecutionTask, task_id: &str) -> bool {
+    task.task_id == task_id
+        || value_string(&task.payload, &["taskId"]).as_deref() == Some(task_id)
+        || task
+            .payload
+            .get("input")
+            .and_then(|input| value_string(input, &["taskId"]))
+            .as_deref()
+            == Some(task_id)
+        || task
+            .payload
+            .get("config")
+            .and_then(|config| value_string(config, &["taskId"]))
+            .as_deref()
+            == Some(task_id)
 }
 
 fn task_lookup_key(run_id: &str, node_id: &str, request_id: &str) -> String {
