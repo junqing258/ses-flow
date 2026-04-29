@@ -795,11 +795,11 @@ impl AppState {
             WHERE status IN ($1, $2)
               AND current_node_id = $3
               AND last_signal->>'type' = $4
-              AND state->'workstation'->'lastRobotDeparture'->>'taskId' = $5
               AND EXISTS (
                 SELECT 1
                 FROM jsonb_each(state->'workstation'->'executions') AS execution(id, payload)
-                WHERE execution.payload->>'workerId' = $6
+                WHERE execution.payload->>'taskId' = $5
+                  AND execution.payload->>'workerId' = $6
               )
             ORDER BY updated_at DESC
             LIMIT 100

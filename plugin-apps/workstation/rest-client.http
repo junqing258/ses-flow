@@ -4,7 +4,6 @@
 @stationId = juFomZRB
 @agvId = AGV-001
 @requestId = 1001
-@taskId = TASK-AGV-001
 
 @barcode = 002
 
@@ -62,6 +61,7 @@ Authorization: {{login.response.body.$.Data.Authorization}}
 {
   "stationId": "{{stationId}}",
   "agvId": "{{agvId}}",
+  "eventId": "agv.arrived",
   "requestId": {{requestId}}
 }
 
@@ -73,16 +73,29 @@ Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
   "barcode": "{{barcode}}",
+  "eventId": "station.operation.scanBarcode",
   "requestId": "{{requestId}}"
 }
 
-### 4. 发车
+### 4. 获取任务信息
+# @name getTaskInfo
+POST {{workstationBaseUrl}}/station/operation/getTaskInfo
+Content-Type: application/json
+Authorization: {{login.response.body.$.Data.Authorization}}
+
+{
+  "stationId": "{{stationId}}",
+  "barcode": "{{barcode}}",
+  "completed": 0
+}
+
+### 5. 发车
 POST {{workstationBaseUrl}}/station/operation/robotDeparture
 Content-Type: application/json
 Authorization: {{login.response.body.$.Data.Authorization}}
 
 {
-  "taskId": "{{taskId}}",
+  "taskId": "{{getTaskInfo.response.body.$.Data.TaskId}}",
   "agvId": "{{agvId}}",
   "completed": 1,
   "requestId": "{{requestId}}"
