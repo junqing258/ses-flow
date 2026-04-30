@@ -1,3 +1,6 @@
+//! 工位登录与鉴权服务。
+//! 负责本地模拟 token、SES station-login，以及请求头 bearer token 到 station_id 的解析。
+
 use axum::http::HeaderMap;
 use serde::Deserialize;
 use serde_json::{Value, json};

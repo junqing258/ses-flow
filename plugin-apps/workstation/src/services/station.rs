@@ -1,3 +1,6 @@
+//! 工位连接与工位事件处理。
+//! 负责 SSE 连接上下文、事件确认、AGV 到达模拟，以及 ConnectRequest 到 station_id 的解析。
+
 use std::sync::atomic::Ordering;
 
 use chrono::Utc;

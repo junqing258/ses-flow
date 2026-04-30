@@ -1,3 +1,6 @@
+//! Runner 恢复与等待流程查询。
+//! 负责调用 runner resume API，并从数据库查找可被工位事件唤醒的等待运行。
+
 use serde_json::{Value, json};
 use sqlx::Row;
 use tracing::{info, warn};

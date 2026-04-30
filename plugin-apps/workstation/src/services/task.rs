@@ -1,3 +1,6 @@
+//! 工位任务生命周期。
+//! 负责创建、去重、查找、完成、失败、取消任务，以及机器人离站的暂存事件。
+
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::Row;

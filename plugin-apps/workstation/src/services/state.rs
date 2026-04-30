@@ -1,3 +1,6 @@
+//! 服务共享状态。
+//! 定义 AppState、内存态 BridgeState、数据库连接、HTTP 客户端和健康检查统计。
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;

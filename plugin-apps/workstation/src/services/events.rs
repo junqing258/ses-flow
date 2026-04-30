@@ -1,3 +1,6 @@
+//! 工位 SSE 待发送事件队列。
+//! 负责生成递增事件 ID、写入站点 backlog，并通过 broadcast 唤醒在线连接。
+
 use std::sync::atomic::Ordering;
 
 use chrono::Utc;

@@ -20,17 +20,21 @@ use crate::error::RunnerError;
 use crate::services::WorkflowServices;
 
 pub struct WorkflowEngine {
+    // 执行器注册表负责把节点类型映射到具体执行逻辑；engine 只编排生命周期。
     registry: ExecutorRegistry,
     services: WorkflowServices,
+    // observer 用于把运行快照推给外部存储或 UI，controller 用于从外部终止运行。
     observer: Arc<dyn WorkflowRunObserver>,
     controller: Arc<dyn WorkflowRunController>,
 }
 
 impl WorkflowEngine {
+    /// 使用默认服务、空 observer 和空 controller 创建工作流引擎。
     pub fn new() -> Self {
         Self::with_services(WorkflowServices::with_defaults())
     }
 
+    /// 使用指定服务创建工作流引擎，并采用默认的 observer/controller。
     pub fn with_services(services: WorkflowServices) -> Self {
         Self::with_services_observer_and_controller(
             services,
@@ -39,6 +43,7 @@ impl WorkflowEngine {
         )
     }
 
+    /// 使用指定 observer 创建工作流引擎，便于外部监听运行摘要。
     pub fn with_observer(observer: Arc<dyn WorkflowRunObserver>) -> Self {
         Self::with_services_observer_and_controller(
             WorkflowServices::with_defaults(),
@@ -47,10 +52,12 @@ impl WorkflowEngine {
         )
     }
 
+    /// 使用指定服务和 observer 创建工作流引擎。
     pub fn with_services_and_observer(services: WorkflowServices, observer: Arc<dyn WorkflowRunObserver>) -> Self {
         Self::with_services_observer_and_controller(services, observer, Arc::new(NoopWorkflowRunController))
     }
 
+    /// 使用完整依赖创建工作流引擎，是其他构造函数最终汇聚的入口。
     pub fn with_services_observer_and_controller(
         services: WorkflowServices,
         observer: Arc<dyn WorkflowRunObserver>,
@@ -64,6 +71,7 @@ impl WorkflowEngine {
         }
     }
 
+    /// 从工作流定义的起始节点开始执行，并自动生成运行 ID。
     pub fn run(
         &self,
         definition: &WorkflowDefinition,
@@ -73,6 +81,7 @@ impl WorkflowEngine {
         self.run_with_id(definition, new_run_id(), trigger, env)
     }
 
+    /// 从工作流定义的起始节点开始执行，并使用调用方传入的运行 ID。
     pub fn run_with_id(
         &self,
         definition: &WorkflowDefinition,
@@ -88,6 +97,7 @@ impl WorkflowEngine {
         );
         definition.validate()?;
         let current_node_id = definition.start_node()?.id.clone();
+        // Webhook 触发通常把业务载荷放在 body 中；没有 body 时直接把 trigger 作为首节点输入。
         let current_input = trigger.get("body").cloned().unwrap_or_else(|| trigger.clone());
 
         self.execute_from(
@@ -102,6 +112,7 @@ impl WorkflowEngine {
         )
     }
 
+    /// 基于暂停时保存的 snapshot 恢复工作流执行。
     pub fn resume(
         &self,
         definition: &WorkflowDefinition,
@@ -117,6 +128,7 @@ impl WorkflowEngine {
         );
         definition.validate()?;
 
+        // snapshot 必须与当前 definition 完全匹配，否则恢复可能走到不同的节点图。
         if snapshot.workflow_key != definition.meta.key {
             return Err(RunnerError::Validation(format!(
                 "resume snapshot workflow key mismatch: expected {}, got {}",
@@ -135,6 +147,7 @@ impl WorkflowEngine {
             .node(&snapshot.current_node_id)
             .ok_or_else(|| RunnerError::MissingNode(snapshot.current_node_id.clone()))?;
         if waiting_node.node_type == NodeType::SubWorkflow {
+            // 子流程暂停时，父流程的 snapshot 中保存的是子流程的 resumeState。
             return self.resume_sub_workflow(definition, waiting_node, snapshot, resume_input);
         }
         let started_at = Utc::now();
@@ -167,6 +180,7 @@ impl WorkflowEngine {
             return Ok(summary);
         }
         let mut state = snapshot.state.clone();
+        // 普通 wait 节点把 resume_input 当作输出；plugin 节点还允许在回调中返回状态补丁或错误。
         let resume_result = match &waiting_node.node_type {
             NodeType::Plugin(_) => plugin_resume_result(&resume_input)?,
             _ => ResolvedResume::success(resume_input.clone(), Value::Null),
@@ -233,6 +247,7 @@ impl WorkflowEngine {
         )
     }
 
+    /// 根据节点执行结果中的分支键选择下一条 transition。
     fn resolve_transition<'a>(
         &self,
         transitions: &'a [&TransitionDefinition],
@@ -245,6 +260,7 @@ impl WorkflowEngine {
         }
 
         if let Some(branch_key) = branch_key {
+            // 分支节点会返回 branch_key；优先兼容前端保存的 label，再兼容旧定义里的 condition。
             if let Some(label_match) = transitions
                 .iter()
                 .copied()
@@ -262,6 +278,7 @@ impl WorkflowEngine {
             }
         }
 
+        // default 分支用于 switch/条件节点未命中时兜底；单出边节点无需显式分支名。
         if let Some(default_branch) = transitions.iter().copied().find(|transition| {
             matches!(transition.branch_type.as_deref(), Some("default"))
                 || matches!(transition.label.as_deref(), Some("default"))
@@ -279,6 +296,7 @@ impl WorkflowEngine {
         )))
     }
 
+    /// 把一组 transition 格式化为调试信息，主要用于增强错误上下文。
     fn describe_transitions(transitions: &[&TransitionDefinition]) -> String {
         transitions
             .iter()
@@ -296,6 +314,7 @@ impl WorkflowEngine {
             .join(", ")
     }
 
+    /// 校验外部恢复输入是否能唤醒当前等待节点。
     fn validate_resume_input(
         &self,
         waiting_node: &super::definition::NodeDefinition,
@@ -304,6 +323,7 @@ impl WorkflowEngine {
     ) -> Result<(), RunnerError> {
         match &waiting_node.node_type {
             NodeType::Wait => {
+                // wait 节点用事件名和 correlationKey 防止错误的外部回调唤醒当前运行。
                 let expected_event = waiting_node
                     .config
                     .get("event")
@@ -348,6 +368,7 @@ impl WorkflowEngine {
         }
     }
 
+    /// 恢复暂停中的子流程，并把子流程结果映射回父流程节点。
     fn resume_sub_workflow(
         &self,
         definition: &WorkflowDefinition,
@@ -359,6 +380,7 @@ impl WorkflowEngine {
         let child_definition = resolve_sub_workflow_definition_from_services(waiting_node, &self.services)?;
         child_definition.validate()?;
 
+        // 子流程恢复不向父流程 observer 发中间状态，父流程会把子流程摘要折叠成自己的节点记录。
         let child_engine = WorkflowEngine::with_services_observer_and_controller(
             self.services.clone(),
             Arc::new(NoopWorkflowRunObserver),
@@ -368,6 +390,7 @@ impl WorkflowEngine {
         let child_output = sub_workflow_summary_output(&child_summary);
 
         let mut state = snapshot.state.clone();
+        // statePath 表示父流程希望把子流程摘要写回到父状态树中的位置。
         if let Some(path) = waiting_node.config.get("statePath").and_then(Value::as_str) {
             merge_state(&mut state, nested_state_patch(path, child_output.clone()));
         }
@@ -418,6 +441,7 @@ impl WorkflowEngine {
         ));
 
         match child_summary.status {
+            // 子流程 resume 只应该暂停、完成、失败或终止；运行中说明执行器协议被破坏。
             WorkflowRunStatus::Running => Err(RunnerError::SubWorkflow(format!(
                 "sub-workflow {} returned unexpected running status",
                 child_summary.workflow_key
@@ -495,6 +519,7 @@ impl WorkflowEngine {
         }
     }
 
+    /// 从指定节点开始推进工作流，直到完成、失败、暂停、终止或触发步数保护。
     fn execute_from(
         &self,
         definition: &WorkflowDefinition,
@@ -508,6 +533,7 @@ impl WorkflowEngine {
     ) -> Result<WorkflowRunSummary, RunnerError> {
         let workflow_key = definition.meta.key.clone();
         let workflow_version = definition.meta.version;
+        // 防止配置错误形成无限循环；合法循环需要后续通过更明确的调度模型支持。
         let max_steps = definition.nodes.len().saturating_mul(8).max(16);
         let mut last_signal = None;
         let workflow_span = info_span!(
@@ -544,6 +570,7 @@ impl WorkflowEngine {
         });
 
         for _ in 0..max_steps {
+            // 终止请求可能在节点执行前、执行中或执行后到达，因此循环内会多次检查。
             if self.controller.should_terminate(&run_id) {
                 workflow_span.record("workflow.status", "terminated");
                 let summary = self.terminated_summary(
@@ -688,6 +715,7 @@ impl WorkflowEngine {
                 last_signal = Some(signal);
             }
 
+            // 节点输出与全局状态分离：output 传给下一节点，state_patch 合并进运行状态。
             if !result.state_patch.is_null() {
                 merge_state(&mut state, result.state_patch.clone());
             }
@@ -728,6 +756,7 @@ impl WorkflowEngine {
                     );
                     let waiting_output = result.output.clone();
                     let next_signal = result.next_signal;
+                    // resume_state 是恢复运行所需的最小快照，由外层持久化后等待外部事件。
                     let summary = WorkflowRunSummary {
                         run_id: run_id.clone(),
                         workflow_key: workflow_key.clone(),
@@ -811,6 +840,7 @@ impl WorkflowEngine {
             let next = self
                 .resolve_transition(&outgoing, result.branch_key.as_deref())
                 .map_err(|error| match error {
+                    // 在错误中补充出边详情，方便排查画布连线和分支标签不一致的问题。
                     RunnerError::Transition(message) => RunnerError::Transition(format!(
                         "{}; node_id={}; outgoing=[{}]",
                         message,
@@ -860,10 +890,12 @@ impl WorkflowEngine {
         ))
     }
 
+    /// 向 observer 发布当前运行摘要。
     fn emit_summary(&self, summary: &WorkflowRunSummary) {
         self.observer.on_summary(summary);
     }
 
+    /// 在同步 webhook 工作流结束时生成最终响应 signal。
     fn resolve_completion_signal(
         &self,
         definition: &WorkflowDefinition,
@@ -871,6 +903,7 @@ impl WorkflowEngine {
         output: &Value,
         last_signal: Option<super::runtime::NextSignal>,
     ) -> Option<super::runtime::NextSignal> {
+        // 如果节点已经显式产生 signal，优先保留它；只有同步 webhook 的 End 节点会自动生成响应。
         if last_signal.is_some() {
             return last_signal;
         }
@@ -896,6 +929,7 @@ impl WorkflowEngine {
         })
     }
 
+    /// 构造终止状态的运行摘要。
     fn terminated_summary(
         &self,
         run_id: &str,
@@ -920,10 +954,12 @@ impl WorkflowEngine {
     }
 }
 
+/// 从节点配置或服务注册表解析子流程定义。
 fn resolve_sub_workflow_definition_from_services(
     node: &super::definition::NodeDefinition,
     services: &WorkflowServices,
 ) -> Result<WorkflowDefinition, RunnerError> {
+    // 子流程既支持内联定义，也支持通过服务注册表按 key/ref 查找。
     if let Some(definition) = node
         .config
         .get("definition")
@@ -952,6 +988,7 @@ fn resolve_sub_workflow_definition_from_services(
     )))
 }
 
+/// 构造一条完整的节点执行记录。
 fn build_node_record(
     node_id: String,
     node_type: NodeType,
@@ -982,6 +1019,7 @@ fn build_node_record(
     }
 }
 
+/// 根据节点执行结果构造 timeline 中的节点记录。
 fn build_node_record_from_result(
     node_id: String,
     node_type: NodeType,
@@ -1006,6 +1044,7 @@ fn build_node_record_from_result(
     )
 }
 
+/// 根据运行时错误构造失败的节点执行记录。
 fn build_node_record_from_error(
     node_id: String,
     node_type: NodeType,
@@ -1032,6 +1071,7 @@ fn build_node_record_from_error(
     )
 }
 
+/// 构造失败状态的运行摘要，并按需补充失败节点记录。
 fn failed_summary(
     run_id: String,
     workflow_key: String,
@@ -1042,6 +1082,7 @@ fn failed_summary(
     record: Option<NodeExecutionRecord>,
     last_signal: Option<super::runtime::NextSignal>,
 ) -> WorkflowRunSummary {
+    // executor 抛错时还没有入 timeline，这里统一补一条失败节点记录。
     if let Some(record) = record {
         timeline.push(record);
     }
@@ -1059,6 +1100,7 @@ fn failed_summary(
     }
 }
 
+/// 把 RunnerError 映射为稳定的节点错误码。
 fn error_code_for_runner_error(error: &RunnerError) -> String {
     match error {
         RunnerError::FetchRequest(_) | RunnerError::InvalidFetchConfig(_) => "HTTP_ERROR".to_string(),
@@ -1085,6 +1127,7 @@ fn error_code_for_runner_error(error: &RunnerError) -> String {
     }
 }
 
+/// 归一化执行器返回的错误码，便于前端和存储层统一消费。
 fn normalize_error_code(raw: &str) -> String {
     match raw.trim().to_ascii_uppercase().as_str() {
         "SUB_WORKFLOW_FAILED" => "SUB_WORKFLOW_FAILED".to_string(),
@@ -1098,6 +1141,7 @@ fn normalize_error_code(raw: &str) -> String {
     }
 }
 
+/// 把工作流状态转换为面向错误消息的人类可读标签。
 fn status_label(status: &WorkflowRunStatus) -> &'static str {
     match status {
         WorkflowRunStatus::Running => "running",
@@ -1108,6 +1152,7 @@ fn status_label(status: &WorkflowRunStatus) -> &'static str {
     }
 }
 
+/// 把子流程的工作流状态映射为父流程节点的执行状态。
 fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStatus {
     match status {
         WorkflowRunStatus::Running => ExecutionStatus::Success,
@@ -1118,7 +1163,9 @@ fn map_workflow_status_to_execution(status: &WorkflowRunStatus) -> ExecutionStat
     }
 }
 
+/// 从父流程 snapshot 中取出子流程恢复所需的 snapshot。
 fn extract_child_snapshot(snapshot: &WorkflowRunSnapshot) -> Result<WorkflowRunSnapshot, RunnerError> {
+    // 兼容直接回传 resumeState，以及 webhook/body 包裹后的 resumeState。
     snapshot
         .last_input
         .get("resumeState")
@@ -1139,6 +1186,7 @@ fn extract_child_snapshot(snapshot: &WorkflowRunSnapshot) -> Result<WorkflowRunS
         .and_then(|value| serde_json::from_value(value).map_err(RunnerError::Json))
 }
 
+/// 把子流程摘要包装为父流程节点输出。
 fn sub_workflow_summary_output(summary: &WorkflowRunSummary) -> Value {
     json!({
         "workflowKey": summary.workflow_key,
@@ -1152,6 +1200,7 @@ fn sub_workflow_summary_output(summary: &WorkflowRunSummary) -> Value {
     })
 }
 
+/// 生成一个包含毫秒时间戳和本进程序号的运行 ID。
 pub fn new_run_id() -> String {
     static RUN_COUNTER: AtomicU64 = AtomicU64::new(1);
     let epoch_ms = SystemTime::now()
@@ -1169,6 +1218,7 @@ struct ResolvedResume {
 }
 
 impl ResolvedResume {
+    /// 构造一次成功恢复的解析结果。
     fn success(output: Value, state_patch: Value) -> Self {
         Self {
             output,
@@ -1178,6 +1228,7 @@ impl ResolvedResume {
     }
 }
 
+/// 校验 plugin 节点恢复事件是否匹配暂停时发出的 signal。
 fn validate_plugin_resume(
     waiting_node: &super::definition::NodeDefinition,
     snapshot: &WorkflowRunSnapshot,
@@ -1204,7 +1255,9 @@ fn validate_plugin_resume(
     }
 }
 
+/// 解析 plugin 恢复回调中的输出、状态补丁和错误。
 fn plugin_resume_result(resume_input: &Value) -> Result<ResolvedResume, RunnerError> {
+    // plugin 回调协议允许 payload 包裹；没有 payload 时把整个输入视作协议体。
     let payload = resume_input.get("payload").unwrap_or(resume_input);
     let status = payload.get("status").and_then(Value::as_str).unwrap_or_else(|| {
         if payload.get("error").is_some() {
@@ -1241,6 +1294,7 @@ fn plugin_resume_result(resume_input: &Value) -> Result<ResolvedResume, RunnerEr
     }
 }
 
+/// 校验恢复输入中的关联字段是否与暂停时发出的 signal 一致。
 fn validate_field_match(
     waiting_node: &super::definition::NodeDefinition,
     snapshot: &WorkflowRunSnapshot,
@@ -1248,6 +1302,7 @@ fn validate_field_match(
     canonical_name: &str,
     candidate_keys: &[&str],
 ) -> Result<(), RunnerError> {
+    // 如果发出 signal 时带了某个关联字段，恢复事件必须带回相同值。
     let expected = candidate_keys
         .iter()
         .find_map(|key| extract_value_by_key_from_signal(snapshot, key));
@@ -1269,6 +1324,7 @@ fn validate_field_match(
     }
 }
 
+/// 优先从 last_signal 中提取字段，缺失时回退到等待节点的 last_input。
 fn extract_value_by_key_from_signal(snapshot: &WorkflowRunSnapshot, key: &str) -> Option<Value> {
     snapshot
         .last_signal
@@ -1277,6 +1333,7 @@ fn extract_value_by_key_from_signal(snapshot: &WorkflowRunSnapshot, key: &str) -
         .or_else(|| extract_value_by_key(&snapshot.last_input, key))
 }
 
+/// 从常见的顶层、payload、headers 和 body 位置提取指定字段。
 fn extract_value_by_key(value: &Value, key: &str) -> Option<Value> {
     value
         .get(key)

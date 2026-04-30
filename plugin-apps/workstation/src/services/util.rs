@@ -1,3 +1,6 @@
+//! services 内部共享的小工具函数。
+//! 仅放置无业务副作用的 key 拼接和 JSON 字段提取逻辑。
+
 use serde_json::Value;
 
 pub(super) fn task_lookup_key(run_id: &str, node_id: &str, request_id: &str) -> String {
